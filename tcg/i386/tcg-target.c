@@ -1340,6 +1340,7 @@ static void tcg_out_qemu_st(TCGContext *s, const TCGArg *args,
     /* TLB Hit.  */
     tcg_out_qemu_st_direct(s, data_reg, data_reg2,
                            tcg_target_call_iarg_regs[0], 0, opc);
+    tcg_out_calli(s, (tcg_target_long)__log_st);
 
     /* jmp label2 */
     tcg_out8(s, OPC_JMP_short);

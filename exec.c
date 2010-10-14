@@ -3764,12 +3764,12 @@ uint32_t ldl_phys(target_phys_addr_t addr)
 
 void __log_ld(target_ulong host_addr, target_ulong guest_addr)
 {
-    fprintf(stderr, "L [016%lx %016lx]\n", host_addr, guest_addr);
+    fprintf(stderr, "L [%016lx   %016lx]\n", host_addr, guest_addr);
 }
 
 void __log_st(target_ulong host_addr, target_ulong guest_addr)
 {
-    fprintf(stderr, "L [%016lx %016lx]\n", host_addr, guest_addr);
+    fprintf(stderr, "S [%016lx   %016lx]\n", host_addr, guest_addr);
 }
 
 /* warning: addr must be aligned */

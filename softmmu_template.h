@@ -262,6 +262,7 @@ void REGPARM glue(glue(__st, SUFFIX), MMUSUFFIX)(target_ulong addr,
 #endif
             addend = env->tlb_table[mmu_idx][index].addend;
             glue(glue(st, SUFFIX), _raw)((uint8_t *)(long)(addr+addend), val);
+	    __log_st(addr + addend, addr);
         }
     } else {
         /* the page is not in the TLB : fill it */
