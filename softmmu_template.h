@@ -123,6 +123,7 @@ DATA_TYPE REGPARM glue(glue(__ld, SUFFIX), MMUSUFFIX)(target_ulong addr,
 #endif
             addend = env->tlb_table[mmu_idx][index].addend;
             res = glue(glue(ld, USUFFIX), _raw)((uint8_t *)(long)(addr+addend));
+	    __log_ld(addr + addend, addr);
         }
     } else {
         /* the page is not in the TLB : fill it */

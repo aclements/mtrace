@@ -1052,6 +1052,8 @@ static inline void tcg_out_tlb_load(TCGContext *s, int addrlo_idx,
     /* add addend(r1), r0 */
     tcg_out_modrm_offset(s, OPC_ADD_GvEv + P_REXW, r0, r1,
                          offsetof(CPUTLBEntry, addend) - which);
+    /* Save the guest address in the second argument register */
+    tcg_out_mov(s, type, r1, addrlo);
 }
 #endif
 
@@ -1162,6 +1164,7 @@ static void tcg_out_qemu_ld(TCGContext *s, const TCGArg *args,
     /* TLB Hit.  */
     tcg_out_qemu_ld_direct(s, data_reg, data_reg2,
                            tcg_target_call_iarg_regs[0], 0, opc);
+    tcg_out_calli(s, (tcg_target_long)__log_ld);
 
     /* jmp label2 */
     tcg_out8(s, OPC_JMP_short);

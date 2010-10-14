@@ -19,4 +19,7 @@ void REGPARM __stl_cmmu(target_ulong addr, uint32_t val, int mmu_idx);
 uint64_t REGPARM __ldq_cmmu(target_ulong addr, int mmu_idx);
 void REGPARM __stq_cmmu(target_ulong addr, uint64_t val, int mmu_idx);
 
+void REGPARM __log_st(target_ulong host_addr, target_ulong guest_addr);
+void REGPARM __log_ld(target_ulong host_addr, target_ulong guest_addr);
+
 #endif
