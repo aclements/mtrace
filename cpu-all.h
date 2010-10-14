@@ -591,6 +591,7 @@ static inline void stfq_be_p(void *ptr, float64 v)
 void REGPARM __log_st(target_ulong host_addr, target_ulong guest_addr);
 void REGPARM __log_ld(target_ulong host_addr, target_ulong guest_addr);
 void __log_io_write(void *cb, target_phys_addr_t host_addr, target_ulong guest_addr);
+void __log_io_read(void *cb, target_phys_addr_t host_addr, target_ulong guest_addr);
 
 /* target CPU memory access functions */
 #if defined(TARGET_WORDS_BIGENDIAN)

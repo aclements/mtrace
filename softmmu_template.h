@@ -68,13 +68,16 @@ static inline DATA_TYPE glue(io_read, SUFFIX)(target_phys_addr_t physaddr,
     env->mem_io_vaddr = addr;
 #if SHIFT <= 2
     res = io_mem_read[index][SHIFT](io_mem_opaque[index], physaddr);
+    __log_io_read((void *)io_mem_read[index][SHIFT], physaddr, addr);
 #else
 #ifdef TARGET_WORDS_BIGENDIAN
     res = (uint64_t)io_mem_read[index][2](io_mem_opaque[index], physaddr) << 32;
     res |= io_mem_read[index][2](io_mem_opaque[index], physaddr + 4);
+    __log_io_read((void *)io_mem_read[index][2], physaddr, addr);
 #else
     res = io_mem_read[index][2](io_mem_opaque[index], physaddr);
     res |= (uint64_t)io_mem_read[index][2](io_mem_opaque[index], physaddr + 4) << 32;
+    __log_io_read((void *)io_mem_read[index][2], physaddr, addr);
 #endif
 #endif /* SHIFT > 2 */
     return res;
@@ -179,6 +182,7 @@ static DATA_TYPE glue(glue(slow_ld, SUFFIX), MMUSUFFIX)(target_ulong addr,
             /* unaligned/aligned access in the same page */
             addend = env->tlb_table[mmu_idx][index].addend;
             res = glue(glue(ld, USUFFIX), _raw)((uint8_t *)(long)(addr+addend));
+	    __log_ld(addr + addend, addr);
         }
     } else {
         /* the page is not in the TLB : fill it */
