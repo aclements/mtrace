@@ -1,0 +1,19 @@
+* Configue options
+
+  ./configure [--prefix=PFX] \
+	    --target-list="x86_64-softmmu" \
+	    --disable-kvm  \
+	    --audio-card-list="" \
+	    --disable-vnc-jpeg \
+	    --disable-vnc-png \
+	    --disable-strip
+
+* A magic instruction?  This is what Simics uses.
+
+  __asm__ __volatile__ ("xchg %bx,%bx");
+
+* Implementation choices
+  
+  If we don't want the virtual address, we could modify the macros in
+  cpu-all.h (stl_p, ...).  We would still need the changes to the
+  dynamic code gen. in tcg/i386/tcg_target.c
