@@ -3764,12 +3764,30 @@ uint32_t ldl_phys(target_phys_addr_t addr)
 
 void __log_ld(target_ulong host_addr, target_ulong guest_addr)
 {
-    fprintf(stderr, "L [%016lx   %016lx]\n", host_addr, guest_addr);
+    fprintf(stderr, "L  [%016lx   %016lx]\n", host_addr, guest_addr);
 }
 
 void __log_st(target_ulong host_addr, target_ulong guest_addr)
 {
-    fprintf(stderr, "S [%016lx   %016lx]\n", host_addr, guest_addr);
+    fprintf(stderr, "S  [%016lx   %016lx]\n", host_addr, guest_addr);
+}
+
+void __log_io_write(void *cb, target_phys_addr_t ram_addr, target_ulong guest_addr)
+{
+    /*
+     * XXX This is a hack -- I'm trying to log the host address and the
+     * guest address without adding an extra argument to the CPUWriteMemoryFunc
+     * and CPUReadMemoryFunc callbacks.
+     * 
+     */
+    if (cb == notdirty_mem_writel ||
+	cb == notdirty_mem_writew ||
+	cb == notdirty_mem_writeb)
+    {
+	fprintf(stderr, "IW [%016lx   %016lx]\n", 
+		(unsigned long) qemu_get_ram_ptr(ram_addr), 
+		guest_addr);
+    }
 }
 
 /* warning: addr must be aligned */
