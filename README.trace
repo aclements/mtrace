@@ -20,7 +20,6 @@
 
 * TODO
 
-  - Log CPU number that makes the memory access.
   - Log a timestamp (cycle counter?).  A global/synchronized clock
     would be best.
   - Turn tracing on and off with the magic instruction.

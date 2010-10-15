@@ -4166,17 +4166,29 @@ void dump_exec_info(FILE *f,
  * Memory access tracing/logging
  */
 
+static void __log_entry(const char *prefix, target_ulong host_addr, 
+			target_ulong guest_addr)
+{
+    fprintf(stderr, "%-3s [%-3u %016lx  %016lx  %016lx]\n", 
+	    prefix,
+	    cpu_single_env->cpu_index, 
+	    cpu_single_env->eip,
+	    host_addr, 
+	    guest_addr);
+}
+
 void __log_st(target_ulong host_addr, target_ulong guest_addr)
 {
-    fprintf(stderr, "S  [%-3u %016lx   %016lx]\n", cpu_single_env->cpu_index, host_addr, guest_addr);
+    __log_entry("S", host_addr, guest_addr);
 }
 
 void __log_ld(target_ulong host_addr, target_ulong guest_addr)
 {
-    fprintf(stderr, "L  [%-3u %016lx   %016lx]\n", cpu_single_env->cpu_index, host_addr, guest_addr);
+    __log_entry("L", host_addr, guest_addr);
 }
 
-void __log_io_write(void *cb, target_phys_addr_t ram_addr, target_ulong guest_addr)
+void __log_io_write(void *cb, target_phys_addr_t ram_addr, 
+		    target_ulong guest_addr)
 {
     /*
      * XXX This is a hack -- I'm trying to log the host address and the
@@ -4188,10 +4200,9 @@ void __log_io_write(void *cb, target_phys_addr_t ram_addr, target_ulong guest_ad
 	cb == notdirty_mem_writew ||
 	cb == notdirty_mem_writeb)
     {
-	fprintf(stderr, "IW [%-3u %016lx   %016lx]\n", 
-		cpu_single_env->cpu_index,
-		(unsigned long) qemu_get_ram_ptr(ram_addr), 
-		guest_addr);
+	__log_entry("IW", (unsigned long) 
+		    qemu_get_ram_ptr(ram_addr), 
+		    guest_addr);
     }
 }
 
