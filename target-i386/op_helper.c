@@ -5663,3 +5663,8 @@ uint32_t helper_cc_compute_c(int op)
 #endif
     }
 }
+
+void helper_tlog_inst_exec(void)
+{
+    tlog_inst_exec();
+}

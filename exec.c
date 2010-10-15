@@ -4210,3 +4210,8 @@ void __log_io_read(void *cb, target_phys_addr_t ram_addr, target_ulong guest_add
 {
     /* Nothing to do.. */
 }
+
+void tlog_inst_exec(void)
+{
+    fprintf(stderr, "the magic instruction..\n");
+}

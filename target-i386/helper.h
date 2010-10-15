@@ -217,4 +217,6 @@ DEF_HELPER_2(rclq, tl, tl, tl)
 DEF_HELPER_2(rcrq, tl, tl, tl)
 #endif
 
+DEF_HELPER_0(tlog_inst_exec, void)
+
 #include "def-helper.h"

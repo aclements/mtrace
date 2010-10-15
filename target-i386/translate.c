@@ -6721,6 +6721,12 @@ static target_ulong disas_insn(DisasContext *s, target_ulong pc_start)
 #endif
         break;
 #endif
+#ifdef WANT_ICEBP
+#error The ICEBP instruction is repurposed for memory tracing
+#endif
+    case 0xf1: /* the instruction for calling into memory trace code */
+	gen_helper_tlog_inst_exec();
+	break;
     case 0xfa: /* cli */
         if (!s->vm86) {
             if (s->cpl <= s->iopl) {

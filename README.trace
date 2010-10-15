@@ -8,10 +8,6 @@
 	    --disable-vnc-png \
 	    --disable-strip
 
-* A magic instruction?  This is what Simics uses.
-
-  __asm__ __volatile__ ("xchg %bx,%bx");
-
 * Implementation choices
   
   If we don't want the virtual address, we could modify the macros in
