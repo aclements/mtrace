@@ -17,3 +17,11 @@
   If we don't want the virtual address, we could modify the macros in
   cpu-all.h (stl_p, ...).  We would still need the changes to the
   dynamic code gen. in tcg/i386/tcg_target.c
+
+* TODO
+
+  - Log CPU number that makes the memory access.
+  - Log a timestamp (cycle counter?).  A global/synchronized clock
+    would be best.
+  - Turn tracing on and off with the magic instruction.
+  - Only log shared read-write data.

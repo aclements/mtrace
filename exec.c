@@ -4168,12 +4168,12 @@ void dump_exec_info(FILE *f,
 
 void __log_st(target_ulong host_addr, target_ulong guest_addr)
 {
-    fprintf(stderr, "S  [%016lx   %016lx]\n", host_addr, guest_addr);
+    fprintf(stderr, "S  [%-3u %016lx   %016lx]\n", cpu_single_env->cpu_index, host_addr, guest_addr);
 }
 
 void __log_ld(target_ulong host_addr, target_ulong guest_addr)
 {
-    fprintf(stderr, "L  [%016lx   %016lx]\n", host_addr, guest_addr);
+    fprintf(stderr, "L  [%-3u %016lx   %016lx]\n", cpu_single_env->cpu_index, host_addr, guest_addr);
 }
 
 void __log_io_write(void *cb, target_phys_addr_t ram_addr, target_ulong guest_addr)
@@ -4188,7 +4188,8 @@ void __log_io_write(void *cb, target_phys_addr_t ram_addr, target_ulong guest_ad
 	cb == notdirty_mem_writew ||
 	cb == notdirty_mem_writeb)
     {
-	fprintf(stderr, "IW [%016lx   %016lx]\n", 
+	fprintf(stderr, "IW [%-3u %016lx   %016lx]\n", 
+		cpu_single_env->cpu_index,
 		(unsigned long) qemu_get_ram_ptr(ram_addr), 
 		guest_addr);
     }
@@ -4196,5 +4197,5 @@ void __log_io_write(void *cb, target_phys_addr_t ram_addr, target_ulong guest_ad
 
 void __log_io_read(void *cb, target_phys_addr_t ram_addr, target_ulong guest_addr)
 {
-    /* Nothing to do at */
+    /* Nothing to do.. */
 }
