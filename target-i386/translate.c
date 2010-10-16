@@ -5313,6 +5313,9 @@ static target_ulong disas_insn(DisasContext *s, target_ulong pc_start)
         if (mod == 3) {
             rm = (modrm & 7) | REX_B(s);
         do_xchg_reg:
+	    /* the instruction for calling into memory trace code? */
+	    if (reg == R_EBX && rm == R_EBX)
+		gen_helper_mtrace_inst_exec();
             gen_op_mov_TN_reg(ot, 0, reg);
             gen_op_mov_TN_reg(ot, 1, rm);
             gen_op_mov_reg_T0(ot, rm);
@@ -6721,12 +6724,6 @@ static target_ulong disas_insn(DisasContext *s, target_ulong pc_start)
 #endif
         break;
 #endif
-#ifdef WANT_ICEBP
-#error The ICEBP instruction is repurposed for memory tracing
-#endif
-    case 0xf1: /* the instruction for calling into memory trace code */
-	gen_helper_mtrace_inst_exec();
-	break;
     case 0xfa: /* cli */
         if (!s->vm86) {
             if (s->cpl <= s->iopl) {

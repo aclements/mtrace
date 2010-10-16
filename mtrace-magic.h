@@ -13,7 +13,9 @@ enum {
 static inline void mtrace_magic(unsigned long ax, unsigned long bx, 
 				unsigned long cx, unsigned long dx)
 {
-    __asm __volatile(".byte 0xf1" : : "a" (ax), "b" (bx), "c" (cx), "d" (dx));
+    __asm __volatile("xchg %%bx, %%bx" 
+		     : 
+		     : "a" (ax), "b" (bx), "c" (cx), "d" (dx));
 }
 
 static inline void mtrace_enable_set(unsigned long b)
