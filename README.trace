@@ -16,7 +16,15 @@
 
 * TODO
 
+  - Accurate RIP values.  The current values are at the start of the
+    translation block.  See the following call stack for figuring out
+    what the correct RIP is:
+
+    gen_pc_load
+    cpu_restore_state
+    tlb_fill
+    __st* (softmmu_template.h)
+
   - Log a timestamp (cycle counter?).  A global/synchronized clock
     would be best.
-  - Turn tracing on and off with the magic instruction.
   - Only log shared read-write data.
