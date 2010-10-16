@@ -5666,5 +5666,5 @@ uint32_t helper_cc_compute_c(int op)
 
 void helper_mtrace_inst_exec(void)
 {
-    mtrace_inst_exec(EAX, EBX, ECX, EDX);
+    mtrace_inst_exec(EAX, EBX, ECX, EDX, ESI, EDI);
 }

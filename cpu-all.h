@@ -974,6 +974,7 @@ void REGPARM mtrace_ld(target_ulong host_addr, target_ulong guest_addr);
 void mtrace_io_write(void *cb, target_phys_addr_t host_addr, target_ulong guest_addr);
 void mtrace_io_read(void *cb, target_phys_addr_t host_addr, target_ulong guest_addr);
 void mtrace_inst_exec(target_ulong a0, target_ulong a1, 
-		      target_ulong a2, target_ulong a3);
+		      target_ulong a2, target_ulong a3,
+		      target_ulong a4, target_ulong a5);
 
 #endif /* CPU_ALL_H */
