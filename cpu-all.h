@@ -588,12 +588,6 @@ static inline void stfq_be_p(void *ptr, float64 v)
 
 #endif
 
-void REGPARM __log_st(target_ulong host_addr, target_ulong guest_addr);
-void REGPARM __log_ld(target_ulong host_addr, target_ulong guest_addr);
-void __log_io_write(void *cb, target_phys_addr_t host_addr, target_ulong guest_addr);
-void __log_io_read(void *cb, target_phys_addr_t host_addr, target_ulong guest_addr);
-void tlog_inst_exec(void);
-
 /* target CPU memory access functions */
 #if defined(TARGET_WORDS_BIGENDIAN)
 #define lduw_p(p) lduw_be_p(p)
@@ -974,5 +968,11 @@ int cpu_memory_rw_debug(CPUState *env, target_ulong addr,
 
 void cpu_inject_x86_mce(CPUState *cenv, int bank, uint64_t status,
                         uint64_t mcg_status, uint64_t addr, uint64_t misc);
+
+void REGPARM mtrace_st(target_ulong host_addr, target_ulong guest_addr);
+void REGPARM mtrace_ld(target_ulong host_addr, target_ulong guest_addr);
+void mtrace_io_write(void *cb, target_phys_addr_t host_addr, target_ulong guest_addr);
+void mtrace_io_read(void *cb, target_phys_addr_t host_addr, target_ulong guest_addr);
+void mtrace_inst_exec(void);
 
 #endif /* CPU_ALL_H */

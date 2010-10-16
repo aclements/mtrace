@@ -12,7 +12,7 @@
   
   If we don't want the virtual address, we could modify the macros in
   cpu-all.h (stl_p, ...).  We would still need the changes to the
-  dynamic code gen. in tcg/i386/tcg_target.c
+  x86 code gen. in tcg/i386/tcg_target.c
 
 * TODO
 

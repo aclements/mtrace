@@ -68,16 +68,16 @@ static inline DATA_TYPE glue(io_read, SUFFIX)(target_phys_addr_t physaddr,
     env->mem_io_vaddr = addr;
 #if SHIFT <= 2
     res = io_mem_read[index][SHIFT](io_mem_opaque[index], physaddr);
-    __log_io_read((void *)io_mem_read[index][SHIFT], physaddr, addr);
+    mtrace_io_read((void *)io_mem_read[index][SHIFT], physaddr, addr);
 #else
 #ifdef TARGET_WORDS_BIGENDIAN
     res = (uint64_t)io_mem_read[index][2](io_mem_opaque[index], physaddr) << 32;
     res |= io_mem_read[index][2](io_mem_opaque[index], physaddr + 4);
-    __log_io_read((void *)io_mem_read[index][2], physaddr, addr);
+    mtrace_io_read((void *)io_mem_read[index][2], physaddr, addr);
 #else
     res = io_mem_read[index][2](io_mem_opaque[index], physaddr);
     res |= (uint64_t)io_mem_read[index][2](io_mem_opaque[index], physaddr + 4) << 32;
-    __log_io_read((void *)io_mem_read[index][2], physaddr, addr);
+    mtrace_io_read((void *)io_mem_read[index][2], physaddr, addr);
 #endif
 #endif /* SHIFT > 2 */
     return res;
@@ -126,7 +126,7 @@ DATA_TYPE REGPARM glue(glue(__ld, SUFFIX), MMUSUFFIX)(target_ulong addr,
 #endif
             addend = env->tlb_table[mmu_idx][index].addend;
             res = glue(glue(ld, USUFFIX), _raw)((uint8_t *)(long)(addr+addend));
-	    __log_ld(addr + addend, addr);
+	    mtrace_ld(addr + addend, addr);
         }
     } else {
         /* the page is not in the TLB : fill it */
@@ -182,7 +182,7 @@ static DATA_TYPE glue(glue(slow_ld, SUFFIX), MMUSUFFIX)(target_ulong addr,
             /* unaligned/aligned access in the same page */
             addend = env->tlb_table[mmu_idx][index].addend;
             res = glue(glue(ld, USUFFIX), _raw)((uint8_t *)(long)(addr+addend));
-	    __log_ld(addr + addend, addr);
+	    mtrace_ld(addr + addend, addr);
         }
     } else {
         /* the page is not in the TLB : fill it */
@@ -216,16 +216,16 @@ static inline void glue(io_write, SUFFIX)(target_phys_addr_t physaddr,
     env->mem_io_pc = (unsigned long)retaddr;
 #if SHIFT <= 2
     io_mem_write[index][SHIFT](io_mem_opaque[index], physaddr, val);
-    __log_io_write((void *)io_mem_write[index][SHIFT], physaddr, addr);
+    mtrace_io_write((void *)io_mem_write[index][SHIFT], physaddr, addr);
 #else
 #ifdef TARGET_WORDS_BIGENDIAN
     io_mem_write[index][2](io_mem_opaque[index], physaddr, val >> 32);
     io_mem_write[index][2](io_mem_opaque[index], physaddr + 4, val);
-    __log_io_write((void *)io_mem_write[index][2], physaddr, addr);
+    mtrace_io_write((void *)io_mem_write[index][2], physaddr, addr);
 #else
     io_mem_write[index][2](io_mem_opaque[index], physaddr, val);
     io_mem_write[index][2](io_mem_opaque[index], physaddr + 4, val >> 32);
-    __log_io_write((void *)io_mem_write[index][2], physaddr, addr);
+    mtrace_io_write((void *)io_mem_write[index][2], physaddr, addr);
 #endif
 #endif /* SHIFT > 2 */
 }
@@ -269,7 +269,7 @@ void REGPARM glue(glue(__st, SUFFIX), MMUSUFFIX)(target_ulong addr,
 #endif
             addend = env->tlb_table[mmu_idx][index].addend;
             glue(glue(st, SUFFIX), _raw)((uint8_t *)(long)(addr+addend), val);
-	    __log_st(addr + addend, addr);
+	    mtrace_st(addr + addend, addr);
         }
     } else {
         /* the page is not in the TLB : fill it */
@@ -322,7 +322,7 @@ static void glue(glue(slow_st, SUFFIX), MMUSUFFIX)(target_ulong addr,
             /* aligned/unaligned access in the same page */
             addend = env->tlb_table[mmu_idx][index].addend;
             glue(glue(st, SUFFIX), _raw)((uint8_t *)(long)(addr+addend), val);
-	    __log_st(addr + addend, addr);
+	    mtrace_st(addr + addend, addr);
         }
     } else {
         /* the page is not in the TLB : fill it */
