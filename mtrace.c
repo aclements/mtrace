@@ -2,6 +2,9 @@
  * Memory access tracing/logging
  */
 
+#define QEMU_MTRACE
+#include "mtrace-magic.h"
+
 static int mtrace_enable = 0;
 
 static void mtrace_entry(const char *prefix, target_ulong host_addr, 
@@ -52,8 +55,28 @@ void mtrace_io_read(void *cb, target_phys_addr_t ram_addr, target_ulong guest_ad
     /* Nothing to do.. */
 }
 
-void mtrace_inst_exec(void)
+/*
+ * Handlers for the mtrace magic instruction
+ */
+
+static void mtrace_enable_set(target_ulong a1, target_ulong a2, target_ulong a3)
 {
-    //fprintf(stderr, "the magic instruction..\n");
-    mtrace_enable = !mtrace_enable;
+    mtrace_enable = !!a1;
+}
+
+static void (*mtrace_call[])(target_ulong, target_ulong, target_ulong) = {
+    [MTRACE_ENABLE_SET] = mtrace_enable_set,
+};
+
+void mtrace_inst_exec(target_ulong a0, target_ulong a1, 
+		      target_ulong a2, target_ulong a3)
+{
+    if (a0 >= sizeof(mtrace_call) / sizeof(mtrace_call[0]) ||
+	mtrace_call[a0] == NULL) 
+    {
+	fprintf(stderr, "mtrace_inst_exec: bad call %lu\n", a0);
+	return;
+    }
+    
+    mtrace_call[a0](a1, a2, a3);
 }
