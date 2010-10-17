@@ -5,12 +5,33 @@
 #define QEMU_MTRACE
 #include "mtrace-magic.h"
 #include "mtrace-file.h"
+#include "mtrace.h"
 
 static int mtrace_enable = 0;
-
 /*
  * XXX come up with some consitent output format
  */
+static FILE *mtrace_file;
+
+void mtrace_init(void)
+{
+    if (mtrace_file == NULL)
+	mtrace_file = stderr;
+    /*
+     * XXX this would be a good place to setup the data structures to
+     * log the last core to write to a cache line.
+     */
+}
+
+void mtrace_log_file_set(const char *path)
+{
+    mtrace_file = fopen(path, "w");
+    if (mtrace_file == NULL) {
+	perror("mtrace: fopen");
+	exit(1);
+    }
+}
+
 static void mtrace_dump_access(const char *prefix, 
 			       target_ulong host_addr, 
 			       target_ulong guest_addr)
@@ -18,7 +39,7 @@ static void mtrace_dump_access(const char *prefix,
     if (!mtrace_enable)
 	return;
 
-    fprintf(stderr, "%-3s [%-3u %016lx  %016lx  %016lx]\n", 
+    fprintf(mtrace_file, "%-3s [%-3u %016lx  %016lx  %016lx]\n", 
 	    prefix,
 	    cpu_single_env->cpu_index, 
 	    cpu_single_env->eip,
@@ -28,7 +49,7 @@ static void mtrace_dump_access(const char *prefix,
 
 static void mtrace_dump_type(struct mtrace_type_entry *type)
 {
-    fprintf(stderr, "%-3s [%-16s  %016lx  %016lx  %016lx]\n",
+    fprintf(mtrace_file, "%-3s [%-16s  %016lx  %016lx  %016lx]\n",
 	    "T",
 	    type->str,
 	    type->host_addr,

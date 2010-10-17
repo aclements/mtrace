@@ -27,6 +27,7 @@
 #include "exec-all.h"
 #include "qemu-common.h"
 #include "kvm.h"
+#include "mtrace.h"
 
 //#define DEBUG_MMU
 
@@ -1140,6 +1141,8 @@ CPUX86State *cpu_x86_init(const char *cpu_model)
     mce_init(env);
 
     qemu_init_vcpu(env);
+
+    mtrace_init();
 
     return env;
 }

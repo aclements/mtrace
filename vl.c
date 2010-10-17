@@ -162,6 +162,8 @@ int main(int argc, char **argv)
 #include "cpus.h"
 #include "arch_init.h"
 
+#include "mtrace.h"
+
 //#define DEBUG_NET
 //#define DEBUG_SLIRP
 
@@ -2633,6 +2635,9 @@ int main(int argc, char **argv, char **envp)
                     fclose(fp);
                     break;
                 }
+	    case QEMU_OPTION_mtrace_file:
+		mtrace_log_file_set(optarg);
+		break;
             default:
                 os_parse_cmd_args(popt->index, optarg);
             }

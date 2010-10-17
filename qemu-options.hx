@@ -938,6 +938,10 @@ Specify SMBIOS type 0 fields
 Specify SMBIOS type 1 fields
 ETEXI
 
+DEF("mtrace-file", HAS_ARG, QEMU_OPTION_mtrace_file,
+    "-mtrace-file filename\n"
+    "                specify memory trace log file\n", QEMU_ARCH_I386)
+
 DEFHEADING()
 STEXI
 @end table
