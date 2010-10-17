@@ -3,7 +3,7 @@
 
 enum {
     MTRACE_ENABLE_SET = 1,
-    MTRACE_TYPE_REGISTER,
+    MTRACE_LABEL_REGISTER,
 };
 
 #ifndef QEMU_MTRACE
@@ -27,12 +27,12 @@ static inline void mtrace_enable_set(unsigned long b)
     mtrace_magic(MTRACE_ENABLE_SET, b, 0, 0, 0, 0);
 }
 
-static inline void mtrace_type_register(void * addr, 
+static inline void mtrace_label_register(void * addr, 
 					unsigned long bytes, 
 					const char *str, 
 					unsigned long n)
 {
-    mtrace_magic(MTRACE_TYPE_REGISTER, (unsigned long)addr, bytes, 
+    mtrace_magic(MTRACE_LABEL_REGISTER, (unsigned long)addr, bytes, 
 		 (unsigned long)str, n, 0);
 }
 

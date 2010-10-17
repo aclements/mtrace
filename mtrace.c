@@ -32,39 +32,64 @@ void mtrace_log_file_set(const char *path)
     }
 }
 
-static void mtrace_dump_access(const char *prefix, 
-			       target_ulong host_addr, 
-			       target_ulong guest_addr)
+static void mtrace_log_entry(union mtrace_entry *entry)
 {
-    if (!mtrace_enable)
-	return;
+    static const char *access_type_to_str[] = {
+	[mtrace_access_ld] = "ld",
+	[mtrace_access_st] = "st",
+	[mtrace_access_iw] = "iw",
+    };
 
-    fprintf(mtrace_file, "%-3s [%-3u %016lx  %016lx  %016lx]\n", 
-	    prefix,
-	    cpu_single_env->cpu_index, 
-	    cpu_single_env->eip,
-	    host_addr, 
-	    guest_addr);
+    switch(entry->type) {
+    case mtrace_entry_label:
+	fprintf(mtrace_file, "%-3s [%-16s  %016lx  %016lx  %016lx]\n",
+		"T",
+		entry->label.str,
+		entry->label.host_addr,
+		entry->label.guest_addr,
+		entry->label.bytes);
+	break;
+    case mtrace_entry_access:
+	fprintf(mtrace_file, "%-3s [%-3u %016lx  %016lx  %016lx]\n", 
+		access_type_to_str[entry->access.access_type],
+		entry->access.cpu,
+		entry->access.pc,
+		entry->access.host_addr,
+		entry->access.guest_addr);
+	break;
+    default:
+	fprintf(stderr, "mtrace_log_entry: bad type %u\n", entry->type);
+	exit(1);
+    }
 }
 
-static void mtrace_dump_type(struct mtrace_type_entry *type)
+static void mtrace_access_dump(mtrace_access_t type, target_ulong host_addr, 
+			       target_ulong guest_addr)
 {
-    fprintf(mtrace_file, "%-3s [%-16s  %016lx  %016lx  %016lx]\n",
-	    "T",
-	    type->str,
-	    type->host_addr,
-	    type->guest_addr,
-	    type->bytes);
+    struct mtrace_access_entry entry;
+    
+    if (!mtrace_enable)
+	return;
+    
+    entry.type = mtrace_entry_access;
+    entry.access_type = type;
+    entry.cpu = cpu_single_env->cpu_index;
+    /* XXX bug -- this EIP is the start of the TB */
+    entry.pc = cpu_single_env->eip;
+    entry.host_addr = host_addr;
+    entry.guest_addr = guest_addr;
+
+    mtrace_log_entry((union mtrace_entry *)&entry);
 }
 
 void mtrace_st(target_ulong host_addr, target_ulong guest_addr)
 {
-    mtrace_dump_access("S", host_addr, guest_addr);
+    mtrace_access_dump(mtrace_access_st, host_addr, guest_addr);
 }
 
 void mtrace_ld(target_ulong host_addr, target_ulong guest_addr)
 {
-    mtrace_dump_access("L", host_addr, guest_addr);
+    mtrace_access_dump(mtrace_access_ld, host_addr, guest_addr);
 }
 
 void mtrace_io_write(void *cb, target_phys_addr_t ram_addr, 
@@ -80,8 +105,8 @@ void mtrace_io_write(void *cb, target_phys_addr_t ram_addr,
 	cb == notdirty_mem_writew ||
 	cb == notdirty_mem_writeb)
     {
-	mtrace_dump_access("IW", (unsigned long) 
-			   qemu_get_ram_ptr(ram_addr), 
+	mtrace_access_dump(mtrace_access_iw, 
+			   (unsigned long) qemu_get_ram_ptr(ram_addr), 
 			   guest_addr);
     }
 }
@@ -134,46 +159,47 @@ static int mtrace_host_addr(target_ulong guest_addr, target_ulong *host_addr)
     return 0;
 }
 
-static void mtrace_type_register(target_ulong guest_addr, target_ulong bytes, 
+static void mtrace_label_register(target_ulong guest_addr, target_ulong bytes, 
 				 target_ulong str_addr, target_ulong n, 
 				 target_ulong a5)
 {
-    struct mtrace_type_entry type;
+    struct mtrace_label_entry label;
     int r;
 
-    if (n > sizeof(type.str) - 1)
-	n = sizeof(type.str) - 1;
+    if (n > sizeof(label.str) - 1)
+	n = sizeof(label.str) - 1;
     
-    r = cpu_memory_rw_debug(cpu_single_env, str_addr, (uint8_t *)type.str, n, 0);
+    r = cpu_memory_rw_debug(cpu_single_env, str_addr, (uint8_t *)label.str, n, 0);
     if (r) {
-	fprintf(stderr, "mtrace_type_register: cpu_memory_rw_debug failed\n");
+	fprintf(stderr, "mtrace_label_register: cpu_memory_rw_debug failed\n");
 	return;
     }
-    type.str[n] = 0;
+    label.str[n] = 0;
 
     /*
      * XXX bug -- guest_addr might cross multiple host memory allocations,
      * which means the [host_addr, host_addr + bytes] is not contiguous.
      *
-     * A simple solution is probably to log multiple mtrace_type_entrys.
+     * A simple solution is probably to log multiple mtrace_label_entrys.
      */
-    r = mtrace_host_addr(guest_addr, &type.host_addr);
+    r = mtrace_host_addr(guest_addr, &label.host_addr);
     if (r) {
-	fprintf(stderr, "mtrace_type_register: mtrace_host_addr failed\n");
+	fprintf(stderr, "mtrace_label_register: mtrace_host_addr failed\n");
 	return;
     }
 
-    type.guest_addr = guest_addr;
-    type.bytes = bytes;
+    label.guest_addr = guest_addr;
+    label.bytes = bytes;
 
-    mtrace_dump_type(&type);
+    label.type = mtrace_entry_label;
+    mtrace_log_entry((union mtrace_entry *)&label);
 }
 
 static void (*mtrace_call[])(target_ulong, target_ulong, target_ulong,
 			     target_ulong, target_ulong) = 
 {
     [MTRACE_ENABLE_SET]		= mtrace_enable_set,
-    [MTRACE_TYPE_REGISTER] 	= mtrace_type_register,
+    [MTRACE_LABEL_REGISTER] 	= mtrace_label_register,
 };
 
 void mtrace_inst_exec(target_ulong a0, target_ulong a1, 
@@ -184,7 +210,7 @@ void mtrace_inst_exec(target_ulong a0, target_ulong a1,
 	mtrace_call[a0] == NULL) 
     {
 	fprintf(stderr, "mtrace_inst_exec: bad call %lu\n", a0);
-	return;
+	exit(1);
     }
     
     mtrace_call[a0](a1, a2, a3, a4, a5);
