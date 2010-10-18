@@ -2964,8 +2964,7 @@ ram_addr_t qemu_ram_addr_from_host(void *ptr)
     return 0;
 }
 
-/* Some of the softmmu routines need to translate from a host pointer
-   (typically a TLB entry) back to a ram offset.  */
+/* This is used only by mtrace. */
 RAMBlock *qemu_ramblock_from_host(void *ptr)
 {
     RAMBlock *block;

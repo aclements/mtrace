@@ -16,12 +16,6 @@
 
 * TODO
 
-  - Only log shared read-write data.  Maybe add a data structure to each
-    RAMBlock, which holds the last cpu to touch a cache line?  Then use
-    something like qemu_ram_addr_from_host to get the RAMBlock?
-
-    file_ram_alloc
-
   - Accurate RIP values.  The current values are at the start of the
     translation block.  See the following call stack for figuring out
     what the correct RIP is:
