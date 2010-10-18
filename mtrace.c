@@ -7,21 +7,9 @@
 #include "mtrace-file.h"
 #include "mtrace.h"
 
-static void mtrace_log_entry_text(union mtrace_entry *entry);
-
-static int mtrace_enable = 0;
+static int mtrace_enable;
 static FILE *mtrace_file;
-static void (*mtrace_log_entry)(union mtrace_entry *) = mtrace_log_entry_text;
-
-void mtrace_init(void)
-{
-    if (mtrace_file == NULL)
-	mtrace_file = stderr;
-    /*
-     * XXX this would be a good place to setup the data structures to
-     * log the last core to write to a cache line.
-     */
-}
+static void (*mtrace_log_entry)(union mtrace_entry *);
 
 void mtrace_log_file_set(const char *path)
 {
@@ -260,4 +248,17 @@ void mtrace_inst_exec(target_ulong a0, target_ulong a1,
     }
     
     mtrace_call[a0](a1, a2, a3, a4, a5);
+}
+
+void mtrace_init(void)
+{
+    if (mtrace_file == NULL)
+	mtrace_file = stderr;
+    if (mtrace_log_entry == NULL)
+	mtrace_log_entry = mtrace_log_entry_text;
+
+    /*
+     * XXX this would be a good place to setup the data structures to
+     * log the last core to write to a cache line.
+     */
 }
