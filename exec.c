@@ -60,6 +60,8 @@
 #endif
 #endif
 
+#include "mtrace.h"
+
 //#define DEBUG_TB_INVALIDATE
 //#define DEBUG_FLUSH
 //#define DEBUG_TLB
@@ -2767,6 +2769,9 @@ static void *file_ram_alloc(RAMBlock *block,
         close(fd);
         return (NULL);
     }
+    if (mtrace_cline_track())
+	block->cline_track = mtrace_cline_track_alloc(memory);
+
     block->fd = fd;
     return area;
 }
@@ -2843,6 +2848,7 @@ ram_addr_t qemu_ram_alloc_from_ptr(DeviceState *dev, const char *name,
             if (!new_block->host) {
                 new_block->host = qemu_vmalloc(size);
                 qemu_madvise(new_block->host, size, QEMU_MADV_MERGEABLE);
+		new_block->cline_track = mtrace_cline_track_alloc(size);
             }
 #else
             fprintf(stderr, "-mem-path option unsupported\n");
@@ -2856,6 +2862,8 @@ ram_addr_t qemu_ram_alloc_from_ptr(DeviceState *dev, const char *name,
                                    MAP_SHARED | MAP_ANONYMOUS, -1, 0);
 #else
             new_block->host = qemu_vmalloc(size);
+	    if (mtrace_cline_track())
+		new_block->cline_track = mtrace_cline_track_alloc(size);
 #endif
             qemu_madvise(new_block->host, size, QEMU_MADV_MERGEABLE);
         }
@@ -2897,6 +2905,8 @@ void qemu_ram_free(ram_addr_t addr)
                 } else {
                     qemu_vfree(block->host);
                 }
+		if (mtrace_cline_track())
+		    mtrace_cline_track_free(block->cline_track);
 #endif
             } else {
 #if defined(TARGET_S390X) && defined(CONFIG_KVM)
@@ -2948,6 +2958,25 @@ ram_addr_t qemu_ram_addr_from_host(void *ptr)
     QLIST_FOREACH(block, &ram_list.blocks, next) {
         if (host - block->host < block->length) {
             return block->offset + (host - block->host);
+        }
+    }
+
+    fprintf(stderr, "Bad ram pointer %p\n", ptr);
+    abort();
+
+    return 0;
+}
+
+/* Some of the softmmu routines need to translate from a host pointer
+   (typically a TLB entry) back to a ram offset.  */
+RAMBlock *qemu_ramblock_from_host(void *ptr)
+{
+    RAMBlock *block;
+    uint8_t *host = ptr;
+
+    QLIST_FOREACH(block, &ram_list.blocks, next) {
+        if (host - block->host < block->length) {
+            return block;
         }
     }
 

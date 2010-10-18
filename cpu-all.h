@@ -872,6 +872,7 @@ typedef struct RAMBlock {
 #if defined(__linux__) && !defined(TARGET_S390X)
     int fd;
 #endif
+    uint8_t *cline_track;
 } RAMBlock;
 
 typedef struct RAMList {
@@ -968,6 +969,9 @@ int cpu_memory_rw_debug(CPUState *env, target_ulong addr,
 
 void cpu_inject_x86_mce(CPUState *cenv, int bank, uint64_t status,
                         uint64_t mcg_status, uint64_t addr, uint64_t misc);
+
+/* This is used only by mtrace. */
+extern RAMBlock *qemu_ramblock_from_host(void *ptr);
 
 void REGPARM mtrace_st(target_ulong host_addr, target_ulong guest_addr);
 void REGPARM mtrace_ld(target_ulong host_addr, target_ulong guest_addr);
