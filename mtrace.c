@@ -7,19 +7,20 @@
 #include "mtrace-file.h"
 #include "mtrace.h"
 
+/* 64-byte cache lines */
 #define MTRACE_CLINE_SHIFT	6
-#define MTRACE_CLINE_SIZE 	(1 << 6)
 
 static int mtrace_enable;
 static FILE *mtrace_file;
 static void (*mtrace_log_entry)(union mtrace_entry *);
+static int mtrace_cline_track = 1;
 
 void mtrace_log_file_set(const char *path)
 {
     mtrace_file = fopen(path, "w");
     if (mtrace_file == NULL) {
 	perror("mtrace: fopen");
-	exit(1);
+	abort();
     }
 }
 
@@ -50,7 +51,7 @@ static void mtrace_log_entry_text(union mtrace_entry *entry)
 	break;
     default:
 	fprintf(stderr, "mtrace_log_entry: bad type %u\n", entry->type);
-	exit(1);
+	abort();
     }
 }
 
@@ -67,13 +68,13 @@ static void mtrace_log_entry_binary(union mtrace_entry *entry)
 	break;
     default:
 	fprintf(stderr, "mtrace_log_entry: bad type %u\n", entry->type);
-	exit(1);
+	abort();
     }
 
     r = fwrite(entry, n, 1, mtrace_file);
     if (r != 1) {
 	perror("mtrace_log_entry_binary: fwrite");
-	exit(1);
+	abort();
     }
 }
 
@@ -97,7 +98,7 @@ void mtrace_format_set(const char *id)
     }
 
     fprintf(stderr, "mtrace_format_set: bad format %s\n", id);
-    exit(1);
+    abort();
 }
 
 static void mtrace_access_dump(mtrace_access_t type, target_ulong host_addr, 
@@ -125,9 +126,12 @@ static int mtrace_cline_update_ld(uint8_t * host_addr, unsigned int cpu)
     unsigned long cline;
     RAMBlock *block;
 
+    if (!mtrace_cline_track)
+	return 1;
+
     block = qemu_ramblock_from_host(host_addr);
     offset = host_addr - block->host;
-    cline = offset / MTRACE_CLINE_SIZE;
+    cline = offset >> MTRACE_CLINE_SHIFT;
 
     if (block->cline_track[cline] & (1 << cpu))
 	return 0;
@@ -142,9 +146,12 @@ static int mtrace_cline_update_st(uint8_t *host_addr, unsigned int cpu)
     unsigned long cline;
     RAMBlock *block;
 
+    if (!mtrace_cline_track)
+	return 1;
+
     block = qemu_ramblock_from_host(host_addr);
     offset = host_addr - block->host;
-    cline = offset / MTRACE_CLINE_SIZE;
+    cline = offset >> MTRACE_CLINE_SHIFT;
 
     if (block->cline_track[cline] & (1 << cpu))
 	return 0;
@@ -155,24 +162,18 @@ static int mtrace_cline_update_st(uint8_t *host_addr, unsigned int cpu)
 
 void mtrace_st(target_ulong host_addr, target_ulong guest_addr)
 {
-    if (mtrace_cline_track()) {
-	int r = mtrace_cline_update_st((uint8_t *)host_addr, 
-				       cpu_single_env->cpu_index);
-	if (!r)
-	    return;
-    }
-    mtrace_access_dump(mtrace_access_st, host_addr, guest_addr);
+    int r = mtrace_cline_update_st((uint8_t *)host_addr, 
+				   cpu_single_env->cpu_index);
+    if (r)
+	mtrace_access_dump(mtrace_access_st, host_addr, guest_addr);
 }
 
 void mtrace_ld(target_ulong host_addr, target_ulong guest_addr)
 {
-    if (mtrace_cline_track()) {
-	int r = mtrace_cline_update_ld((uint8_t *)host_addr, 
-				       cpu_single_env->cpu_index);
-	if (!r)
-	    return;
-    }
-    mtrace_access_dump(mtrace_access_ld, host_addr, guest_addr);
+    int r = mtrace_cline_update_ld((uint8_t *)host_addr, 
+				   cpu_single_env->cpu_index);
+    if (r)
+	mtrace_access_dump(mtrace_access_ld, host_addr, guest_addr);
 }
 
 void mtrace_io_write(void *cb, target_phys_addr_t ram_addr, 
@@ -188,9 +189,12 @@ void mtrace_io_write(void *cb, target_phys_addr_t ram_addr,
 	cb == notdirty_mem_writew ||
 	cb == notdirty_mem_writeb)
     {
-	mtrace_access_dump(mtrace_access_iw, 
-			   (unsigned long) qemu_get_ram_ptr(ram_addr), 
-			   guest_addr);
+	int r = mtrace_cline_update_st(qemu_get_ram_ptr(ram_addr),
+				       cpu_single_env->cpu_index);
+	if (r)
+	    mtrace_access_dump(mtrace_access_iw, 
+			       (unsigned long) qemu_get_ram_ptr(ram_addr), 
+			       guest_addr);
     }
 }
 
@@ -293,32 +297,30 @@ void mtrace_inst_exec(target_ulong a0, target_ulong a1,
 	mtrace_call[a0] == NULL) 
     {
 	fprintf(stderr, "mtrace_inst_exec: bad call %lu\n", a0);
-	exit(1);
+	abort();
     }
     
     mtrace_call[a0](a1, a2, a3, a4, a5);
-}
-
-int mtrace_cline_track(void)
-{
-    return 1;
 }
 
 uint8_t *mtrace_cline_track_alloc(size_t size)
 {
     uint8_t *b;
 
-    if (!mtrace_cline_track())
+    if (!mtrace_cline_track)
 	return NULL;
 
-    b = qemu_vmalloc(size / MTRACE_CLINE_SIZE);
+    b = qemu_vmalloc(size >> MTRACE_CLINE_SHIFT);
     if (b == NULL) {
 	perror("qemu_vmalloc failed\n");
-	exit(1);
+	abort();
     }
-    /* Use qemu_madvise(MADV_MERGEABLE) if size / MTRACE_CLINE_SIZE is large */
+    /* 
+     * Could use qemu_madvise(MADV_MERGEABLE) if 
+     * size >> MTRACE_CLINE_SHIFT is large 
+     */
 
-    memset(b, 0, size / MTRACE_CLINE_SIZE);
+    memset(b, 0, size >> MTRACE_CLINE_SHIFT);
     return b;
 }
 
