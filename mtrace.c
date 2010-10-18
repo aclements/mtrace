@@ -7,11 +7,11 @@
 #include "mtrace-file.h"
 #include "mtrace.h"
 
+static void mtrace_log_entry_text(union mtrace_entry *entry);
+
 static int mtrace_enable = 0;
-/*
- * XXX come up with some consitent output format
- */
 static FILE *mtrace_file;
+static void (*mtrace_log_entry)(union mtrace_entry *) = mtrace_log_entry_text;
 
 void mtrace_init(void)
 {
@@ -32,7 +32,7 @@ void mtrace_log_file_set(const char *path)
     }
 }
 
-static void mtrace_log_entry(union mtrace_entry *entry)
+static void mtrace_log_entry_text(union mtrace_entry *entry)
 {
     static const char *access_type_to_str[] = {
 	[mtrace_access_ld] = "ld",
@@ -61,6 +61,52 @@ static void mtrace_log_entry(union mtrace_entry *entry)
 	fprintf(stderr, "mtrace_log_entry: bad type %u\n", entry->type);
 	exit(1);
     }
+}
+
+static void mtrace_log_entry_binary(union mtrace_entry *entry)
+{
+    size_t r, n;
+
+    switch(entry->type) {
+    case mtrace_entry_label:
+	n = sizeof(struct mtrace_label_entry);
+	break;
+    case mtrace_entry_access:
+	n = sizeof(struct mtrace_access_entry);
+	break;
+    default:
+	fprintf(stderr, "mtrace_log_entry: bad type %u\n", entry->type);
+	exit(1);
+    }
+
+    r = fwrite(entry, n, 1, mtrace_file);
+    if (r != 1) {
+	perror("mtrace_log_entry_binary: fwrite");
+	exit(1);
+    }
+}
+
+void mtrace_format_set(const char *id)
+{
+    static struct {
+	const char *id;
+	void (*fn)(union mtrace_entry *);
+    } format[] = {
+	{ "text", mtrace_log_entry_text },
+	{ "binary", mtrace_log_entry_binary },
+    };
+
+    unsigned int i;
+
+    for (i = 0; i < ARRAY_SIZE(format); i++) {
+	if (!strcmp(id, format[i].id)) {
+	    mtrace_log_entry = format[i].fn;
+	    return;
+	}
+    }
+
+    fprintf(stderr, "mtrace_format_set: bad format %s\n", id);
+    exit(1);
 }
 
 static void mtrace_access_dump(mtrace_access_t type, target_ulong host_addr, 

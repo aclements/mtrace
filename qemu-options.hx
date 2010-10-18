@@ -941,6 +941,9 @@ ETEXI
 DEF("mtrace-file", HAS_ARG, QEMU_OPTION_mtrace_file,
     "-mtrace-file filename\n"
     "                specify memory trace log file\n", QEMU_ARCH_I386)
+DEF("mtrace-format", HAS_ARG, QEMU_OPTION_mtrace_format,
+    "-mtrace-format text\n"
+    "-mtrace-format binary\n", QEMU_ARCH_I386)
 
 DEFHEADING()
 STEXI

@@ -2638,6 +2638,9 @@ int main(int argc, char **argv, char **envp)
 	    case QEMU_OPTION_mtrace_file:
 		mtrace_log_file_set(optarg);
 		break;
+	    case QEMU_OPTION_mtrace_format:
+		mtrace_format_set(optarg);
+		break;
             default:
                 os_parse_cmd_args(popt->index, optarg);
             }
