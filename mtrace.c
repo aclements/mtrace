@@ -24,6 +24,11 @@ void mtrace_log_file_set(const char *path)
     }
 }
 
+void mtrace_cline_trace_set(int b)
+{
+    mtrace_cline_track = b;
+}
+
 static void mtrace_log_entry_text(union mtrace_entry *entry)
 {
     static const char *access_type_to_str[] = {
@@ -336,9 +341,4 @@ void mtrace_init(void)
 	mtrace_file = stderr;
     if (mtrace_log_entry == NULL)
 	mtrace_log_entry = mtrace_log_entry_text;
-
-    /*
-     * XXX this would be a good place to setup the data structures to
-     * log the last core to write to a cache line.
-     */
 }

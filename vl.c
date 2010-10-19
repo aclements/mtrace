@@ -2641,6 +2641,9 @@ int main(int argc, char **argv, char **envp)
 	    case QEMU_OPTION_mtrace_format:
 		mtrace_format_set(optarg);
 		break;
+	    case QEMU_OPTION_mtrace_all:
+		mtrace_cline_trace_set(0);
+		break;
             default:
                 os_parse_cmd_args(popt->index, optarg);
             }
