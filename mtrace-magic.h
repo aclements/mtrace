@@ -27,10 +27,10 @@ static inline void mtrace_enable_set(unsigned long b)
     mtrace_magic(MTRACE_ENABLE_SET, b, 0, 0, 0, 0);
 }
 
-static inline void mtrace_label_register(void * addr, 
-					unsigned long bytes, 
-					const char *str, 
-					unsigned long n)
+static inline void mtrace_label_register(const void * addr, 
+					 unsigned long bytes, 
+					 const char *str, 
+					 unsigned long n)
 {
     mtrace_magic(MTRACE_LABEL_REGISTER, (unsigned long)addr, bytes, 
 		 (unsigned long)str, n, 0);
