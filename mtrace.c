@@ -158,7 +158,7 @@ static int mtrace_cline_update_st(uint8_t *host_addr, unsigned int cpu)
     offset = host_addr - block->host;
     cline = offset >> MTRACE_CLINE_SHIFT;
 
-    if (block->cline_track[cline] & (1 << cpu))
+    if (block->cline_track[cline] == (1 << cpu))
 	return 0;
 
     block->cline_track[cline] = (1 << cpu);
@@ -252,15 +252,15 @@ static int mtrace_host_addr(target_ulong guest_addr, target_ulong *host_addr)
 }
 
 static void mtrace_label_register(target_ulong guest_addr, target_ulong bytes, 
-				 target_ulong str_addr, target_ulong n, 
-				 target_ulong a5)
+				  target_ulong str_addr, target_ulong n, 
+				  target_ulong a5)
 {
     struct mtrace_label_entry label;
     int r;
 
     if (n > sizeof(label.str) - 1)
 	n = sizeof(label.str) - 1;
-    
+
     r = cpu_memory_rw_debug(cpu_single_env, str_addr, (uint8_t *)label.str, n, 0);
     if (r) {
 	fprintf(stderr, "mtrace_label_register: cpu_memory_rw_debug failed\n");
