@@ -14,6 +14,7 @@ static int mtrace_enable;
 static FILE *mtrace_file;
 static void (*mtrace_log_entry)(union mtrace_entry *);
 static int mtrace_cline_track = 1;
+static uint64_t mtrace_access_count;
 
 void mtrace_log_file_set(const char *path)
 {
@@ -47,9 +48,10 @@ static void mtrace_log_entry_text(union mtrace_entry *entry)
 		entry->label.bytes);
 	break;
     case mtrace_entry_access:
-	fprintf(mtrace_file, "%-3s [%-3u %016lx  %016lx  %016lx]\n", 
+	fprintf(mtrace_file, "%-3s [%-3u %016lu  %016lx  %016lx  %016lx]\n", 
 		access_type_to_str[entry->access.access_type],
 		entry->access.cpu,
+		entry->access.access_count,
 		entry->access.pc,
 		entry->access.host_addr,
 		entry->access.guest_addr);
@@ -107,7 +109,8 @@ void mtrace_format_set(const char *id)
 }
 
 static void mtrace_access_dump(mtrace_access_t type, target_ulong host_addr, 
-			       target_ulong guest_addr)
+			       target_ulong guest_addr, 
+			       unsigned long access_count)
 {
     struct mtrace_access_entry entry;
     
@@ -121,6 +124,7 @@ static void mtrace_access_dump(mtrace_access_t type, target_ulong host_addr,
     entry.pc = cpu_single_env->eip;
     entry.host_addr = host_addr;
     entry.guest_addr = guest_addr;
+    entry.access_count = access_count;
 
     mtrace_log_entry((union mtrace_entry *)&entry);
 }
@@ -167,18 +171,28 @@ static int mtrace_cline_update_st(uint8_t *host_addr, unsigned int cpu)
 
 void mtrace_st(target_ulong host_addr, target_ulong guest_addr)
 {
-    int r = mtrace_cline_update_st((uint8_t *)host_addr, 
-				   cpu_single_env->cpu_index);
+    uint64_t a;
+    int r;
+
+    a = mtrace_access_count++;
+
+    r = mtrace_cline_update_st((uint8_t *)host_addr, 
+			       cpu_single_env->cpu_index);
     if (r)
-	mtrace_access_dump(mtrace_access_st, host_addr, guest_addr);
+	mtrace_access_dump(mtrace_access_st, host_addr, guest_addr, a);
 }
 
 void mtrace_ld(target_ulong host_addr, target_ulong guest_addr)
 {
-    int r = mtrace_cline_update_ld((uint8_t *)host_addr, 
-				   cpu_single_env->cpu_index);
+    uint64_t a;
+    int r;
+
+    a = mtrace_access_count++;
+
+    r = mtrace_cline_update_ld((uint8_t *)host_addr, 
+			       cpu_single_env->cpu_index);
     if (r)
-	mtrace_access_dump(mtrace_access_ld, host_addr, guest_addr);
+	mtrace_access_dump(mtrace_access_ld, host_addr, guest_addr, a);
 }
 
 void mtrace_io_write(void *cb, target_phys_addr_t ram_addr, 
@@ -194,12 +208,17 @@ void mtrace_io_write(void *cb, target_phys_addr_t ram_addr,
 	cb == notdirty_mem_writew ||
 	cb == notdirty_mem_writeb)
     {
-	int r = mtrace_cline_update_st(qemu_get_ram_ptr(ram_addr),
-				       cpu_single_env->cpu_index);
+	uint64_t a;
+	int r;
+
+	a = mtrace_access_count++;
+
+	r = mtrace_cline_update_st(qemu_get_ram_ptr(ram_addr),
+				   cpu_single_env->cpu_index);
 	if (r)
 	    mtrace_access_dump(mtrace_access_iw, 
 			       (unsigned long) qemu_get_ram_ptr(ram_addr), 
-			       guest_addr);
+			       guest_addr, a);
     }
 }
 

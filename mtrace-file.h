@@ -34,6 +34,7 @@ struct mtrace_access_entry {
     mtrace_entry_t type;
 
     mtrace_access_t access_type;
+    uint64_t access_count;
     uint16_t cpu;
     uint64_t pc;
     uint64_t host_addr;
