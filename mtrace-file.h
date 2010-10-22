@@ -12,7 +12,14 @@ typedef enum {
 typedef enum {
     mtrace_entry_label = 1,
     mtrace_entry_access,
+    mtrace_entry_enable,
 } mtrace_entry_t;
+
+struct mtrace_enable_entry {
+    mtrace_entry_t type;
+
+    uint8_t enable;
+};
 
 /* 
  * The guest specified an string to associate with the range: 
@@ -25,6 +32,7 @@ struct mtrace_label_entry {
     uint64_t host_addr;
     uint64_t guest_addr;
     uint64_t bytes;
+    uint64_t access_count;
 };
 
 /*
@@ -46,6 +54,7 @@ union mtrace_entry {
 
     struct mtrace_access_entry access;
     struct mtrace_label_entry label;
+    struct mtrace_enable_entry enable;
 };
 
 #endif

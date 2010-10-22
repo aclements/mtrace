@@ -40,12 +40,13 @@ static void mtrace_log_entry_text(union mtrace_entry *entry)
 
     switch(entry->type) {
     case mtrace_entry_label:
-	fprintf(mtrace_file, "%-3s [%-16s  %016lx  %016lx  %016lx]\n",
+	fprintf(mtrace_file, "%-3s [%-16s  %016lx  %016lx  %016lx  %016lx]\n",
 		"T",
 		entry->label.str,
 		entry->label.host_addr,
 		entry->label.guest_addr,
-		entry->label.bytes);
+		entry->label.bytes,
+		entry->label.access_count);
 	break;
     case mtrace_entry_access:
 	fprintf(mtrace_file, "%-3s [%-3u %016lu  %016lx  %016lx  %016lx]\n", 
@@ -55,6 +56,10 @@ static void mtrace_log_entry_text(union mtrace_entry *entry)
 		entry->access.pc,
 		entry->access.host_addr,
 		entry->access.guest_addr);
+	break;
+    case mtrace_entry_enable:
+	fprintf(mtrace_file, "%-3s [%u]\n", 
+		"E", entry->enable.enable);
 	break;
     default:
 	fprintf(stderr, "mtrace_log_entry: bad type %u\n", entry->type);
@@ -72,6 +77,9 @@ static void mtrace_log_entry_binary(union mtrace_entry *entry)
 	break;
     case mtrace_entry_access:
 	n = sizeof(struct mtrace_access_entry);
+	break;
+    case mtrace_entry_enable:
+	n = sizeof(struct mtrace_enable_entry);
 	break;
     default:
 	fprintf(stderr, "mtrace_log_entry: bad type %u\n", entry->type);
@@ -235,7 +243,12 @@ static void mtrace_enable_set(target_ulong b, target_ulong a2,
 			      target_ulong a3, target_ulong a4,
 			      target_ulong a5)
 {
+    struct mtrace_enable_entry enable;
     mtrace_enable = !!b;
+
+    enable.type = mtrace_entry_enable;
+    enable.enable = mtrace_enable;
+    mtrace_log_entry((union mtrace_entry *)&enable);
 }
 
 static int mtrace_host_addr(target_ulong guest_addr, target_ulong *host_addr)
@@ -276,6 +289,8 @@ static void mtrace_label_register(target_ulong guest_addr, target_ulong bytes,
 {
     struct mtrace_label_entry label;
     int r;
+
+    label.access_count = mtrace_access_count;
 
     if (n > sizeof(label.str) - 1)
 	n = sizeof(label.str) - 1;
