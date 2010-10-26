@@ -239,16 +239,29 @@ void mtrace_io_read(void *cb, target_phys_addr_t ram_addr, target_ulong guest_ad
  * Handlers for the mtrace magic instruction
  */
 
-static void mtrace_enable_set(target_ulong b, target_ulong a2,
-			      target_ulong a3, target_ulong a4,
+static void mtrace_enable_set(target_ulong b, target_ulong str_addr,
+			      target_ulong n, target_ulong a4,
 			      target_ulong a5)
 {
     struct mtrace_enable_entry enable;
-    mtrace_enable = !!b;
+    int r;
 
+    mtrace_enable = !!b;
     enable.type = mtrace_entry_enable;
     enable.access_count = mtrace_access_count;
     enable.enable = mtrace_enable;
+
+
+    if (n > sizeof(enable.str) - 1)
+	n = sizeof(enable.str) - 1;
+    
+    r = cpu_memory_rw_debug(cpu_single_env, str_addr, (uint8_t *)enable.str, n, 0);
+    if (r) {
+	fprintf(stderr, "mtrace_enable_set: cpu_memory_rw_debug failed\n");
+	return;
+    }
+    enable.str[n] = 0;
+
     mtrace_log_entry((union mtrace_entry *)&enable);
 }
 

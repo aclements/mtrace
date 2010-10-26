@@ -20,6 +20,7 @@ struct mtrace_enable_entry {
     uint64_t access_count;
 
     uint8_t enable;
+    char str[32];
 };
 
 /* 

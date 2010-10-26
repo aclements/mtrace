@@ -22,9 +22,10 @@ static inline void mtrace_magic(unsigned long ax, unsigned long bx,
 		       "S" (si), "D" (di));
 }
 
-static inline void mtrace_enable_set(unsigned long b)
+static inline void mtrace_enable_set(unsigned long b, const char *str, 
+				     unsigned long n)
 {
-    mtrace_magic(MTRACE_ENABLE_SET, b, 0, 0, 0, 0);
+    mtrace_magic(MTRACE_ENABLE_SET, b, (unsigned long)str, n, 0, 0);
 }
 
 static inline void mtrace_label_register(const void * addr, 
