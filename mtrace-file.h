@@ -17,6 +17,7 @@ typedef enum {
 
 struct mtrace_enable_entry {
     mtrace_entry_t type;
+    uint64_t access_count;
 
     uint8_t enable;
 };
@@ -27,12 +28,12 @@ struct mtrace_enable_entry {
  */
 struct mtrace_label_entry {
     mtrace_entry_t type;
+    uint64_t access_count;
 
     char str[32];
     uint64_t host_addr;
     uint64_t guest_addr;
     uint64_t bytes;
-    uint64_t access_count;
 };
 
 /*
@@ -40,9 +41,9 @@ struct mtrace_label_entry {
  */
 struct mtrace_access_entry {
     mtrace_entry_t type;
+    uint64_t access_count;
 
     mtrace_access_t access_type;
-    uint64_t access_count;
     uint16_t cpu;
     uint64_t pc;
     uint64_t host_addr;

@@ -247,6 +247,7 @@ static void mtrace_enable_set(target_ulong b, target_ulong a2,
     mtrace_enable = !!b;
 
     enable.type = mtrace_entry_enable;
+    enable.access_count = mtrace_access_count;
     enable.enable = mtrace_enable;
     mtrace_log_entry((union mtrace_entry *)&enable);
 }
