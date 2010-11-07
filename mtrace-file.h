@@ -13,8 +13,27 @@ typedef enum {
     mtrace_entry_label = 1,
     mtrace_entry_access,
     mtrace_entry_enable,
+    mtrace_entry_fcall,
 } mtrace_entry_t;
 
+/*
+ * The guest specified the begining or end to a function call
+ */
+struct mtrace_fcall_entry {
+    mtrace_entry_t type;    
+    uint64_t access_count;
+    uint16_t cpu;
+
+    uint64_t tid;
+    uint64_t pc;
+    uint64_t tag;
+    uint16_t depth;
+    uint8_t end;
+};
+
+/*
+ * The guest enabled/disabled mtrace and specified an optional string
+ */
 struct mtrace_enable_entry {
     mtrace_entry_t type;
     uint64_t access_count;
@@ -57,6 +76,7 @@ union mtrace_entry {
     struct mtrace_access_entry access;
     struct mtrace_label_entry label;
     struct mtrace_enable_entry enable;
+    struct mtrace_fcall_entry fcall;
 };
 
 #endif

@@ -49,7 +49,7 @@ static void mtrace_log_entry_text(union mtrace_entry *entry)
 		entry->label.access_count);
 	break;
     case mtrace_entry_access:
-	fprintf(mtrace_file, "%-3s [%-3u %016lu  %016lx  %016lx  %016lx]\n", 
+	fprintf(mtrace_file, "%-3s [%-3u %16lu  %016lx  %016lx  %016lx]\n", 
 		access_type_to_str[entry->access.access_type],
 		entry->access.cpu,
 		entry->access.access_count,
@@ -60,6 +60,18 @@ static void mtrace_log_entry_text(union mtrace_entry *entry)
     case mtrace_entry_enable:
 	fprintf(mtrace_file, "%-3s [%u]\n", 
 		"E", entry->enable.enable);
+	break;
+    case mtrace_entry_fcall:
+	fprintf(mtrace_file, "%-3s [%-3u  %16lu  %16lu  %016lx"
+		"  %016lx  %4u  %1u]\n",
+		"C",
+		entry->fcall.cpu,
+		entry->fcall.access_count,
+		entry->fcall.tid,
+		entry->fcall.pc,
+		entry->fcall.tag,
+		entry->fcall.depth,
+		entry->fcall.end);
 	break;
     default:
 	fprintf(stderr, "mtrace_log_entry: bad type %u\n", entry->type);
@@ -80,6 +92,9 @@ static void mtrace_log_entry_binary(union mtrace_entry *entry)
 	break;
     case mtrace_entry_enable:
 	n = sizeof(struct mtrace_enable_entry);
+	break;
+    case mtrace_entry_fcall:
+	n = sizeof(struct mtrace_fcall_entry);
 	break;
     default:
 	fprintf(stderr, "mtrace_log_entry: bad type %u\n", entry->type);
@@ -335,11 +350,30 @@ static void mtrace_label_register(target_ulong guest_addr, target_ulong bytes,
     mtrace_log_entry((union mtrace_entry *)&label);
 }
 
+static void mtrace_fcall_register(target_ulong tid, target_ulong pc, 
+				  target_ulong tag, target_ulong depth, 
+				  target_ulong end)
+{
+    struct mtrace_fcall_entry fcall;
+
+    fcall.type = mtrace_entry_fcall;
+    fcall.tid = tid;
+    fcall.pc = pc;
+    fcall.tag = tag;
+    fcall.depth = depth;
+    fcall.end = !!end;
+    fcall.cpu = cpu_single_env->cpu_index;
+    fcall.access_count = mtrace_access_count;
+
+    mtrace_log_entry((union mtrace_entry *)&fcall);
+}
+
 static void (*mtrace_call[])(target_ulong, target_ulong, target_ulong,
 			     target_ulong, target_ulong) = 
 {
     [MTRACE_ENABLE_SET]		= mtrace_enable_set,
     [MTRACE_LABEL_REGISTER] 	= mtrace_label_register,
+    [MTRACE_FCALL_REGISTER]	= mtrace_fcall_register,
 };
 
 void mtrace_inst_exec(target_ulong a0, target_ulong a1, 
