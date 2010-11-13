@@ -40,8 +40,9 @@ static void mtrace_log_entry_text(union mtrace_entry *entry)
 
     switch(entry->type) {
     case mtrace_entry_label:
-	fprintf(mtrace_file, "%-3s [%-16s  %016lx  %016lx  %016lx  %016lx]\n",
+	fprintf(mtrace_file, "%-3s [%-3u  %16s  %016lx  %016lx  %016lx  %016lx]\n",
 		"T",
+		entry->label.label_type,
 		entry->label.str,
 		entry->label.host_addr,
 		entry->label.guest_addr,
@@ -312,14 +313,15 @@ static int mtrace_host_addr(target_ulong guest_addr, target_ulong *host_addr)
     return 0;
 }
 
-static void mtrace_label_register(target_ulong guest_addr, target_ulong bytes, 
-				  target_ulong str_addr, target_ulong n, 
-				  target_ulong a5)
+static void mtrace_label_register(target_ulong type, target_ulong guest_addr, 
+				  target_ulong bytes, target_ulong str_addr, 
+				  target_ulong n)
 {
     struct mtrace_label_entry label;
     int r;
 
     label.access_count = mtrace_access_count;
+    label.label_type = type;
 
     if (n > sizeof(label.str) - 1)
 	n = sizeof(label.str) - 1;

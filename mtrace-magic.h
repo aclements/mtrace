@@ -7,6 +7,14 @@ enum {
     MTRACE_FCALL_REGISTER,
 };
 
+typedef enum {
+    mtrace_label_heap = 1,	/* kmalloc, etc */
+    mtrace_label_block,		/* page_alloc, etc */
+    mtrace_label_static,	/* .data, .bss, etc */
+
+    mtrace_label_end
+} mtrace_label_t;
+
 #ifndef QEMU_MTRACE
 
 /*
@@ -29,13 +37,14 @@ static inline void mtrace_enable_set(unsigned long b, const char *str,
     mtrace_magic(MTRACE_ENABLE_SET, b, (unsigned long)str, n, 0, 0);
 }
 
-static inline void mtrace_label_register(const void * addr, 
+static inline void mtrace_label_register(mtrace_label_t type,
+					 const void * addr, 
 					 unsigned long bytes, 
 					 const char *str, 
 					 unsigned long n)
 {
-    mtrace_magic(MTRACE_LABEL_REGISTER, (unsigned long)addr, bytes, 
-		 (unsigned long)str, n, 0);
+    mtrace_magic(MTRACE_LABEL_REGISTER, (unsigned long) type, 
+		 (unsigned long)addr, bytes, (unsigned long)str, n);
 }
 
 static inline void mtrace_fcall_register(unsigned long tid,
