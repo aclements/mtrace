@@ -144,18 +144,19 @@ static unsigned long mtrace_get_pc(unsigned long searched_pc)
 
 static unsigned long mtrace_get_pc(unsigned long searched_pc)
 {
+    int mtrace_enable_save;
     TranslationBlock *tb;
 
     /*
      * If searched_pc is NULL, or we can't find a TB, then cpu_single_env->eip 
      * is (hopefully, probably?) up-to-date.
      */
-    if (searched_pc == NULL)
+    if (searched_pc == 0)
 	return cpu_single_env->eip;
 
     /*
-     * This is pretty heavy weight.  It doesn't look like QEMU saves the mappings
-     * required to translated a TCG code PC into a guest PC.  So, we:
+     * This is pretty heavy weight.  It doesn't look like QEMU saves the 
+     * mappings required to translated a TCG code PC into a guest PC.  So, we:
      *
      *  1. find the TB for the TCG code PC (searched_pc)
      *  Call cpu_restore_state, which:
@@ -166,14 +167,18 @@ static unsigned long mtrace_get_pc(unsigned long searched_pc)
      *     PC
      *  5. updates cpu_single_env->eip
      *
-     *  NB This technique has the side-effect that, while generating micro ops,
-     *  QEMU will read guest memory.  If we are tracing *all* memory accesses
-     *  this will show up in the traces.
+     *  NB while generating micro ops QEMU reads guest memory.  We want to
+     *  ignore these accesses, so we temporarily set mtrace_enable to 0.
      */
     tb = tb_find_pc(searched_pc);
     if (!tb)
 	return cpu_single_env->eip;
+
+    mtrace_enable_save = mtrace_enable;
+    mtrace_enable = 0;
     cpu_restore_state(tb, cpu_single_env, searched_pc, NULL);
+    mtrace_enable = mtrace_enable_save;
+
     return cpu_single_env->eip;
 }
 
