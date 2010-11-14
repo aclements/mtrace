@@ -149,7 +149,8 @@ static unsigned long mtrace_get_pc(unsigned long searched_pc)
 
     /*
      * If searched_pc is NULL, or we can't find a TB, then cpu_single_env->eip 
-     * is (hopefully, probably?) up-to-date.
+     * is (hopefully, probably?) up-to-date.  This happens, for example, when
+     * generating micro ops.
      */
     if (searched_pc == 0)
 	return cpu_single_env->eip;
@@ -160,7 +161,7 @@ static unsigned long mtrace_get_pc(unsigned long searched_pc)
      *
      *  1. find the TB for the TCG code PC (searched_pc)
      *  Call cpu_restore_state, which:
-     *  2. generates the intermediate micro ops
+     *  2. generates the micro ops
      *  3. finds the offset of the micro op that corresponds to searched_pc's 
      *     offset in the TCG code of the TB
      *  4. uses gen_opc_pc to convert the offset of the micro op into a guest 
