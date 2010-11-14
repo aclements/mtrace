@@ -10,6 +10,9 @@
 /* 64-byte cache lines */
 #define MTRACE_CLINE_SHIFT	6
 
+/* From dyngen-exec.h */
+#define MTRACE_GETPC() ((void *)((unsigned long)__builtin_return_address(0) - 1))
+
 static int mtrace_enable;
 static FILE *mtrace_file;
 static void (*mtrace_log_entry)(union mtrace_entry *);
@@ -132,9 +135,52 @@ void mtrace_format_set(const char *id)
     abort();
 }
 
+#if 0
+static unsigned long mtrace_get_pc(unsigned long searched_pc)
+{
+    return cpu_single_env->eip;
+}
+#endif
+
+static unsigned long mtrace_get_pc(unsigned long searched_pc)
+{
+    TranslationBlock *tb;
+
+    /*
+     * If searched_pc is NULL, or we can't find a TB, then cpu_single_env->eip 
+     * is (hopefully, probably?) up-to-date.
+     */
+    if (searched_pc == NULL)
+	return cpu_single_env->eip;
+
+    /*
+     * This is pretty heavy weight.  It doesn't look like QEMU saves the mappings
+     * required to translated a TCG code PC into a guest PC.  So, we:
+     *
+     *  1. find the TB for the TCG code PC (searched_pc)
+     *  Call cpu_restore_state, which:
+     *  2. generates the intermediate micro ops
+     *  3. finds the offset of the micro op that corresponds to searched_pc's 
+     *     offset in the TCG code of the TB
+     *  4. uses gen_opc_pc to convert the offset of the micro op into a guest 
+     *     PC
+     *  5. updates cpu_single_env->eip
+     *
+     *  NB This technique has the side-effect that, while generating micro ops,
+     *  QEMU will read guest memory.  If we are tracing *all* memory accesses
+     *  this will show up in the traces.
+     */
+    tb = tb_find_pc(searched_pc);
+    if (!tb)
+	return cpu_single_env->eip;
+    cpu_restore_state(tb, cpu_single_env, searched_pc, NULL);
+    return cpu_single_env->eip;
+}
+
 static void mtrace_access_dump(mtrace_access_t type, target_ulong host_addr, 
 			       target_ulong guest_addr, 
-			       unsigned long access_count)
+			       unsigned long access_count,
+			       void *retaddr)
 {
     struct mtrace_access_entry entry;
     
@@ -144,8 +190,7 @@ static void mtrace_access_dump(mtrace_access_t type, target_ulong host_addr,
     entry.type = mtrace_entry_access;
     entry.access_type = type;
     entry.cpu = cpu_single_env->cpu_index;
-    /* XXX bug -- this EIP is the start of the TB */
-    entry.pc = cpu_single_env->eip;
+    entry.pc = mtrace_get_pc((unsigned long)retaddr);
     entry.host_addr = host_addr;
     entry.guest_addr = guest_addr;
     entry.access_count = access_count;
@@ -193,7 +238,7 @@ static int mtrace_cline_update_st(uint8_t *host_addr, unsigned int cpu)
     return 1;
 }
 
-void mtrace_st(target_ulong host_addr, target_ulong guest_addr)
+void mtrace_st(target_ulong host_addr, target_ulong guest_addr, void *retaddr)
 {
     uint64_t a;
     int r;
@@ -203,10 +248,15 @@ void mtrace_st(target_ulong host_addr, target_ulong guest_addr)
     r = mtrace_cline_update_st((uint8_t *)host_addr, 
 			       cpu_single_env->cpu_index);
     if (r)
-	mtrace_access_dump(mtrace_access_st, host_addr, guest_addr, a);
+	mtrace_access_dump(mtrace_access_st, host_addr, guest_addr, a, retaddr);
 }
 
-void mtrace_ld(target_ulong host_addr, target_ulong guest_addr)
+void mtrace_tcg_st(target_ulong host_addr, target_ulong guest_addr)
+{
+    mtrace_st(host_addr, guest_addr, MTRACE_GETPC());
+}
+
+void mtrace_ld(target_ulong host_addr, target_ulong guest_addr, void *retaddr)
 {
     uint64_t a;
     int r;
@@ -216,11 +266,16 @@ void mtrace_ld(target_ulong host_addr, target_ulong guest_addr)
     r = mtrace_cline_update_ld((uint8_t *)host_addr, 
 			       cpu_single_env->cpu_index);
     if (r)
-	mtrace_access_dump(mtrace_access_ld, host_addr, guest_addr, a);
+	mtrace_access_dump(mtrace_access_ld, host_addr, guest_addr, a, retaddr);
+}
+
+void mtrace_tcg_ld(target_ulong host_addr, target_ulong guest_addr)
+{
+    mtrace_ld(host_addr, guest_addr, MTRACE_GETPC());
 }
 
 void mtrace_io_write(void *cb, target_phys_addr_t ram_addr, 
-		    target_ulong guest_addr)
+		     target_ulong guest_addr, void *retaddr)
 {
     /*
      * XXX This is a hack -- I'm trying to log the host address and the
@@ -242,11 +297,12 @@ void mtrace_io_write(void *cb, target_phys_addr_t ram_addr,
 	if (r)
 	    mtrace_access_dump(mtrace_access_iw, 
 			       (unsigned long) qemu_get_ram_ptr(ram_addr), 
-			       guest_addr, a);
+			       guest_addr, a, retaddr);
     }
 }
 
-void mtrace_io_read(void *cb, target_phys_addr_t ram_addr, target_ulong guest_addr)
+void mtrace_io_read(void *cb, target_phys_addr_t ram_addr, 
+		    target_ulong guest_addr, void *retaddr)
 {
     /* Nothing to do.. */
 }

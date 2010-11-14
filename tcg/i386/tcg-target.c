@@ -1164,7 +1164,7 @@ static void tcg_out_qemu_ld(TCGContext *s, const TCGArg *args,
     /* TLB Hit.  */
     tcg_out_qemu_ld_direct(s, data_reg, data_reg2,
                            tcg_target_call_iarg_regs[0], 0, opc);
-    tcg_out_calli(s, (tcg_target_long)mtrace_ld);
+    tcg_out_calli(s, (tcg_target_long)mtrace_tcg_ld);
 
     /* jmp label2 */
     tcg_out8(s, OPC_JMP_short);
@@ -1340,7 +1340,7 @@ static void tcg_out_qemu_st(TCGContext *s, const TCGArg *args,
     /* TLB Hit.  */
     tcg_out_qemu_st_direct(s, data_reg, data_reg2,
                            tcg_target_call_iarg_regs[0], 0, opc);
-    tcg_out_calli(s, (tcg_target_long)mtrace_st);
+    tcg_out_calli(s, (tcg_target_long)mtrace_tcg_st);
 
     /* jmp label2 */
     tcg_out8(s, OPC_JMP_short);
