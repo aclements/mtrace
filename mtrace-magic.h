@@ -11,6 +11,7 @@ typedef enum {
     mtrace_label_heap = 1,	/* kmalloc, etc */
     mtrace_label_block,		/* page_alloc, etc */
     mtrace_label_static,	/* .data, .bss, etc */
+    mtrace_label_percpu,	/* .data..percpu (base addr. set at runtime) */
 
     mtrace_label_end
 } mtrace_label_t;
