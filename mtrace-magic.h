@@ -5,6 +5,7 @@ enum {
     MTRACE_ENABLE_SET = 1,
     MTRACE_LABEL_REGISTER,
     MTRACE_FCALL_REGISTER,
+    MTRACE_SEGMENT_REGISTER,
 };
 
 typedef enum {
@@ -55,6 +56,14 @@ static inline void mtrace_fcall_register(unsigned long tid,
 					 int end)
 {
     mtrace_magic(MTRACE_FCALL_REGISTER, tid, pc, tag, depth, end);
+}
+
+static inline void mtrace_segment_register(unsigned long baseaddr,
+					   unsigned long endaddr,
+					   mtrace_label_t type,
+					   unsigned long cpu)
+{
+    mtrace_magic(MTRACE_SEGMENT_REGISTER, baseaddr, endaddr, type, cpu, 0);    
 }
 
 #endif /* QEMU_MTRACE */

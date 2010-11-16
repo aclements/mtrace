@@ -77,6 +77,14 @@ static void mtrace_log_entry_text(union mtrace_entry *entry)
 		entry->fcall.depth,
 		entry->fcall.end);
 	break;
+    case mtrace_entry_segment:
+	fprintf(mtrace_file, "%-3s [%-3u  %3u  %16lx %16lx]\n",
+		"S",
+		entry->seg.cpu,
+		entry->seg.type,
+		entry->seg.baseaddr,
+		entry->seg.endaddr);
+	break;
     default:
 	fprintf(stderr, "mtrace_log_entry: bad type %u\n", entry->type);
 	abort();
@@ -99,6 +107,9 @@ static void mtrace_log_entry_binary(union mtrace_entry *entry)
 	break;
     case mtrace_entry_fcall:
 	n = sizeof(struct mtrace_fcall_entry);
+	break;
+    case mtrace_entry_segment:
+	n = sizeof(struct mtrace_segment_entry);
 	break;
     default:
 	fprintf(stderr, "mtrace_log_entry: bad type %u\n", entry->type);
@@ -432,12 +443,30 @@ static void mtrace_fcall_register(target_ulong tid, target_ulong pc,
     mtrace_log_entry((union mtrace_entry *)&fcall);
 }
 
+static void mtrace_segment_register(target_ulong baseaddr, target_ulong endaddr,
+				    target_ulong type, target_ulong cpu, 
+				    target_ulong a4)
+{
+    struct mtrace_segment_entry seg;
+
+    seg.type = mtrace_entry_segment;
+    seg.access_count = mtrace_access_count;
+
+    seg.object_type = type;
+    seg.baseaddr = baseaddr;
+    seg.endaddr = endaddr;
+    seg.cpu = cpu;
+
+    mtrace_log_entry((union mtrace_entry *)&seg);
+}
+
 static void (*mtrace_call[])(target_ulong, target_ulong, target_ulong,
 			     target_ulong, target_ulong) = 
 {
     [MTRACE_ENABLE_SET]		= mtrace_enable_set,
     [MTRACE_LABEL_REGISTER] 	= mtrace_label_register,
     [MTRACE_FCALL_REGISTER]	= mtrace_fcall_register,
+    [MTRACE_SEGMENT_REGISTER]	= mtrace_segment_register,
 };
 
 void mtrace_inst_exec(target_ulong a0, target_ulong a1, 
