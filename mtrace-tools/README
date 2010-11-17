@@ -1,0 +1,6 @@
+* See the MOSBENCH repo for some microbenchmarks.
+
+* See qemu.sh for some useful QEMU arguments.
+
+* See run-cmdline and run-cmdline.py to automatically run benchmarks
+  when Linux boots, then shutdown the emulator.
