@@ -1,3 +1,5 @@
+* NB Don't confuse QEMU's 'trace' features with mtrace.
+
 * Cache line tracking
 
   When cache line tracking is enabled (the default) a memory access is
