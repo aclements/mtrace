@@ -31,13 +31,15 @@ using namespace::__gnu_cxx;
 
 struct ObjectLabel {
 
-	ObjectLabel(struct mtrace_label_entry *a, uint64_t b) {
-		this->l = a;
-		this->access_count_end = b;
+	ObjectLabel(struct mtrace_label_entry *label, 
+		    uint64_t access_count_end) 
+	{
+		this->label_ = label;
+		this->access_count_end_ = access_count_end;
 	}
 
-	struct mtrace_label_entry *l;
-	uint64_t access_count_end;
+	struct mtrace_label_entry *label_;
+	uint64_t access_count_end_;
 };
 
 struct CompleteFcall {
@@ -79,18 +81,18 @@ struct Progress {
 };
 
 typedef hash_map<uint64_t, struct mtrace_label_entry *> LabelHash;
-typedef list<ObjectLabel> 	  		     	LabelList;
+typedef list<ObjectLabel> 	  		     	ObjectList;
 typedef list<struct mtrace_access_entry *> 		AccessList;
 typedef list<CompleteFcall> 				FcallList;
 
-typedef list<struct mtrace_label_entry *>	     	LabelList2;
+typedef list<struct mtrace_label_entry *>	     	LabelList;
 
 static LabelHash    outstanding_labels[mtrace_label_end];
-static LabelList    complete_labels[mtrace_label_end];;
+static ObjectList   complete_labels[mtrace_label_end];;
 static AccessList   accesses;
 static FcallList    complete_fcalls;
 
-static LabelList2   percpu_labels;
+static LabelList    percpu_labels;
 
 static struct mtrace_enable_entry mtrace_enable;
 static struct mtrace_fcall_entry *mtrace_fcall[MAX_CPU];
@@ -119,18 +121,23 @@ static void __noret__ __chfmt__ edie(const char* errstr, ...)
 
 static void insert_complete_label(ObjectLabel ol)
 {
-	if (ol.l->label_type == 0 || ol.l->label_type >= mtrace_label_end)
-		die("insert_complete_label: bad label type: %u", ol.l->label_type);
-	complete_labels[ol.l->label_type].push_back(ol);
+	if (ol.label_->label_type == 0 || 
+	    ol.label_->label_type >= mtrace_label_end)
+		die("insert_complete_label: bad label type: %u", 
+		    ol.label_->label_type);
+	complete_labels[ol.label_->label_type].push_back(ol);
 }
 
-// In theory, using INTEGER won't yield correct results.  INTEGER is a 
-// *signed" 64-bit value.  If a label starts at 0x7FFFFFFFFFFFFFFF and is
-// one byte, the end address, 0x8000000000000000, will be a negative number,
-// and smaller than the start address.  INTEGER, however, is much faster
-// than BLOB, and the virtual address space is only 48-bits with a hole in
-// the middle of a 64-bit space, so in most cases the role over problem 
-// is avoided.
+// In theory, using INTEGER won't yield correct results for a 64-bit virtual 
+// address space because INTEGER is a *signed" 64-bit value.  If a label starts 
+// at 0x7FFFFFFFFFFFFFFF and is one byte, the end address, 0x8000000000000000, 
+// will be a negative number, and smaller than the start address. Lucky for us 
+// the AMD64 virtual address space is only 48-bits with a 16-bit sign extension, 
+// so this problem never shows up.
+//
+// Use INTEGER, because it is much faster than BLOB.
+// Use BLOB, because it prints much nicer than BLOB in the sqlite3 shell.
+
 #if 0
 #define ADDR_TYPE "BLOB"
 #define ADDR_FMT  "x'%016lx'"
@@ -220,16 +227,20 @@ static void build_labelx_db(void *arg, const char *name,
 			name, label_type);
 	exec_stmt(db, NULL, NULL, create_label_table, name, label_type);
 
-	LabelList::iterator it = complete_labels[label_type].begin();
+	ObjectList::iterator it = complete_labels[label_type].begin();
 	for (; it != complete_labels[label_type].end(); ++it) {
 		ObjectLabel ol = *it;
 		
-		exec_stmt(db, NULL, NULL, insert_label, name, label_type, 
-			  ol.l->str, ol.l->host_addr, 
-			  ol.l->host_addr + ol.l->bytes, 
-			  ol.l->guest_addr, ol.l->guest_addr + ol.l->bytes, 
-			  ol.l->bytes, ol.l->access_count, 
-			  ol.access_count_end);
+		exec_stmt(db, NULL, NULL, insert_label, name, 
+			  label_type, 
+			  ol.label_->str, 
+			  ol.label_->host_addr, 
+			  ol.label_->host_addr + ol.label_->bytes, 
+			  ol.label_->guest_addr, 
+			  ol.label_->guest_addr + ol.label_->bytes, 
+			  ol.label_->bytes, 
+			  ol.label_->access_count, 
+			  ol.access_count_end_);
 
 		p.tick();
 	}
@@ -552,7 +563,7 @@ static void handle_segment(struct mtrace_segment_entry *seg)
 	if (seg->object_type != mtrace_label_percpu)
 		die("handle_segment: bad type %u", seg->object_type);
 
-	LabelList2::iterator it = percpu_labels.begin();
+	LabelList::iterator it = percpu_labels.begin();
 	for (; it != percpu_labels.end(); ++it) {
 		struct mtrace_label_entry *offset = *it;
 		struct mtrace_label_entry *l = 
@@ -568,6 +579,9 @@ static void handle_segment(struct mtrace_segment_entry *seg)
 		ObjectLabel ol(l, ~0UL);
 		insert_complete_label(ol);
 	}
+
+	// XXX Oops, we leak the mtrace_label_entry in percpu_labels after
+	// we handle the final segment.
 }
 
 static void process_log(void *arg, union mtrace_entry *entry, unsigned long size)
@@ -675,19 +689,20 @@ static void process_symbols(void *arg, const char *nm_file)
 	// Move all the labels for percpu variables from the mtrace_label_static 
 	// list to the temporary list.  Once we know each CPUs percpu base 
 	// address we add percpu objects onto the mtrace_label_percpu list.
-	LabelList::iterator it = complete_labels[mtrace_label_static].begin();
-	LabelList::iterator tmp = it;
+	ObjectList::iterator it = complete_labels[mtrace_label_static].begin();
+	ObjectList::iterator tmp = it;
 	++tmp;
 	for (; it != complete_labels[mtrace_label_static].end(); it = tmp, ++tmp) {
 		ObjectLabel ol = *it;
-		if (percpu_start <= ol.l->guest_addr && 
-		    ol.l->guest_addr < percpu_end)
+		if (percpu_start <= ol.label_->guest_addr && 
+		    ol.label_->guest_addr < percpu_end)
 		{
 			complete_labels[mtrace_label_static].erase(it);
-			percpu_labels.push_back(ol.l);
+			percpu_labels.push_back(ol.label_);
 		}
 	}
 
+	fclose(f);
 	free(line);
 	printf("all done!\n");
 }
@@ -700,7 +715,7 @@ int main(int ac, char **av)
 	int fd;
 	
 	if (ac != 4)
-		die("usage: %s mtrace-log-file nm-file database", av[0]);
+		die("usage: %s mtrace-log-file symbol-file database", av[0]);
 
 	fd = open(av[1], O_RDONLY);
 	if (fd < 0)
