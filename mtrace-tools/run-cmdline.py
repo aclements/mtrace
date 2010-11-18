@@ -3,11 +3,9 @@
 # * Put this script in /usr/bin/
 # * Put run-cmdline in /etc/init.d/
 # * Add a symlink to run run-cmdline at boot:
-#     ln -s /etc/init.d/run-cmdline /etc/rc2.d/S90run-cmdline
-#      or
-#     (cd /etc/inid.d && update-rc.d run-cmdline defaults)
+     cd /etc/inid.d && update-rc.d run-cmdline defaults
 
-# XXX port this to bash (i.e. run-cmdline)
+# XXX port this to sh (i.e. run-cmdline)
 
 import shlex
 import subprocess

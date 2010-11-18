@@ -4,3 +4,24 @@
 
 * See run-cmdline and run-cmdline.py to automatically run benchmarks
   when Linux boots, then shutdown the emulator.
+
+* For a disk image:
+  
+  $ qemu-img create disk.img 300M
+  $ mkfs.ext3 disk.img
+  # mount -o loop disk.img tmp
+  # debootstrap --arch amd64 --include=python --exclude=udev --variant=minbase squeeze tmp http://ftp.debian.org/debian/
+
+  Fix the root pw in /etc/shadow:
+   root::14931:0:99999:7:::
+
+  Fix /etc/inittab to ttyS login and disable tty:
+   #1:2345:respawn:/sbin/getty 38400 tty1
+   #2:23:respawn:/sbin/getty 38400 tty2
+   #3:23:respawn:/sbin/getty 38400 tty3
+   #4:23:respawn:/sbin/getty 38400 tty4
+   #5:23:respawn:/sbin/getty 38400 tty5
+   #6:23:respawn:/sbin/getty 38400 tty6
+
+   T0:123:respawn:/sbin/getty -L ttyS0 9600 vt100
+
