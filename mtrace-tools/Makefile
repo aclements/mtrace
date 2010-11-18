@@ -1,6 +1,6 @@
 Q = @
 
-QEMUDIR = /home/sbw/qemu
+QEMUDIR = ..
 
 CXX  = g++
 
