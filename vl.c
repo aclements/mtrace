@@ -2635,6 +2635,9 @@ int main(int argc, char **argv, char **envp)
                     fclose(fp);
                     break;
                 }
+	    case QEMU_OPTION_mtrace_enable:
+		mtrace_system_enable_set(1);
+		break;
 	    case QEMU_OPTION_mtrace_file:
 		mtrace_log_file_set(optarg);
 		break;
