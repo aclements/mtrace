@@ -945,7 +945,7 @@ DEF("mtrace-format", HAS_ARG, QEMU_OPTION_mtrace_format,
     "-mtrace-format text\n"
     "-mtrace-format binary\n", QEMU_ARCH_I386)
 DEF("mtrace-all", 0, QEMU_OPTION_mtrace_all,
-    "-mtrace-all     Log all memory accesses "
+    "-mtrace-all     Log all memory accesses\n"
     "                (the default is only the shared cache lines)\n", QEMU_ARCH_I386)
 
 DEFHEADING()
