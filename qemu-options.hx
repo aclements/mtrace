@@ -938,6 +938,9 @@ Specify SMBIOS type 0 fields
 Specify SMBIOS type 1 fields
 ETEXI
 
+DEF("mtrace-enable", 0, QEMU_OPTION_mtrace_enable,
+    "-mtrace-enable  Enable the memory trace system\n"
+    "                (the default is only the shared cache lines)\n", QEMU_ARCH_I386)
 DEF("mtrace-file", HAS_ARG, QEMU_OPTION_mtrace_file,
     "-mtrace-file filename\n"
     "                specify memory trace log file\n", QEMU_ARCH_I386)

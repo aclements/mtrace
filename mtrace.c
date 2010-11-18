@@ -13,6 +13,7 @@
 /* From dyngen-exec.h */
 #define MTRACE_GETPC() ((void *)((unsigned long)__builtin_return_address(0) - 1))
 
+static int mtrace_system_enable;
 static int mtrace_enable;
 static FILE *mtrace_file;
 static void (*mtrace_log_entry)(union mtrace_entry *);
@@ -31,6 +32,11 @@ void mtrace_log_file_set(const char *path)
 void mtrace_cline_trace_set(int b)
 {
     mtrace_cline_track = b;
+}
+
+void mtrace_system_enable_set(int b)
+{
+    mtrace_system_enable = b;
 }
 
 static void mtrace_log_entry_text(union mtrace_entry *entry)
@@ -260,6 +266,9 @@ void mtrace_st(target_ulong host_addr, target_ulong guest_addr, void *retaddr)
     uint64_t a;
     int r;
 
+    if (!mtrace_system_enable)
+	return;
+
     a = mtrace_access_count++;
 
     r = mtrace_cline_update_st((uint8_t *)host_addr, 
@@ -278,6 +287,9 @@ void mtrace_ld(target_ulong host_addr, target_ulong guest_addr, void *retaddr)
     uint64_t a;
     int r;
 
+    if (!mtrace_system_enable)
+	return;
+
     a = mtrace_access_count++;
 
     r = mtrace_cline_update_ld((uint8_t *)host_addr, 
@@ -294,6 +306,9 @@ void mtrace_tcg_ld(target_ulong host_addr, target_ulong guest_addr)
 void mtrace_io_write(void *cb, target_phys_addr_t ram_addr, 
 		     target_ulong guest_addr, void *retaddr)
 {
+    if (!mtrace_system_enable)
+	return;
+
     /*
      * XXX This is a hack -- I'm trying to log the host address and the
      * guest address without adding an extra argument to the CPUWriteMemoryFunc
@@ -473,6 +488,9 @@ void mtrace_inst_exec(target_ulong a0, target_ulong a1,
 		      target_ulong a2, target_ulong a3,
 		      target_ulong a4, target_ulong a5)
 {
+    if (!mtrace_system_enable)
+	return;
+
     if (a0 >= sizeof(mtrace_call) / sizeof(mtrace_call[0]) ||
 	mtrace_call[a0] == NULL) 
     {
@@ -487,7 +505,7 @@ uint8_t *mtrace_cline_track_alloc(size_t size)
 {
     uint8_t *b;
 
-    if (!mtrace_cline_track)
+    if (!mtrace_cline_track || !mtrace_system_enable)
 	return NULL;
 
     b = qemu_vmalloc(size >> MTRACE_CLINE_SHIFT);
@@ -512,6 +530,9 @@ void mtrace_cline_track_free(uint8_t *cline_track)
 
 void mtrace_init(void)
 {
+    if (!mtrace_system_enable)
+	return;
+
     if (mtrace_file == NULL)
 	mtrace_file = stderr;
     if (mtrace_log_entry == NULL)
