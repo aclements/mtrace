@@ -25,3 +25,5 @@
 
    T0:123:respawn:/sbin/getty -L ttyS0 9600 vt100
 
+  Make the ttyS devices:
+   (cd tmp/dev && MAKEDEV ttyS)

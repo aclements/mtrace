@@ -3,7 +3,7 @@
 # * Put this script in /usr/bin/
 # * Put run-cmdline in /etc/init.d/
 # * Add a symlink to run run-cmdline at boot:
-     cd /etc/inid.d && update-rc.d run-cmdline defaults
+#    cd /etc/inid.d && update-rc.d run-cmdline defaults
 
 # XXX port this to sh (i.e. run-cmdline)
 
