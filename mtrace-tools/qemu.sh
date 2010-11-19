@@ -6,8 +6,8 @@ cmds='run-cmdline="/root/fops-dir 1 2 /root/foo 1" '
 cmds=$cmds'run-cmdline="shutdown -h now"'
 
 QEMU=/usr/local/qemu-mtrace/bin/qemu-system-x86_64
-DISK=~/linux-2.6/disk.img
-KERN=~/linux-2.6/obj.qemu/arch/x86_64/boot/bzImage
+DISK=disk.img
+KERN=bzImage
 OUT=/tmp/`whoami`-mtrace.out
 
 echo "***"
