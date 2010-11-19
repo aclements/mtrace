@@ -1,19 +1,26 @@
 #!/bin/sh
 
-cmds='run-cmdline="/root/fops-dir 1 2 /root/tmp/foo 1" '
-cmds=$cmds'run-cmdline="/root/proc-ping-pong 0 1 1" '
+# Add/remove commands here
+cmds='run-cmdline="/root/fops-dir 1 2 /root/foo 1" '
+#cmds=$cmds'run-cmdline="/root/proc-ping-pong 0 1 1" '
 cmds=$cmds'run-cmdline="shutdown -h now"'
 
-QEMU=~/local/bin/qemu-system-x86_64
-DISK=~/img/qemu.img
+QEMU=/usr/local/qemu-mtrace/bin/qemu-system-x86_64
+DISK=~/linux-2.6/disk.img
 KERN=~/linux-2.6/obj.qemu/arch/x86_64/boot/bzImage
+OUT=/tmp/`whoami`-mtrace.out
 
-$QEMU									\
-     -smp 2								\
-     -m 256								\
-     -kernel $KERN							\
-     -hda $DISK								\
-     -append "root=/dev/hda console=ttyS0 $cmds"  			\
-     -nographic								\
-     -mtrace-enable							\
-     -mtrace-file /tmp/mtrace.out -mtrace-format binary
+echo "***"
+echo "*** Writing mtrace to $OUT"
+echo "***"
+
+$QEMU                                                                   \
+     -smp 2                                                             \
+     -m 256                                                             \
+     -kernel $KERN                                                      \
+     -hda $DISK                                                         \
+     -no-reboot                                                         \
+     -append "root=/dev/hda console=ttyS0 $cmds"                        \
+     -nographic                                                         \
+     -mtrace-enable                                                     \
+     -mtrace-file $OUT -mtrace-format binary
