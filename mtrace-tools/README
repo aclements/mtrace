@@ -1,3 +1,6 @@
+* mt2db converts a binary mtrace file from QEMU to a sqlite3 database
+  file.  See README.mt2db for more details.
+
 * See the MOSBENCH repo for some microbenchmarks.
 
 * See qemu.sh for some useful QEMU arguments.

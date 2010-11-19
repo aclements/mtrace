@@ -1,0 +1,31 @@
+* usage: mt2db mtrace-log-file symbol-file database
+  
+  The mtrace-log-file is from QEMU mtace and in binary format.
+
+  The symbol file is for the binaries run while generating the QEMU
+  mtrace file.  For Linux you probably want:
+    $ nm -S vmlinux > symbol-file
+
+  The database is the sqlite3 database file to create.
+
+* The can get the schema from the command line:
+
+  $ sqlite3 /dev/shm/mtrace.db .schema
+
+  or look at mt2.db.cc
+
+  There is a labels table for each object (mtrace_label_t) listed in
+  mtrace-magic.h
+
+* All addresses are stored as signed 64-bit integers.  See mt2db.cc
+  for the explanation.
+
+* Example query:
+
+  Get the access type and PC/RIP for each access to a dentry:
+
+  $ sqlite3 -separator ' ' mtrace.db 'SELECT pc, access_type FROM
+    fops_dir_accesses WHERE EXISTS(SELECT * FROM fops_dir_labels1
+    WHERE fops_dir_labels1.label_id = fops_dir_accesses.label_id AND
+    fops_dir_labels1.str = "dentry")' | \
+    awk '{ printf "rip %016lx type %u\n", $1, $2 }'

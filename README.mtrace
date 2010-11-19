@@ -14,7 +14,7 @@
   There is no other cache simulation (i.e. caches are fully
   associative and have infinite capacity).
 
-* qemu calls
+* QEMU calls
 
   Guest code can call into qemu to turn mtracing on or off,
   communicate object instances and types, etc.  See mtrace-magic.h and
