@@ -1,6 +1,7 @@
 Q = @
 
 QEMUDIR = ..
+INSTDIR = /usr/local/bin
 
 CXX  = g++
 
@@ -17,6 +18,10 @@ all: mt2db
 mt2db: mt2db.cc $(QEMUDIR)/mtrace-file.h
 	@echo "CXX	$@"
 	$(Q)$(CXX) -o $@ $< $(CFLAGS) $(LDFLAGS)
+
+install: mt2db
+	@echo "INSTALL  $(INSTDIR)"
+	$(Q)cp mt2db $(INSTDIR)/mt2db
 
 clean:
 	@echo "CLEAN"
