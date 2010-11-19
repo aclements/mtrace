@@ -3,14 +3,27 @@
 * Cache line tracking
 
   When cache line tracking is enabled (the default) a memory access is
-  reported only when one of the following two sets of conditions is
-  met:
+  reported only when an access might cause inter-core traffic.
+  Specifically:
   
-  XXX
+  * On read -- a cache line that was written to by another core
+    since that last read from the reading core.
+  * On write -- a cache line that was read from or written to by
+    another core since the last write from the writing core.
+
+  There is no other cache simulation (i.e. caches are fully
+  associative and have infinite capacity).
+
+* qemu calls
+
+  Guest code can call into qemu to turn mtracing on or off,
+  communicate object instances and types, etc.  See mtrace-magic.h and
+  mtrace-file.h for the current API and the scale-linux 'mtrace'
+  branch and mosbench/micro directory for example usuages.
 
 * Configue options
 
-  ./configure [--prefix=PFX] \
+  ./configure --prefix=PFX \
 	    --target-list="x86_64-softmmu" \
 	    --disable-kvm  \
 	    --audio-card-list="" \
@@ -25,17 +38,5 @@
   x86 code gen. in tcg/i386/tcg_target.c
 
 * TODO
-
-  - Accurate RIP values.  The current values are at the start of the
-    translation block.  See the following call stack for figuring out
-    what the correct RIP is:
-
-    gen_pc_load
-    cpu_restore_state
-    tlb_fill
-    __st* (softmmu_template.h)
-
-  - Log a timestamp (cycle counter?).  A global/synchronized clock
-    would be best.
 
   - Move all mtrace* decls. to mtrace.h
