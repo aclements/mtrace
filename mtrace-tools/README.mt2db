@@ -20,7 +20,7 @@
 * All addresses are stored as signed 64-bit integers.  See mt2db.cc
   for the explanation.
 
-* Example query:
+* Example queries:
 
   Get the access type and PC/RIP for each access to a dentry:
 
@@ -29,3 +29,8 @@
     WHERE fops_dir_labels1.label_id = fops_dir_accesses.label_id AND
     fops_dir_labels1.str = "dentry")' | \
     awk '{ printf "rip %016lx type %u\n", $1, $2 }'
+
+  Find every PC/RIP that does an access:
+
+  $ sqlite3 /dev/shm/sbw-mtrace.db 'SELECT DISTINCT pc FROM
+    fops_dir_accesses' | awk '{ printf "RIP %016lx\n", $1 }'
