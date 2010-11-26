@@ -70,7 +70,6 @@ struct mtrace_label_entry {
 /*
  * A memory access to host_addr, executed on cpu, at the guest pc
  */
-
 typedef enum {
     mtrace_access_ld = 1,
     mtrace_access_st,

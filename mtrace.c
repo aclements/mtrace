@@ -207,7 +207,7 @@ static unsigned long mtrace_get_pc(unsigned long searched_pc)
      *     PC
      *  5. updates cpu_single_env->eip
      *
-     *  NB while generating micro ops QEMU reads guest memory.  We want to
+     *  NB QEMU reads guest memory while generating micro ops.  We want to
      *  ignore these accesses, so we temporarily set mtrace_enable to 0.
      */
     tb = tb_find_pc(searched_pc);
