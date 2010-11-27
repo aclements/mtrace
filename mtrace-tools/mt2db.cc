@@ -416,6 +416,10 @@ static void build_access_db(void *arg, const char *name)
 		"VALUES (%lu, %u, %u, "ADDR_FMT", "ADDR_FMT", "ADDR_FMT", "
 		"%lu, %lu, %lu)";
 
+	const char *create_index = 
+		"CREATE INDEX %s_idx_accesses ON %s_accesses"
+		"(guest_addr)";
+
 	sqlite3 *db = (sqlite3 *) arg;
 	Progress p(accesses.size(), 0);
 
@@ -452,6 +456,8 @@ static void build_access_db(void *arg, const char *name)
 		accesses.pop_front();
 		p.tick();
 	}
+
+	exec_stmt(db, NULL, NULL, create_index, name, name);
 }
 
 static void complete_outstanding_labels(void)
