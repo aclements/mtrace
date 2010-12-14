@@ -305,12 +305,17 @@ static void build_call_db(void *arg, const char *name)
 		"pc, depth, access_start, access_end) "
 		"VALUES (%lu, %u, "ADDR_FMT", "ADDR_FMT", %u, %lu, %lu)";
 
-	const char *create_index = 
-		"CREATE INDEX %s_idx_calls ON %s_calls"
-		"(cpu, access_start, access_end)";
+	const char *create_index[] = {
+		"CREATE INDEX %s_idx_calls%u ON %s_calls"
+		"(cpu, access_start, access_end)",
+		"CREATE INDEX %s_idx_calls%u ON %s_calls"
+		"(cpu, call_tag)" 
+	};
+		
 
 	sqlite3 *db = (sqlite3 *) arg;
 	Progress p(complete_fcalls.size(), 0);
+	unsigned int i;
 
 	exec_stmt_noerr(db, NULL, NULL, "DROP TABLE %s_calls", name);
 	exec_stmt(db, NULL, NULL, create_calls_table, name);
@@ -326,7 +331,8 @@ static void build_call_db(void *arg, const char *name)
 		p.tick();
 	}
 
-	exec_stmt(db, NULL, NULL, create_index, name, name);
+	for (i = 0; i < sizeof(create_index) / sizeof(create_index[0]); i++)
+		exec_stmt(db, NULL, NULL, create_index[i], name, i, name);
 }
 
 static int get_access_var(void *arg, int ac, char **av, char **colname)
