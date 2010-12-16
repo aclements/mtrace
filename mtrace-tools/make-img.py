@@ -9,20 +9,6 @@ import traceback
 
 default_img_size = '300M'
 
-# (relative path to script location, absolute path in disk image)
-extra_files      = [ 
-                     ( 'img-files/shadow', '/etc/shadow' ),
-                     ( 'img-files/inittab', '/etc/inittab' ),
-                     ( 'img-files/run-cmdline', '/etc/init.d/run-cmdline' ),
-                     ( 'img-files/run-cmdline.py', '/usr/bin/run-cmdline.py' )
-                   ]
-
-# chroot into the disk image and run these shell commands
-fixup_cmds       = [ 
-                     'cd /dev && /sbin/MAKEDEV ttyS',
-                     'cd /etc/init.d && update-rc.d run-cmdline defaults',
-                   ]
-
 # colors differentiate subprocess output from make-img.py
 text_log_color   = '\033[95m'       # purplish
 text_err_color   = '\033[91m'       # redish
@@ -33,6 +19,36 @@ def print_log(string):
 
 def print_err(string):
     print text_err_color + string + text_end_color
+
+class CopyFileCmd:
+    # (relative path to script location, absolute path in disk image)
+    def __init__(self, src, dst):
+        self.src = src
+        self.dst = dst
+
+    def run(self, img):
+        src = sys.path[0] + '/' + self.src
+        chroot_dst = self.dst
+        chroot_src = '/tmp/' + os.path.basename(self.src)
+        sudo(['cp', src, img.tmp + '/tmp']).run()
+        img.chroot(['sh', '-c', 'cp ' + chroot_src + ' ' + chroot_dst ]).run()
+
+class FixupCmd:
+    # chroot into the disk image and run cmd shell command
+    def __init__(self, cmd):
+        self.cmd = cmd
+
+    def run(self, img):
+        img.chroot(['sh', '-c', self.cmd]).run()
+
+default_cmds = [ 
+                 CopyFileCmd('img-files/shadow', '/etc/shadow'),
+                 CopyFileCmd('img-files/inittab', '/etc/inittab'),
+                 CopyFileCmd('img-files/run-cmdline', '/etc/init.d/run-cmdline'),
+                 CopyFileCmd('img-files/run-cmdline.py', '/usr/bin/run-cmdline.py'),
+                 FixupCmd('cd /dev && /sbin/MAKEDEV ttyS'),
+                 FixupCmd('cd /etc/init.d && update-rc.d run-cmdline defaults')
+               ]
 
 class ProcessHelper:
     def __init__(self, args):
@@ -107,8 +123,7 @@ class DiskImage:
         sudo(['debootstrap',
               '--arch',
               'amd64',
-              '--include=python',
-              '--include=makedev',
+              '--include=python,makedev',
               '--exclude=udev',
               '--variant=minbase',
               'squeeze',
@@ -127,18 +142,10 @@ class DiskImage:
         except:
             pass
 
-    def copy_files(self, files):
-        self.mount()
-        for pair in files:
-            src = sys.path[0] + '/' + pair[0]
-            dst = self.tmp + pair[1]
-            sudo(['cp', src, dst]).run()
-        self.umount()
-
-    def fixup(self, cmds):
+    def run_cmds(self, cmds):
         self.mount()
         for cmd in cmds:
-            self.chroot(['sh', '-c', cmd]).run()
+            cmd.run(self)
         self.umount()
 
 def main(argv=None):
@@ -160,8 +167,7 @@ def main(argv=None):
         img.create(img_size)
         img.format()
         img.bootstrap()
-        #img.copy_files(extra_files)
-        #img.fixup(fixup_cmds)
+        img.run_cmds(default_cmds)
     except Exception as ex:
         print_err('\n[failed]')
         traceback.print_exc(file=sys.stdout)
