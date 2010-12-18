@@ -20,7 +20,7 @@ def print_log(string):
 def print_err(string):
     print text_err_color + string + text_end_color
 
-class CopyFileCmd:
+class CopyCmd:
     # (relative path to script location, absolute path in disk image)
     def __init__(self, src, dst):
         self.src = src
@@ -30,8 +30,10 @@ class CopyFileCmd:
         src = sys.path[0] + '/' + self.src
         chroot_dst = self.dst
         chroot_src = '/tmp/' + os.path.basename(self.src)
+        # Copy once, chroot, and copy again to avoid accidentally overwriting
+        # the host system files
         sudo(['cp', src, img.tmp + '/tmp']).run()
-        img.chroot(['sh', '-c', 'cp ' + chroot_src + ' ' + chroot_dst ]).run()
+        img.chroot(['sh', '-c', 'cp -r ' + chroot_src + ' ' + chroot_dst ]).run()
 
 class FixupCmd:
     # chroot into the disk image and run cmd shell command
@@ -42,10 +44,10 @@ class FixupCmd:
         img.chroot(['sh', '-c', self.cmd]).run()
 
 default_cmds = [ 
-                 CopyFileCmd('img-files/shadow', '/etc/shadow'),
-                 CopyFileCmd('img-files/inittab', '/etc/inittab'),
-                 CopyFileCmd('img-files/run-cmdline', '/etc/init.d/run-cmdline'),
-                 CopyFileCmd('img-files/run-cmdline.py', '/usr/bin/run-cmdline.py'),
+                 CopyCmd('img-files/shadow', '/etc/shadow'),
+                 CopyCmd('img-files/inittab', '/etc/inittab'),
+                 CopyCmd('img-files/run-cmdline', '/etc/init.d/run-cmdline'),
+                 CopyCmd('img-files/run-cmdline.py', '/usr/bin/run-cmdline.py'),
                  FixupCmd('cd /dev && /sbin/MAKEDEV ttyS'),
                  FixupCmd('cd /etc/init.d && update-rc.d run-cmdline defaults')
                ]
@@ -148,15 +150,53 @@ class DiskImage:
             cmd.run(self)
         self.umount()
 
+def usage():
+    print """Usage: make-img.py output-file [-size size -fixup fixup -copy src,dst]
+
+    'size' is the disk image size in kilobytes. Optional suffixes
+      'M' (megabyte, 1024 * 1024) and 'G' (gigabyte, 1024 * 1024 * 1024) are
+      supported any 'k' or 'K' is ignored
+
+    'fixup' is a string of shell command to execute while chrooted into the
+      disk image
+
+    'src,dst' is a source file on the host file system to copy to the destination
+      on the disk image
+"""
+    exit(1)
+
+def parse_args(argv):
+    if len(argv) < 2:
+        usage()
+
+    def size_handler(val):
+        global default_img_size
+        default_img_size = val
+
+    def fixup_handler(val):
+        global default_cmds
+        default_cmds.append(FixupCmd(val))
+
+    def copy_handler(val):
+        global default_cmds
+        split = val.partition(',')
+        default_cmds.append(CopyCmd(split[0], split[2]))
+
+    handler = {
+        '-size': size_handler,
+        '-fixup': fixup_handler,
+        '-copy': copy_handler
+    }
+
+    args = argv[2:]
+    for i in range(0, len(args) - 2, 2):
+        handler[args[i]](args[i + 1])
+    
 def main(argv=None):
     if argv is None:
         argv = sys.argv
-    if len(argv) < 2:
-        print 'usage: ' + argv[0] + ' output-file'
-        exit(1)
-
-    img_size = default_img_size
-
+    
+    parse_args(argv)
     img = DiskImage(argv[1])
 
     def on_sigint(signum, frame):
@@ -164,7 +204,7 @@ def main(argv=None):
     signal.signal(signal.SIGINT, on_sigint)
 
     try:
-        img.create(img_size)
+        img.create(default_img_size)
         img.format()
         img.bootstrap()
         img.run_cmds(default_cmds)
