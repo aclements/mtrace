@@ -192,8 +192,6 @@ def parse_args(argv):
     def copy_handler(val):
         global default_cmds
         split = val.partition(',')
-        print split[0]
-        print split[2]
         default_cmds.append(CopyCmd(split[0], split[2]))
 
     handler = {
