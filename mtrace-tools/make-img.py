@@ -8,6 +8,7 @@ import shutil
 import traceback
 
 default_img_size = '300M'
+default_includes = 'python,makedev'
 
 # colors differentiate subprocess output from make-img.py
 text_log_color   = '\033[95m'       # purplish
@@ -26,14 +27,19 @@ class CopyCmd:
         self.src = src
         self.dst = dst
 
+        if self.src.startswith('/') == False:
+            self.src = sys.path[0] + '/' + self.src
+        if self.dst.startswith('/') == False:
+            self.src = sys.path[0] + '/' + self.src
+
     def run(self, img):
-        src = sys.path[0] + '/' + self.src
+        src = self.src
         chroot_dst = self.dst
         chroot_src = '/tmp/' + os.path.basename(self.src)
-        # Copy once, chroot, and copy again to avoid accidentally overwriting
+        # Copy once, chroot, and move to avoid accidentally overwriting
         # the host system files
-        sudo(['cp', src, img.tmp + '/tmp']).run()
-        img.chroot(['sh', '-c', 'cp -r ' + chroot_src + ' ' + chroot_dst ]).run()
+        sudo(['cp', '-r', src, img.tmp + '/tmp']).run()
+        img.chroot(['sh', '-c', 'mv ' + chroot_src + ' ' + chroot_dst ]).run()
 
 class FixupCmd:
     # chroot into the disk image and run cmd shell command
@@ -120,12 +126,12 @@ class DiskImage:
                        '-F', 
                        self.filepath]).run()
 
-    def bootstrap(self):
+    def bootstrap(self, include):
         self.mount()
         sudo(['debootstrap',
               '--arch',
               'amd64',
-              '--include=python,makedev',
+              '--include=' + include,
               '--exclude=udev',
               '--variant=minbase',
               'squeeze',
@@ -151,7 +157,7 @@ class DiskImage:
         self.umount()
 
 def usage():
-    print """Usage: make-img.py output-file [-size size -fixup fixup -copy src,dst]
+    print """Usage: make-img.py output-file [-size size -fixup fixup -copy src,dst -include pkg0,pkg1,...]
 
     'size' is the disk image size in kilobytes. Optional suffixes
       'M' (megabyte, 1024 * 1024) and 'G' (gigabyte, 1024 * 1024 * 1024) are
@@ -162,6 +168,8 @@ def usage():
 
     'src,dst' is a source file on the host file system to copy to the destination
       on the disk image
+
+    'pkg0,pkg1,...' is a comma separated list of Debian package names
 """
     exit(1)
 
@@ -177,19 +185,27 @@ def parse_args(argv):
         global default_cmds
         default_cmds.append(FixupCmd(val))
 
+    def include_handler(val):
+        global default_includes
+        default_includes = default_includes + ',' + val
+
     def copy_handler(val):
         global default_cmds
         split = val.partition(',')
+        print split[0]
+        print split[2]
         default_cmds.append(CopyCmd(split[0], split[2]))
 
     handler = {
         '-size': size_handler,
         '-fixup': fixup_handler,
-        '-copy': copy_handler
+        '-copy': copy_handler,
+        '-include': include_handler
     }
 
     args = argv[2:]
-    for i in range(0, len(args) - 2, 2):
+    print len(args)
+    for i in range(0, len(args), 2):
         handler[args[i]](args[i + 1])
     
 def main(argv=None):
@@ -206,7 +222,7 @@ def main(argv=None):
     try:
         img.create(default_img_size)
         img.format()
-        img.bootstrap()
+        img.bootstrap(default_includes)
         img.run_cmds(default_cmds)
     except Exception as ex:
         print_err('\n[failed]')
