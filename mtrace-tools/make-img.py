@@ -54,6 +54,7 @@ default_cmds = [
                  CopyCmd('img-files/inittab', '/etc/inittab'),
                  CopyCmd('img-files/run-cmdline', '/etc/init.d/run-cmdline'),
                  CopyCmd('img-files/run-cmdline.py', '/usr/bin/run-cmdline.py'),
+                 CopyCmd('img-files/interfaces', '/etc/network/interfaces'),
                  FixupCmd('cd /dev && /sbin/MAKEDEV ttyS'),
                  FixupCmd('cd /etc/init.d && update-rc.d run-cmdline defaults')
                ]
