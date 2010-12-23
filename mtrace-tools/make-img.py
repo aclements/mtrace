@@ -1,5 +1,9 @@
 #!/usr/bin/python
 
+#
+# Run make-img.py with no arguments for usage
+#
+
 import sys
 import os.path
 import subprocess
@@ -9,6 +13,8 @@ import traceback
 
 default_img_size = '300M'
 default_includes = 'python,makedev'
+
+mosbench_includes = 'make,rsync,dropbear,libpcre3,numactl,procps,sudo,ifupdown,netbase'
 
 # colors differentiate subprocess output from make-img.py
 text_log_color   = '\033[95m'       # purplish
@@ -158,7 +164,8 @@ class DiskImage:
         self.umount()
 
 def usage():
-    print """Usage: make-img.py output-file [-size size -fixup fixup -copy src,dst -include pkg0,pkg1,...]
+    print """Usage: make-img.py output-file [ -size size -fixup fixup -copy src,dst 
+                      -include pkg0,pkg1,... -mosbench mosbenchsrc ]
 
     'size' is the disk image size in kilobytes. Optional suffixes
       'M' (megabyte, 1024 * 1024) and 'G' (gigabyte, 1024 * 1024 * 1024) are
@@ -167,10 +174,12 @@ def usage():
     'fixup' is a string of shell command to execute while chrooted into the
       disk image
 
-    'src,dst' is a source file on the host file system to copy to the destination
-      on the disk image
+    'src,dst' is a source file on the host file system to copy to the 
+      destination on the disk image
 
     'pkg0,pkg1,...' is a comma separated list of Debian package names
+
+    'mosbenchsrc' is the path to your mosbench source tree
 """
     exit(1)
 
@@ -195,15 +204,28 @@ def parse_args(argv):
         split = val.partition(',')
         default_cmds.append(CopyCmd(split[0], split[2]))
 
+    def mosbench_handler(val):
+        global mosbench_includes
+
+        # Copy the mosbench tree to the same absolute path in the image
+        src = val
+        chroot_dst = os.path.abspath(val)
+        chroot_dir = os.path.dirname(chroot_dst)
+        fixup_handler('mkdir -p ' + chroot_dir)
+        copy_handler(src + ',' + chroot_dst)
+
+        include_handler(mosbench_includes)
+        copy_handler('/etc/hosts,/etc/hosts')
+
     handler = {
         '-size': size_handler,
         '-fixup': fixup_handler,
         '-copy': copy_handler,
-        '-include': include_handler
+        '-include': include_handler,
+        '-mosbench': mosbench_handler
     }
 
     args = argv[2:]
-    print len(args)
     for i in range(0, len(args), 2):
         handler[args[i]](args[i + 1])
     
