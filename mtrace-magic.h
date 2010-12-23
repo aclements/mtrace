@@ -143,6 +143,9 @@ static inline void mtrace_label_register(mtrace_label_t type,
 {
     struct mtrace_label_entry label;
 
+    if (n >= sizeof(label.str))
+	n = sizeof(label.str) - 1;
+
     label.label_type = type;
     memcpy(label.str, str, n);
     label.str[n] = 0;
