@@ -26,7 +26,6 @@
 
 #define QEMU_MTRACE
 #include "mtrace-magic.h"
-#include "mtrace-file.h"
 #include "mtrace.h"
 
 /* 64-byte cache lines */
@@ -423,25 +422,22 @@ static int mtrace_host_addr(target_ulong guest_addr, target_ulong *host_addr)
     return 0;
 }
 
-static void mtrace_label_register(target_ulong type, target_ulong guest_addr, 
-				  target_ulong bytes, target_ulong str_addr, 
-				  target_ulong n)
+static void mtrace_label_register(target_ulong label_addr, target_ulong n2, 
+				  target_ulong n3, target_ulong n4, 
+				  target_ulong n5)
 {
     struct mtrace_label_entry label;
     int r;
 
-    label.access_count = mtrace_access_count;
-    label.label_type = type;
-
-    if (n > sizeof(label.str) - 1)
-	n = sizeof(label.str) - 1;
-
-    r = cpu_memory_rw_debug(cpu_single_env, str_addr, (uint8_t *)label.str, n, 0);
+    r = cpu_memory_rw_debug(cpu_single_env, label_addr, (uint8_t *)&label, sizeof(label), 0);
     if (r) {
 	fprintf(stderr, "mtrace_label_register: cpu_memory_rw_debug failed\n");
 	return;
     }
-    label.str[n] = 0;
+
+    label.access_count = mtrace_access_count;
+    label.str[sizeof(label.str) - 1] = 0;
+    label.type = mtrace_entry_label;
 
     /*
      * XXX bug -- guest_addr might cross multiple host memory allocations,
@@ -449,16 +445,13 @@ static void mtrace_label_register(target_ulong type, target_ulong guest_addr,
      *
      * A simple solution is probably to log multiple mtrace_label_entrys.
      */
-    r = mtrace_host_addr(guest_addr, &label.host_addr);
+    r = mtrace_host_addr(label.guest_addr, &label.host_addr);
     if (r) {
-	fprintf(stderr, "mtrace_label_register: mtrace_host_addr failed\n");
+	fprintf(stderr, "mtrace_label_register: mtrace_host_addr failed (%lx\n", 
+		label.guest_addr);
 	return;
     }
 
-    label.guest_addr = guest_addr;
-    label.bytes = bytes;
-
-    label.type = mtrace_entry_label;
     mtrace_log_entry((union mtrace_entry *)&label);
 }
 

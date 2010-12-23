@@ -35,6 +35,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <stdint.h>
 
 #include <sqlite3.h>
 
@@ -44,7 +45,6 @@
 
 extern "C" {
 #include <mtrace-magic.h>
-#include <mtrace-file.h>
 }
 
 using namespace::std;
@@ -700,7 +700,8 @@ static void process_symbols(void *arg, const char *nm_file)
 			l->type = mtrace_entry_label;
 			l->access_count = 0;
 			l->label_type = mtrace_label_static;
-			strncpy(l->str, str, sizeof(l->str));
+			strncpy(l->str, str, sizeof(l->str) - 1);
+			l->str[sizeof(l->str) - 1] = 0;
 			l->host_addr = 0;
 			l->guest_addr = addr;
 			l->bytes = size;
