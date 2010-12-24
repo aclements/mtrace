@@ -41,11 +41,12 @@
 
 #include <ext/hash_map>
 #include <list>
-#include <map>
 
 extern "C" {
 #include <mtrace-magic.h>
 }
+
+#include "syms.h"
 
 using namespace::std;
 using namespace::__gnu_cxx;
@@ -119,6 +120,8 @@ static AccessList   accesses;
 static FcallList    complete_fcalls;
 
 static LabelList    percpu_labels;
+
+static Syms 	    addr_to_fname;
 
 static struct mtrace_enable_entry mtrace_enable;
 static struct mtrace_fcall_entry *mtrace_fcall[MAX_CPU];
@@ -298,6 +301,7 @@ static void build_call_db(void *arg, const char *name)
 		"cpu integer, "
 		"tid "ADDR_TYPE", "
 		"pc "ADDR_TYPE", "
+		"name VARCHAR(32), "
 		"depth integer, "
 		"access_start integer, "
 		"access_end integer"
@@ -305,8 +309,8 @@ static void build_call_db(void *arg, const char *name)
 
 	const char *insert_call = 
 		"INSERT INTO %s_calls (call_tag, cpu, tid, "
-		"pc, depth, access_start, access_end) "
-		"VALUES (%lu, %u, "ADDR_FMT", "ADDR_FMT", %u, %lu, %lu)";
+		"pc, name, depth, access_start, access_end) "
+		"VALUES (%lu, %u, "ADDR_FMT", "ADDR_FMT", \"%s\", %u, %lu, %lu)";
 
 	const char *create_index[] = {
 		"CREATE INDEX %s_idx_calls%u ON %s_calls"
@@ -326,9 +330,13 @@ static void build_call_db(void *arg, const char *name)
 	FcallList::iterator it = complete_fcalls.begin();
 	for (; it != complete_fcalls.end(); ++it) {
 		CompleteFcall cf = (*it);
+		const char *fname = addr_to_fname.lookup_name(cf.start_->pc);
+		
+		if (fname == NULL)
+			fname = "(unknown)";
 
 		exec_stmt(db, NULL, NULL, insert_call, name, cf.start_->tag, cf.start_->cpu,
-			  cf.start_->tid, cf.start_->pc, cf.start_->depth,
+			  cf.start_->tid, cf.start_->pc, fname, cf.start_->depth,
 			  cf.start_->access_count, cf.stop_->access_count);
 
 		p.tick();
@@ -711,6 +719,11 @@ static void process_symbols(void *arg, const char *nm_file)
 
 			ObjectLabel ol(l, 0x7fffffffffffffffUL);
 			insert_complete_label(ol);
+			continue;
+		}
+
+		if (r == 4 && (type == 'T' || type == 't')) { // .text
+			addr_to_fname.insert_sym(addr, size, str);
 			continue;
 		}
 		

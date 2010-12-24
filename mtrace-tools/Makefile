@@ -15,7 +15,7 @@ LDFLAGS = -lsqlite3
 
 all: mt2db
 
-mt2db: mt2db.cc $(QEMUDIR)/mtrace-magic.h
+mt2db: mt2db.cc $(QEMUDIR)/mtrace-magic.h syms.h
 	@echo "CXX	$@"
 	$(Q)$(CXX) -o $@ $< $(CFLAGS) $(LDFLAGS)
 
