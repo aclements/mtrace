@@ -225,6 +225,7 @@ static void build_labelx_db(void *arg, const char *name,
 		"CREATE TABLE %s_labels%u ("
 		"label_id integer primary key, "
 		"str char(32), "
+		"alloc_pc "ADDR_TYPE", "
 		"host_addr "ADDR_TYPE", "
 		"host_addr_end "ADDR_TYPE", "
 		"guest_addr "ADDR_TYPE", "
@@ -235,10 +236,11 @@ static void build_labelx_db(void *arg, const char *name,
 		")";
 
 	const char *insert_label = 
-		"INSERT INTO %s_labels%u (str, host_addr, host_addr_end, "
+		"INSERT INTO %s_labels%u (str, alloc_pc, "
+		"host_addr, host_addr_end, "
 		"guest_addr, guest_addr_end, bytes, "
 		"access_start, access_end) "
-		"VALUES (\"%s\", "ADDR_FMT", "ADDR_FMT", "
+		"VALUES (\"%s\", "ADDR_FMT", "ADDR_FMT", "ADDR_FMT", "
 		ADDR_FMT", "ADDR_FMT", %lu, "
 		"%lu, %lu)";
 	
@@ -260,6 +262,7 @@ static void build_labelx_db(void *arg, const char *name,
 		exec_stmt(db, NULL, NULL, insert_label, name, 
 			  label_type, 
 			  ol.label_->str, 
+			  ol.label_->pc, 			  
 			  ol.label_->host_addr, 
 			  ol.label_->host_addr + ol.label_->bytes, 
 			  ol.label_->guest_addr, 

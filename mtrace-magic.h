@@ -80,7 +80,7 @@ struct mtrace_label_entry {
     char str[32];
     uint64_t guest_addr;
     uint64_t bytes;
-    uint64_t rip;
+    uint64_t pc;
 } __pack__;
 
 /*
@@ -152,7 +152,7 @@ static inline void mtrace_label_register(mtrace_label_t type,
     label.str[n] = 0;
     label.guest_addr = (uint64_t)addr;
     label.bytes = bytes;
-    label.rip = call_site;
+    label.pc = call_site;
 
     mtrace_magic(MTRACE_LABEL_REGISTER, (unsigned long)&label, 0, 0, 0, 0);
 }
