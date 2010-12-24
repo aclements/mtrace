@@ -447,7 +447,7 @@ static void mtrace_label_register(target_ulong label_addr, target_ulong n2,
      */
     r = mtrace_host_addr(label.guest_addr, &label.host_addr);
     if (r) {
-	fprintf(stderr, "mtrace_label_register: mtrace_host_addr failed (%lx\n", 
+	fprintf(stderr, "mtrace_label_register: mtrace_host_addr failed (%lx)\n", 
 		label.guest_addr);
 	return;
     }

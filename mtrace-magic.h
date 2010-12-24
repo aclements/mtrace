@@ -139,19 +139,20 @@ static inline void mtrace_label_register(mtrace_label_t type,
 					 const void * addr, 
 					 unsigned long bytes, 
 					 const char *str, 
-					 unsigned long n)
+					 unsigned long n,
+					 unsigned long call_site)
 {
-    struct mtrace_label_entry label;
+    volatile struct mtrace_label_entry label;
 
     if (n >= sizeof(label.str))
 	n = sizeof(label.str) - 1;
 
     label.label_type = type;
-    memcpy(label.str, str, n);
+    memcpy((void *)label.str, str, n);
     label.str[n] = 0;
     label.guest_addr = (uint64_t)addr;
     label.bytes = bytes;
-    label.rip = 0; /* XXX */
+    label.rip = call_site;
 
     mtrace_magic(MTRACE_LABEL_REGISTER, (unsigned long)&label, 0, 0, 0, 0);
 }
