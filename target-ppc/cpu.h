@@ -20,7 +20,7 @@
 #define __CPU_PPC_H__
 
 #include "config.h"
-#include <inttypes.h>
+#include "qemu-common.h"
 
 //#define PPC_EMULATE_32BITS_HYPV
 
@@ -700,9 +700,6 @@ struct CPUPPCState {
     int power_mode;
     int (*check_pow)(CPUPPCState *env);
 
-    /* temporary hack to handle OSI calls (only used if non NULL) */
-    int (*osi_call)(struct CPUPPCState *env);
-
 #if !defined(CONFIG_USER_ONLY)
     void *load_info;    /* Holds boot loading state.  */
 #endif
@@ -764,7 +761,7 @@ void ppc_store_sr (CPUPPCState *env, int srnum, target_ulong value);
 #endif /* !defined(CONFIG_USER_ONLY) */
 void ppc_store_msr (CPUPPCState *env, target_ulong value);
 
-void ppc_cpu_list (FILE *f, int (*cpu_fprintf)(FILE *f, const char *fmt, ...));
+void ppc_cpu_list (FILE *f, fprintf_function cpu_fprintf);
 
 const ppc_def_t *cpu_ppc_find_by_name (const char *name);
 int cpu_ppc_register_internal (CPUPPCState *env, const ppc_def_t *def);

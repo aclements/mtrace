@@ -864,6 +864,7 @@ static void lsi_do_msgout(LSIState *s)
         case 0x01:
             len = lsi_get_msgbyte(s);
             msg = lsi_get_msgbyte(s);
+            (void)len; /* avoid a warning about unused variable*/
             DPRINTF("Extended message 0x%x (len %d)\n", msg, len);
             switch (msg) {
             case 1:
@@ -2172,16 +2173,17 @@ static int lsi_scsi_init(PCIDevice *dev)
     pci_conf[PCI_INTERRUPT_PIN] = 0x01;
 
     s->mmio_io_addr = cpu_register_io_memory(lsi_mmio_readfn,
-                                             lsi_mmio_writefn, s);
+                                             lsi_mmio_writefn, s,
+                                             DEVICE_NATIVE_ENDIAN);
     s->ram_io_addr = cpu_register_io_memory(lsi_ram_readfn,
-                                            lsi_ram_writefn, s);
+                                            lsi_ram_writefn, s,
+                                            DEVICE_NATIVE_ENDIAN);
 
-    /* TODO: use dev and get rid of cast below */
-    pci_register_bar((struct PCIDevice *)s, 0, 256,
+    pci_register_bar(&s->dev, 0, 256,
                            PCI_BASE_ADDRESS_SPACE_IO, lsi_io_mapfunc);
-    pci_register_bar((struct PCIDevice *)s, 1, 0x400,
+    pci_register_bar(&s->dev, 1, 0x400,
                            PCI_BASE_ADDRESS_SPACE_MEMORY, lsi_mmio_mapfunc);
-    pci_register_bar((struct PCIDevice *)s, 2, 0x2000,
+    pci_register_bar(&s->dev, 2, 0x2000,
                            PCI_BASE_ADDRESS_SPACE_MEMORY, lsi_ram_mapfunc);
     QTAILQ_INIT(&s->queue);
 

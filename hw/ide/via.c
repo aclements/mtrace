@@ -78,21 +78,14 @@ static void bmdma_map(PCIDevice *pci_dev, int region_num,
 
     for(i = 0;i < 2; i++) {
         BMDMAState *bm = &d->bmdma[i];
-        d->bus[i].bmdma = bm;
-        bm->bus = d->bus+i;
-        qemu_add_vm_change_state_handler(ide_dma_restart_cb, bm);
 
         register_ioport_write(addr, 1, 1, bmdma_cmd_writeb, bm);
 
         register_ioport_write(addr + 1, 3, 1, bmdma_writeb, bm);
         register_ioport_read(addr, 4, 1, bmdma_readb, bm);
 
-        register_ioport_write(addr + 4, 4, 1, bmdma_addr_writeb, bm);
-        register_ioport_read(addr + 4, 4, 1, bmdma_addr_readb, bm);
-        register_ioport_write(addr + 4, 4, 2, bmdma_addr_writew, bm);
-        register_ioport_read(addr + 4, 4, 2, bmdma_addr_readw, bm);
-        register_ioport_write(addr + 4, 4, 4, bmdma_addr_writel, bm);
-        register_ioport_read(addr + 4, 4, 4, bmdma_addr_readl, bm);
+        iorange_init(&bm->addr_ioport, &bmdma_addr_ioport_ops, addr + 4, 4);
+        ioport_register(&bm->addr_ioport);
         addr += 8;
     }
 }
@@ -105,7 +98,6 @@ static void via_reset(void *opaque)
 
     for (i = 0; i < 2; i++) {
         ide_bus_reset(&d->bus[i]);
-        ide_dma_reset(&d->bmdma[i]);
     }
 
     pci_set_word(pci_conf + PCI_COMMAND, PCI_COMMAND_WAIT);
@@ -139,6 +131,29 @@ static void via_reset(void *opaque)
     pci_set_long(pci_conf + 0xc0, 0x00020001);
 }
 
+static void vt82c686b_init_ports(PCIIDEState *d) {
+    int i;
+    struct {
+        int iobase;
+        int iobase2;
+        int isairq;
+    } port_info[] = {
+        {0x1f0, 0x3f6, 14},
+        {0x170, 0x376, 15},
+    };
+
+    for (i = 0; i < 2; i++) {
+        ide_bus_new(&d->bus[i], &d->dev.qdev, i);
+        ide_init_ioport(&d->bus[i], port_info[i].iobase, port_info[i].iobase2);
+        ide_init2(&d->bus[i], isa_reserve_irq(port_info[i].isairq));
+
+        bmdma_init(&d->bus[i], &d->bmdma[i]);
+        d->bmdma[i].bus = &d->bus[i];
+        qemu_add_vm_change_state_handler(d->bus[i].dma->ops->restart_cb,
+                                         &d->bmdma[i].dma);
+    }
+}
+
 /* via ide func */
 static int vt82c686b_ide_initfn(PCIDevice *dev)
 {
@@ -153,17 +168,12 @@ static int vt82c686b_ide_initfn(PCIDevice *dev)
     pci_set_long(pci_conf + PCI_CAPABILITY_LIST, 0x000000c0);
 
     qemu_register_reset(via_reset, d);
-    pci_register_bar((PCIDevice *)d, 4, 0x10,
+    pci_register_bar(&d->dev, 4, 0x10,
                            PCI_BASE_ADDRESS_SPACE_IO, bmdma_map);
 
     vmstate_register(&dev->qdev, 0, &vmstate_ide_pci, d);
 
-    ide_bus_new(&d->bus[0], &d->dev.qdev);
-    ide_bus_new(&d->bus[1], &d->dev.qdev);
-    ide_init2(&d->bus[0], isa_reserve_irq(14));
-    ide_init2(&d->bus[1], isa_reserve_irq(15));
-    ide_init_ioport(&d->bus[0], 0x1f0, 0x3f6);
-    ide_init_ioport(&d->bus[1], 0x170, 0x376);
+    vt82c686b_init_ports(d);
 
     return 0;
 }

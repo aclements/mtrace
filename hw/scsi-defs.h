@@ -84,6 +84,7 @@
 #define MODE_SENSE_10         0x5a
 #define PERSISTENT_RESERVE_IN 0x5e
 #define PERSISTENT_RESERVE_OUT 0x5f
+#define WRITE_SAME_16         0x93
 #define MAINTENANCE_IN        0xa3
 #define MAINTENANCE_OUT       0xa4
 #define MOVE_MEDIUM           0xa5
@@ -111,18 +112,20 @@
 #define BLANK 0xa1
 
 /*
- *  Status codes
+ *  SAM Status codes
  */
 
 #define GOOD                 0x00
-#define CHECK_CONDITION      0x01
-#define CONDITION_GOOD       0x02
-#define BUSY                 0x04
-#define INTERMEDIATE_GOOD    0x08
-#define INTERMEDIATE_C_GOOD  0x0a
-#define RESERVATION_CONFLICT 0x0c
-#define COMMAND_TERMINATED   0x11
-#define QUEUE_FULL           0x14
+#define CHECK_CONDITION      0x02
+#define CONDITION_GOOD       0x04
+#define BUSY                 0x08
+#define INTERMEDIATE_GOOD    0x10
+#define INTERMEDIATE_C_GOOD  0x14
+#define RESERVATION_CONFLICT 0x18
+#define COMMAND_TERMINATED   0x22
+#define TASK_SET_FULL        0x28
+#define ACA_ACTIVE           0x30
+#define TASK_ABORTED         0x40
 
 #define STATUS_MASK          0x3e
 

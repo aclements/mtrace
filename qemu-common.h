@@ -18,11 +18,6 @@ typedef struct QEMUFile QEMUFile;
 typedef struct QEMUBH QEMUBH;
 typedef struct DeviceState DeviceState;
 
-/* Hack around the mess dyngen-exec.h causes: We need QEMU_NORETURN in files that
-   cannot include the following headers without conflicts. This condition has
-   to be removed once dyngen is gone. */
-#ifndef __DYNGEN_EXEC_H__
-
 /* we put basic includes here to avoid repeating them in device drivers */
 #include <stdlib.h>
 #include <stdio.h>
@@ -55,6 +50,9 @@ typedef struct DeviceState DeviceState;
 #if !defined(ENOTSUP)
 #define ENOTSUP 4096
 #endif
+#ifndef TIME_MAX
+#define TIME_MAX LONG_MAX
+#endif
 
 #ifndef CONFIG_IOVEC
 #define CONFIG_IOVEC
@@ -85,6 +83,9 @@ struct iovec {
 #define GCC_ATTR /**/
 #define GCC_FMT_ATTR(n, m)
 #endif
+
+typedef int (*fprintf_function)(FILE *f, const char *fmt, ...)
+    GCC_FMT_ATTR(2, 3);
 
 #ifdef _WIN32
 #define fsync _commit
@@ -138,8 +139,6 @@ void qemu_bh_delete(QEMUBH *bh);
 int qemu_bh_poll(void);
 void qemu_bh_update_timeout(int *timeout);
 
-uint64_t muldiv64(uint64_t a, uint32_t b, uint32_t c);
-
 void qemu_get_timedate(struct tm *tm, int offset);
 int qemu_timedate_diff(struct tm *tm);
 
@@ -153,6 +152,14 @@ time_t mktimegm(struct tm *tm);
 int qemu_fls(int i);
 int qemu_fdatasync(int fd);
 int fcntl_setfl(int fd, int flag);
+
+#define STRTOSZ_DEFSUFFIX_TB	'T'
+#define STRTOSZ_DEFSUFFIX_GB	'G'
+#define STRTOSZ_DEFSUFFIX_MB	'M'
+#define STRTOSZ_DEFSUFFIX_KB	'K'
+#define STRTOSZ_DEFSUFFIX_B	'B'
+ssize_t strtosz(const char *nptr, char **end);
+ssize_t strtosz_suffix(const char *nptr, char **end, const char default_suffix);
 
 /* path.c */
 void init_paths(const char *prefix);
@@ -174,6 +181,12 @@ const char *path(const char *pathname);
 #define qemu_isascii(c)		isascii((unsigned char)(c))
 #define qemu_toascii(c)		toascii((unsigned char)(c))
 
+#ifdef _WIN32
+/* ffs() in oslib-win32.c for WIN32, strings.h for the rest of the world */
+int ffs(int i);
+#endif
+
+void *qemu_oom_check(void *ptr);
 void *qemu_malloc(size_t size);
 void *qemu_realloc(void *ptr, size_t size);
 void *qemu_mallocz(size_t size);
@@ -235,6 +248,13 @@ typedef struct PCIHostState PCIHostState;
 typedef struct PCIExpressHost PCIExpressHost;
 typedef struct PCIBus PCIBus;
 typedef struct PCIDevice PCIDevice;
+typedef struct PCIExpressDevice PCIExpressDevice;
+typedef struct PCIBridge PCIBridge;
+typedef struct PCIEAERMsg PCIEAERMsg;
+typedef struct PCIEAERLog PCIEAERLog;
+typedef struct PCIEAERErr PCIEAERErr;
+typedef struct PCIEPort PCIEPort;
+typedef struct PCIESlot PCIESlot;
 typedef struct SerialState SerialState;
 typedef struct IRQState *qemu_irq;
 typedef struct PCMCIACardState PCMCIACardState;
@@ -316,8 +336,30 @@ static inline uint8_t from_bcd(uint8_t val)
     return ((val >> 4) * 10) + (val & 0x0f);
 }
 
-#include "module.h"
+/* compute with 96 bit intermediate result: (a*b)/c */
+static inline uint64_t muldiv64(uint64_t a, uint32_t b, uint32_t c)
+{
+    union {
+        uint64_t ll;
+        struct {
+#ifdef HOST_WORDS_BIGENDIAN
+            uint32_t high, low;
+#else
+            uint32_t low, high;
+#endif
+        } l;
+    } u, res;
+    uint64_t rl, rh;
 
-#endif /* dyngen-exec.h hack */
+    u.ll = a;
+    rl = (uint64_t)u.l.low * (uint64_t)b;
+    rh = (uint64_t)u.l.high * (uint64_t)b;
+    rh += (rl >> 32);
+    res.l.high = rh / c;
+    res.l.low = (((rh % c) << 32) + (rl & 0xffffffff)) / c;
+    return res.ll;
+}
+
+#include "module.h"
 
 #endif

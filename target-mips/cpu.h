@@ -8,6 +8,7 @@
 #define CPUState struct CPUMIPSState
 
 #include "config.h"
+#include "qemu-common.h"
 #include "mips-defs.h"
 #include "cpu-defs.h"
 #include "softfloat.h"
@@ -496,7 +497,7 @@ void do_unassigned_access(target_phys_addr_t addr, int is_write, int is_exec,
                           int unused, int size);
 #endif
 
-void mips_cpu_list (FILE *f, int (*cpu_fprintf)(FILE *f, const char *fmt, ...));
+void mips_cpu_list (FILE *f, fprintf_function cpu_fprintf);
 
 #define cpu_init cpu_mips_init
 #define cpu_exec cpu_mips_exec
@@ -530,6 +531,14 @@ static inline int cpu_mips_hw_interrupts_pending(CPUState *env)
     int32_t pending;
     int32_t status;
     int r;
+
+    if (!(env->CP0_Status & (1 << CP0St_IE)) ||
+        (env->CP0_Status & (1 << CP0St_EXL)) ||
+        (env->CP0_Status & (1 << CP0St_ERL)) ||
+        (env->hflags & MIPS_HFLAG_DM)) {
+        /* Interrupts are disabled */
+        return 0;
+    }
 
     pending = env->CP0_Cause & CP0Ca_IP_mask;
     status = env->CP0_Status & CP0Ca_IP_mask;

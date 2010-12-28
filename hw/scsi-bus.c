@@ -5,9 +5,12 @@
 #include "qdev.h"
 #include "blockdev.h"
 
+static char *scsibus_get_fw_dev_path(DeviceState *dev);
+
 static struct BusInfo scsi_bus_info = {
     .name  = "SCSI",
     .size  = sizeof(SCSIBus),
+    .get_fw_dev_path = scsibus_get_fw_dev_path,
     .props = (Property[]) {
         DEFINE_PROP_UINT32("scsi-id", SCSIDevice, id, -1),
         DEFINE_PROP_END_OF_LIST(),
@@ -108,7 +111,7 @@ int scsi_bus_legacy_handle_cmdline(SCSIBus *bus)
     int res = 0, unit;
 
     loc_push_none(&loc);
-    for (unit = 0; unit < MAX_SCSI_DEVS; unit++) {
+    for (unit = 0; unit < bus->ndev; unit++) {
         dinfo = drive_get(IF_SCSI, bus->busnr, unit);
         if (dinfo == NULL) {
             continue;
@@ -121,16 +124,6 @@ int scsi_bus_legacy_handle_cmdline(SCSIBus *bus)
     }
     loc_pop(&loc);
     return res;
-}
-
-void scsi_dev_clear_sense(SCSIDevice *dev)
-{
-    memset(&dev->sense, 0, sizeof(dev->sense));
-}
-
-void scsi_dev_set_sense(SCSIDevice *dev, uint8_t key)
-{
-    dev->sense.key = key;
 }
 
 SCSIRequest *scsi_req_alloc(size_t size, SCSIDevice *d, uint32_t tag, uint32_t lun)
@@ -527,4 +520,24 @@ void scsi_req_complete(SCSIRequest *req)
     req->bus->complete(req->bus, SCSI_REASON_DONE,
                        req->tag,
                        req->status);
+}
+
+static char *scsibus_get_fw_dev_path(DeviceState *dev)
+{
+    SCSIDevice *d = (SCSIDevice*)dev;
+    SCSIBus *bus = scsi_bus_from_device(d);
+    char path[100];
+    int i;
+
+    for (i = 0; i < bus->ndev; i++) {
+        if (bus->devs[i] == d) {
+            break;
+        }
+    }
+
+    assert(i != bus->ndev);
+
+    snprintf(path, sizeof(path), "%s@%x", qdev_fw_name(dev), i);
+
+    return strdup(path);
 }

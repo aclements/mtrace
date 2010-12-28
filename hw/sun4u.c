@@ -525,10 +525,10 @@ static void ebus_mmio_mapfunc(PCIDevice *pci_dev, int region_num,
                  region_num, addr);
     switch (region_num) {
     case 0:
-        isa_mmio_init(addr, 0x1000000, 1);
+        isa_mmio_init(addr, 0x1000000);
         break;
     case 1:
-        isa_mmio_init(addr, 0x800000, 1);
+        isa_mmio_init(addr, 0x800000);
         break;
     }
 }
@@ -767,7 +767,7 @@ static void sun4uv_init(ram_addr_t RAM_size,
     pci_bus = pci_apb_init(APB_SPECIAL_BASE, APB_MEM_BASE, irq, &pci_bus2,
                            &pci_bus3);
     isa_mem_base = APB_PCI_IO_BASE;
-    pci_vga_init(pci_bus, 0, 0);
+    pci_vga_init(pci_bus);
 
     // XXX Should be pci_bus3
     pci_ebus_init(pci_bus, -1);

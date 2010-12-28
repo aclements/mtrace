@@ -167,9 +167,6 @@ static void bmdma_map(PCIDevice *pci_dev, int region_num,
 
     for(i = 0;i < 2; i++) {
         BMDMAState *bm = &d->bmdma[i];
-        d->bus[i].bmdma = bm;
-        bm->bus = d->bus+i;
-        qemu_add_vm_change_state_handler(ide_dma_restart_cb, bm);
 
         if (i == 0) {
             register_ioport_write(addr, 4, 1, bmdma_writeb_0, d);
@@ -179,12 +176,8 @@ static void bmdma_map(PCIDevice *pci_dev, int region_num,
             register_ioport_read(addr, 4, 1, bmdma_readb_1, d);
         }
 
-        register_ioport_write(addr + 4, 4, 1, bmdma_addr_writeb, bm);
-        register_ioport_read(addr + 4, 4, 1, bmdma_addr_readb, bm);
-        register_ioport_write(addr + 4, 4, 2, bmdma_addr_writew, bm);
-        register_ioport_read(addr + 4, 4, 2, bmdma_addr_readw, bm);
-        register_ioport_write(addr + 4, 4, 4, bmdma_addr_writel, bm);
-        register_ioport_read(addr + 4, 4, 4, bmdma_addr_readl, bm);
+        iorange_init(&bm->addr_ioport, &bmdma_addr_ioport_ops, addr + 4, 4);
+        ioport_register(&bm->addr_ioport);
         addr += 8;
     }
 }
@@ -222,7 +215,6 @@ static void cmd646_reset(void *opaque)
 
     for (i = 0; i < 2; i++) {
         ide_bus_reset(&d->bus[i]);
-        ide_dma_reset(&d->bmdma[i]);
     }
 }
 
@@ -232,6 +224,7 @@ static int pci_cmd646_ide_initfn(PCIDevice *dev)
     PCIIDEState *d = DO_UPCAST(PCIIDEState, dev, dev);
     uint8_t *pci_conf = d->dev.config;
     qemu_irq *irq;
+    int i;
 
     pci_config_set_vendor_id(pci_conf, PCI_VENDOR_ID_CMD);
     pci_config_set_device_id(pci_conf, PCI_DEVICE_ID_CMD_646);
@@ -257,10 +250,15 @@ static int pci_cmd646_ide_initfn(PCIDevice *dev)
     pci_conf[PCI_INTERRUPT_PIN] = 0x01; // interrupt on pin 1
 
     irq = qemu_allocate_irqs(cmd646_set_irq, d, 2);
-    ide_bus_new(&d->bus[0], &d->dev.qdev);
-    ide_bus_new(&d->bus[1], &d->dev.qdev);
-    ide_init2(&d->bus[0], irq[0]);
-    ide_init2(&d->bus[1], irq[1]);
+    for (i = 0; i < 2; i++) {
+        ide_bus_new(&d->bus[i], &d->dev.qdev, i);
+        ide_init2(&d->bus[i], irq[i]);
+
+        bmdma_init(&d->bus[i], &d->bmdma[i]);
+        d->bmdma[i].bus = &d->bus[i];
+        qemu_add_vm_change_state_handler(d->bus[i].dma->ops->restart_cb,
+                                         &d->bmdma[i].dma);
+    }
 
     vmstate_register(&dev->qdev, 0, &vmstate_ide_pci, d);
     qemu_register_reset(cmd646_reset, d);

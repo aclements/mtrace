@@ -19,10 +19,7 @@ o qmp-spec.txt      QEMU Monitor Protocol current specification
 o qmp-commands.txt  QMP supported commands (auto-generated at build-time)
 o qmp-events.txt    List of available asynchronous events
 
-There are also two simple Python scripts available:
-
-o qmp-shell  A shell
-o vm-info    Show some information about the Virtual Machine
+There is also a simple Python script called 'qmp-shell' available.
 
 IMPORTANT: It's strongly recommended to read the 'Stability Considerations'
 section in the qmp-commands.txt file before making any serious use of QMP.
@@ -82,10 +79,10 @@ doing any code change. This is so because:
   2. Review can improve your interface.  Letting that happen before
      you implement it can save you work.
 
-* The qmp-commands.txt file is generated from the qemu-monitor.hx one, which
+* The qmp-commands.txt file is generated from the qmp-commands.hx one, which
   is the file that should be edited.
 
 Homepage
 --------
 
-http://www.linux-kvm.org/page/MonitorProtocol
+http://wiki.qemu.org/QMP

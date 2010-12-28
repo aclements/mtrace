@@ -164,7 +164,8 @@ static void ref405ep_fpga_init (uint32_t base)
 
     fpga = qemu_mallocz(sizeof(ref405ep_fpga_t));
     fpga_memory = cpu_register_io_memory(ref405ep_fpga_read,
-                                         ref405ep_fpga_write, fpga);
+                                         ref405ep_fpga_write, fpga,
+                                         DEVICE_NATIVE_ENDIAN);
     cpu_register_physical_memory(base, 0x00000100, fpga_memory);
     qemu_register_reset(&ref405ep_fpga_reset, fpga);
 }
@@ -488,7 +489,8 @@ static void taihu_cpld_init (uint32_t base)
 
     cpld = qemu_mallocz(sizeof(taihu_cpld_t));
     cpld_memory = cpu_register_io_memory(taihu_cpld_read,
-                                         taihu_cpld_write, cpld);
+                                         taihu_cpld_write, cpld,
+                                         DEVICE_NATIVE_ENDIAN);
     cpu_register_physical_memory(base, 0x00000100, cpld_memory);
     qemu_register_reset(&taihu_cpld_reset, cpld);
 }
@@ -501,7 +503,6 @@ static void taihu_405ep_init(ram_addr_t ram_size,
                              const char *cpu_model)
 {
     char *filename;
-    CPUPPCState *env;
     qemu_irq *pic;
     ram_addr_t bios_offset;
     target_phys_addr_t ram_bases[2], ram_sizes[2];
@@ -521,8 +522,8 @@ static void taihu_405ep_init(ram_addr_t ram_size,
 #ifdef DEBUG_BOARD_INIT
     printf("%s: register cpu\n", __func__);
 #endif
-    env = ppc405ep_init(ram_bases, ram_sizes, 33333333, &pic,
-                        kernel_filename == NULL ? 0 : 1);
+    ppc405ep_init(ram_bases, ram_sizes, 33333333, &pic,
+                  kernel_filename == NULL ? 0 : 1);
     /* allocate and load BIOS */
 #ifdef DEBUG_BOARD_INIT
     printf("%s: register BIOS\n", __func__);

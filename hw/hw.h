@@ -39,8 +39,8 @@ typedef int (QEMUFileRateLimit)(void *opaque);
  * the new actual bandwidth. It should be new_rate if everything goes ok, and
  * the old rate otherwise
  */
-typedef size_t (QEMUFileSetRateLimit)(void *opaque, size_t new_rate);
-typedef size_t (QEMUFileGetRateLimit)(void *opaque);
+typedef int64_t (QEMUFileSetRateLimit)(void *opaque, int64_t new_rate);
+typedef int64_t (QEMUFileGetRateLimit)(void *opaque);
 
 QEMUFile *qemu_fopen_ops(void *opaque, QEMUFilePutBufferFunc *put_buffer,
                          QEMUFileGetBufferFunc *get_buffer,
@@ -83,8 +83,8 @@ unsigned int qemu_get_be16(QEMUFile *f);
 unsigned int qemu_get_be32(QEMUFile *f);
 uint64_t qemu_get_be64(QEMUFile *f);
 int qemu_file_rate_limit(QEMUFile *f);
-size_t qemu_file_set_rate_limit(QEMUFile *f, size_t new_rate);
-size_t qemu_file_get_rate_limit(QEMUFile *f);
+int64_t qemu_file_set_rate_limit(QEMUFile *f, int64_t new_rate);
+int64_t qemu_file_get_rate_limit(QEMUFile *f);
 int qemu_file_has_error(QEMUFile *f);
 void qemu_file_set_error(QEMUFile *f);
 
@@ -333,6 +333,8 @@ struct VMStateDescription {
     const VMStateSubsection *subsections;
 };
 
+extern const VMStateInfo vmstate_info_bool;
+
 extern const VMStateInfo vmstate_info_int8;
 extern const VMStateInfo vmstate_info_int16;
 extern const VMStateInfo vmstate_info_int32;
@@ -526,6 +528,17 @@ extern const VMStateInfo vmstate_info_unused_buffer;
     .start        = (_start),                                        \
 }
 
+#define VMSTATE_VBUFFER_UINT32(_field, _state, _version, _test, _start, _field_size) { \
+    .name         = (stringify(_field)),                             \
+    .version_id   = (_version),                                      \
+    .field_exists = (_test),                                         \
+    .size_offset  = vmstate_offset_value(_state, _field_size, uint32_t),\
+    .info         = &vmstate_info_buffer,                            \
+    .flags        = VMS_VBUFFER|VMS_POINTER,                         \
+    .offset       = offsetof(_state, _field),                        \
+    .start        = (_start),                                        \
+}
+
 #define VMSTATE_BUFFER_UNSAFE_INFO(_field, _state, _version, _info, _size) { \
     .name       = (stringify(_field)),                               \
     .version_id = (_version),                                        \
@@ -602,6 +615,9 @@ extern const VMStateDescription vmstate_i2c_slave;
 #define VMSTATE_STRUCT_POINTER(_field, _state, _vmsd, _type)          \
     VMSTATE_STRUCT_POINTER_TEST(_field, _state, NULL, _vmsd, _type)
 
+#define VMSTATE_BOOL_V(_f, _s, _v)                                    \
+    VMSTATE_SINGLE(_f, _s, _v, vmstate_info_bool, bool)
+
 #define VMSTATE_INT8_V(_f, _s, _v)                                    \
     VMSTATE_SINGLE(_f, _s, _v, vmstate_info_int8, int8_t)
 #define VMSTATE_INT16_V(_f, _s, _v)                                   \
@@ -619,6 +635,9 @@ extern const VMStateDescription vmstate_i2c_slave;
     VMSTATE_SINGLE(_f, _s, _v, vmstate_info_uint32, uint32_t)
 #define VMSTATE_UINT64_V(_f, _s, _v)                                  \
     VMSTATE_SINGLE(_f, _s, _v, vmstate_info_uint64, uint64_t)
+
+#define VMSTATE_BOOL(_f, _s)                                          \
+    VMSTATE_BOOL_V(_f, _s, 0)
 
 #define VMSTATE_INT8(_f, _s)                                          \
     VMSTATE_INT8_V(_f, _s, 0)
@@ -673,6 +692,12 @@ extern const VMStateDescription vmstate_i2c_slave;
 
 #define VMSTATE_PTIMER(_f, _s)                                        \
     VMSTATE_PTIMER_V(_f, _s, 0)
+
+#define VMSTATE_BOOL_ARRAY_V(_f, _s, _n, _v)                         \
+    VMSTATE_ARRAY(_f, _s, _n, _v, vmstate_info_bool, bool)
+
+#define VMSTATE_BOOL_ARRAY(_f, _s, _n)                               \
+    VMSTATE_BOOL_ARRAY_V(_f, _s, _n, 0)
 
 #define VMSTATE_UINT16_ARRAY_V(_f, _s, _n, _v)                         \
     VMSTATE_ARRAY(_f, _s, _n, _v, vmstate_info_uint16, uint16_t)
@@ -730,6 +755,9 @@ extern const VMStateDescription vmstate_i2c_slave;
 
 #define VMSTATE_PARTIAL_VBUFFER(_f, _s, _size)                        \
     VMSTATE_VBUFFER(_f, _s, 0, NULL, 0, _size)
+
+#define VMSTATE_PARTIAL_VBUFFER_UINT32(_f, _s, _size)                        \
+    VMSTATE_VBUFFER_UINT32(_f, _s, 0, NULL, 0, _size)
 
 #define VMSTATE_SUB_VBUFFER(_f, _s, _start, _size)                    \
     VMSTATE_VBUFFER(_f, _s, 0, NULL, _start, _size)

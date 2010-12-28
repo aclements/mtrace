@@ -1,6 +1,9 @@
 # Makefile for QEMU.
 
-GENERATED_HEADERS = config-host.h trace.h
+GENERATED_HEADERS = config-host.h trace.h qemu-options.def
+ifeq ($(TRACE_BACKEND),dtrace)
+GENERATED_HEADERS += trace-dtrace.h
+endif
 
 ifneq ($(wildcard config-host.mak),)
 # Put the all: rule here so that config-host.mak can contain dependencies.
@@ -36,18 +39,19 @@ endif
 
 SUBDIR_MAKEFLAGS=$(if $(V),,--no-print-directory)
 SUBDIR_DEVICES_MAK=$(patsubst %, %/config-devices.mak, $(TARGET_DIRS))
+SUBDIR_DEVICES_MAK_DEP=$(patsubst %, %/config-devices.mak.d, $(TARGET_DIRS))
 
 config-all-devices.mak: $(SUBDIR_DEVICES_MAK)
 	$(call quiet-command,cat $(SUBDIR_DEVICES_MAK) | grep =y | sort -u > $@,"  GEN   $@")
 
+-include $(SUBDIR_DEVICES_MAK_DEP)
+
 %/config-devices.mak: default-configs/%.mak
-	$(call quiet-command,cat $< > $@.tmp, "  GEN   $@")
+	$(call quiet-command,$(SHELL) $(SRC_PATH)/make_device_config.sh $@ $<, "  GEN   $@")
 	@if test -f $@; then \
 	  if cmp -s $@.old $@; then \
-	    if ! cmp -s $@ $@.tmp; then \
-	      mv $@.tmp $@; \
-	      cp -p $@ $@.old; \
-	    fi; \
+	    mv $@.tmp $@; \
+	    cp -p $@ $@.old; \
 	  else \
 	    if test -f $@.old; then \
 	      echo "WARNING: $@ (user modified) out of date.";\
@@ -71,6 +75,8 @@ build-all: $(DOCS) $(TOOLS) recurse-all
 
 config-host.h: config-host.h-timestamp
 config-host.h-timestamp: config-host.mak
+qemu-options.def: $(SRC_PATH)/qemu-options.hx
+	$(call quiet-command,sh $(SRC_PATH)/hxtool -h < $< > $@,"  GEN   $@")
 
 SUBDIR_RULES=$(patsubst %,subdir-%, $(TARGET_DIRS))
 
@@ -106,7 +112,11 @@ ui/vnc.o: QEMU_CFLAGS += $(VNC_TLS_CFLAGS)
 
 bt-host.o: QEMU_CFLAGS += $(BLUEZ_CFLAGS)
 
+ifeq ($(TRACE_BACKEND),dtrace)
+trace.h: trace.h-timestamp trace-dtrace.h
+else
 trace.h: trace.h-timestamp
+endif
 trace.h-timestamp: $(SRC_PATH)/trace-events config-host.mak
 	$(call quiet-command,sh $(SRC_PATH)/tracetool --$(TRACE_BACKEND) -h < $< > $@,"  GEN   trace.h")
 	@cmp -s $@ trace.h || cp $@ trace.h
@@ -118,6 +128,20 @@ trace.c-timestamp: $(SRC_PATH)/trace-events config-host.mak
 
 trace.o: trace.c $(GENERATED_HEADERS)
 
+trace-dtrace.h: trace-dtrace.dtrace
+	$(call quiet-command,dtrace -o $@ -h -s $<, "  GEN   trace-dtrace.h")
+
+# Normal practice is to name DTrace probe file with a '.d' extension
+# but that gets picked up by QEMU's Makefile as an external dependancy
+# rule file. So we use '.dtrace' instead
+trace-dtrace.dtrace: trace-dtrace.dtrace-timestamp
+trace-dtrace.dtrace-timestamp: $(SRC_PATH)/trace-events config-host.mak
+	$(call quiet-command,sh $(SRC_PATH)/tracetool --$(TRACE_BACKEND) -d < $< > $@,"  GEN   trace-dtrace.dtrace")
+	@cmp -s $@ trace-dtrace.dtrace || cp $@ trace-dtrace.dtrace
+
+trace-dtrace.o: trace-dtrace.dtrace $(GENERATED_HEADERS)
+	$(call quiet-command,dtrace -o $@ -G -s $<, "  GEN trace-dtrace.o")
+
 simpletrace.o: simpletrace.c $(GENERATED_HEADERS)
 
 version.o: $(SRC_PATH)/version.rc config-host.mak
@@ -127,41 +151,46 @@ version-obj-$(CONFIG_WIN32) += version.o
 ######################################################################
 
 qemu-img.o: qemu-img-cmds.h
-qemu-img.o qemu-tool.o qemu-nbd.o qemu-io.o: $(GENERATED_HEADERS)
+qemu-img.o qemu-tool.o qemu-nbd.o qemu-io.o cmd.o: $(GENERATED_HEADERS)
 
-qemu-img$(EXESUF): qemu-img.o qemu-tool.o qemu-error.o $(trace-obj-y) $(block-obj-y) $(qobject-obj-y) $(version-obj-y)
+qemu-img$(EXESUF): qemu-img.o qemu-tool.o qemu-error.o $(oslib-obj-y) $(trace-obj-y) $(block-obj-y) $(qobject-obj-y) $(version-obj-y) qemu-timer-common.o
 
-qemu-nbd$(EXESUF): qemu-nbd.o qemu-tool.o qemu-error.o $(trace-obj-y) $(block-obj-y) $(qobject-obj-y) $(version-obj-y)
+qemu-nbd$(EXESUF): qemu-nbd.o qemu-tool.o qemu-error.o $(oslib-obj-y) $(trace-obj-y) $(block-obj-y) $(qobject-obj-y) $(version-obj-y) qemu-timer-common.o
 
-qemu-io$(EXESUF): qemu-io.o cmd.o qemu-tool.o qemu-error.o $(trace-obj-y) $(block-obj-y) $(qobject-obj-y) $(version-obj-y)
+qemu-io$(EXESUF): qemu-io.o cmd.o qemu-tool.o qemu-error.o $(oslib-obj-y) $(trace-obj-y) $(block-obj-y) $(qobject-obj-y) $(version-obj-y) qemu-timer-common.o
 
 qemu-img-cmds.h: $(SRC_PATH)/qemu-img-cmds.hx
 	$(call quiet-command,sh $(SRC_PATH)/hxtool -h < $< > $@,"  GEN   $@")
 
 check-qint.o check-qstring.o check-qdict.o check-qlist.o check-qfloat.o check-qjson.o: $(GENERATED_HEADERS)
 
-check-qint: check-qint.o qint.o qemu-malloc.o
-check-qstring: check-qstring.o qstring.o qemu-malloc.o
-check-qdict: check-qdict.o qdict.o qfloat.o qint.o qstring.o qbool.o qemu-malloc.o qlist.o
-check-qlist: check-qlist.o qlist.o qint.o qemu-malloc.o
-check-qfloat: check-qfloat.o qfloat.o qemu-malloc.o
-check-qjson: check-qjson.o qfloat.o qint.o qdict.o qstring.o qlist.o qbool.o qjson.o json-streamer.o json-lexer.o json-parser.o qemu-malloc.o
+CHECK_PROG_DEPS = qemu-malloc.o $(oslib-obj-y) $(trace-obj-y)
+
+check-qint: check-qint.o qint.o $(CHECK_PROG_DEPS)
+check-qstring: check-qstring.o qstring.o $(CHECK_PROG_DEPS)
+check-qdict: check-qdict.o qdict.o qfloat.o qint.o qstring.o qbool.o qlist.o $(CHECK_PROG_DEPS)
+check-qlist: check-qlist.o qlist.o qint.o $(CHECK_PROG_DEPS)
+check-qfloat: check-qfloat.o qfloat.o $(CHECK_PROG_DEPS)
+check-qjson: check-qjson.o qfloat.o qint.o qdict.o qstring.o qlist.o qbool.o qjson.o json-streamer.o json-lexer.o json-parser.o $(CHECK_PROG_DEPS)
 
 clean:
 # avoid old build problems by removing potentially incorrect old files
 	rm -f config.mak op-i386.h opc-i386.h gen-op-i386.h op-arm.h opc-arm.h gen-op-arm.h
+	rm -f qemu-options.def
 	rm -f *.o *.d *.a $(TOOLS) TAGS cscope.* *.pod *~ */*~
 	rm -f slirp/*.o slirp/*.d audio/*.o audio/*.d block/*.o block/*.d net/*.o net/*.d fsdev/*.o fsdev/*.d ui/*.o ui/*.d
 	rm -f qemu-img-cmds.h
-	rm -f trace.c trace.h
+	rm -f trace.c trace.h trace.c-timestamp trace.h-timestamp
+	rm -f trace-dtrace.dtrace trace-dtrace.dtrace-timestamp
+	rm -f trace-dtrace.h trace-dtrace.h-timestamp
 	$(MAKE) -C tests clean
 	for d in $(ALL_SUBDIRS) libhw32 libhw64 libuser libdis libdis-user; do \
 	if test -d $$d; then $(MAKE) -C $$d $@ || exit 1; fi; \
+	rm -f $$d/qemu-options.def; \
         done
 
 distclean: clean
 	rm -f config-host.mak config-host.h* config-host.ld $(DOCS) qemu-options.texi qemu-img-cmds.texi qemu-monitor.texi
-	rm -f qemu-options.def
 	rm -f config-all-devices.mak
 	rm -f roms/seabios/config.mak roms/vgabios/config.mak
 	rm -f qemu-doc.info qemu-doc.aux qemu-doc.cp qemu-doc.dvi qemu-doc.fn qemu-doc.info qemu-doc.ky qemu-doc.log qemu-doc.pdf qemu-doc.pg qemu-doc.toc qemu-doc.tp qemu-doc.vr
@@ -175,10 +204,10 @@ ar      de     en-us  fi  fr-be  hr     it  lv  nl         pl  ru     th \
 common  de-ch  es     fo  fr-ca  hu     ja  mk  nl-be      pt  sl     tr
 
 ifdef INSTALL_BLOBS
-BLOBS=bios.bin vgabios.bin vgabios-cirrus.bin ppc_rom.bin \
-video.x openbios-sparc32 openbios-sparc64 openbios-ppc \
+BLOBS=bios.bin vgabios.bin vgabios-cirrus.bin \
+vgabios-stdvga.bin vgabios-vmware.bin vgabios-qxl.bin \
+ppc_rom.bin openbios-sparc32 openbios-sparc64 openbios-ppc \
 gpxe-eepro100-80861209.rom \
-gpxe-eepro100-80861229.rom \
 pxe-e1000.bin \
 pxe-ne2k_pci.bin pxe-pcnet.bin \
 pxe-rtl8139.bin pxe-virtio.bin \
@@ -255,10 +284,10 @@ TEXIFLAG=$(if $(V),,--quiet)
 qemu-options.texi: $(SRC_PATH)/qemu-options.hx
 	$(call quiet-command,sh $(SRC_PATH)/hxtool -t < $< > $@,"  GEN   $@")
 
-qemu-monitor.texi: $(SRC_PATH)/qemu-monitor.hx
+qemu-monitor.texi: $(SRC_PATH)/hmp-commands.hx
 	$(call quiet-command,sh $(SRC_PATH)/hxtool -t < $< > $@,"  GEN   $@")
 
-QMP/qmp-commands.txt: $(SRC_PATH)/qemu-monitor.hx
+QMP/qmp-commands.txt: $(SRC_PATH)/qmp-commands.hx
 	$(call quiet-command,sh $(SRC_PATH)/hxtool -q < $< > $@,"  GEN   $@")
 
 qemu-img-cmds.texi: $(SRC_PATH)/qemu-img-cmds.hx
@@ -323,7 +352,6 @@ tarbin:
 	$(datadir)/vgabios.bin \
 	$(datadir)/vgabios-cirrus.bin \
 	$(datadir)/ppc_rom.bin \
-	$(datadir)/video.x \
 	$(datadir)/openbios-sparc32 \
 	$(datadir)/openbios-sparc64 \
 	$(datadir)/openbios-ppc \

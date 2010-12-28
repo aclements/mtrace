@@ -40,6 +40,7 @@
 #include "sysbus.h"
 #include "sysemu.h"
 #include "blockdev.h"
+#include "ui/qemu-spice.h"
 
 /* output Bochs bios info messages */
 //#define DEBUG_BIOS
@@ -75,12 +76,12 @@ struct e820_entry {
     uint64_t address;
     uint64_t length;
     uint32_t type;
-};
+} __attribute((__packed__, __aligned__(4)));
 
 struct e820_table {
     uint32_t count;
     struct e820_entry entry[E820_NR_ENTRIES];
-};
+} __attribute((__packed__, __aligned__(4)));
 
 static struct e820_table e820_table;
 
@@ -430,8 +431,8 @@ static void bochs_bios_write(void *opaque, uint32_t addr, uint32_t val)
         /* Bochs BIOS messages */
     case 0x400:
     case 0x401:
-        fprintf(stderr, "BIOS panic at rombios.c, line %d\n", val);
-        exit(1);
+        /* used to be panic, now unused */
+        break;
     case 0x402:
     case 0x403:
 #ifdef DEBUG_BIOS
@@ -467,19 +468,19 @@ static void bochs_bios_write(void *opaque, uint32_t addr, uint32_t val)
 
 int e820_add_entry(uint64_t address, uint64_t length, uint32_t type)
 {
-    int index = e820_table.count;
+    int index = le32_to_cpu(e820_table.count);
     struct e820_entry *entry;
 
     if (index >= E820_NR_ENTRIES)
         return -EBUSY;
-    entry = &e820_table.entry[index];
+    entry = &e820_table.entry[index++];
 
-    entry->address = address;
-    entry->length = length;
-    entry->type = type;
+    entry->address = cpu_to_le64(address);
+    entry->length = cpu_to_le64(length);
+    entry->type = cpu_to_le32(type);
 
-    e820_table.count++;
-    return e820_table.count;
+    e820_table.count = cpu_to_le32(index);
+    return index;
 }
 
 static void *bochs_bios_init(void)
@@ -733,7 +734,8 @@ static void load_linux(void *fw_cfg,
     fw_cfg_add_i32(fw_cfg, FW_CFG_SETUP_SIZE, setup_size);
     fw_cfg_add_bytes(fw_cfg, FW_CFG_SETUP_DATA, setup, setup_size);
 
-    option_rom[nb_option_roms] = "linuxboot.bin";
+    option_rom[nb_option_roms].name = "linuxboot.bin";
+    option_rom[nb_option_roms].bootindex = 0;
     nb_option_roms++;
 }
 
@@ -937,7 +939,7 @@ void pc_memory_init(ram_addr_t ram_size,
         goto bios_error;
     }
     bios_offset = qemu_ram_alloc(NULL, "pc.bios", bios_size);
-    ret = rom_add_file_fixed(bios_name, (uint32_t)(-bios_size));
+    ret = rom_add_file_fixed(bios_name, (uint32_t)(-bios_size), -1);
     if (ret != 0) {
     bios_error:
         fprintf(stderr, "qemu: could not load PC BIOS '%s'\n", bios_name);
@@ -969,7 +971,7 @@ void pc_memory_init(ram_addr_t ram_size,
     }
 
     for (i = 0; i < nb_option_roms; i++) {
-        rom_add_option(option_rom[i]);
+        rom_add_option(option_rom[i].name, option_rom[i].bootindex);
     }
 }
 
@@ -991,9 +993,16 @@ void pc_vga_init(PCIBus *pci_bus)
             pci_vmsvga_init(pci_bus);
         else
             fprintf(stderr, "%s: vmware_vga: no PCI bus\n", __FUNCTION__);
+#ifdef CONFIG_SPICE
+    } else if (qxl_enabled) {
+        if (pci_bus)
+            pci_create_simple(pci_bus, -1, "qxl-vga");
+        else
+            fprintf(stderr, "%s: qxl: no PCI bus\n", __FUNCTION__);
+#endif
     } else if (std_vga_enabled) {
         if (pci_bus) {
-            pci_vga_init(pci_bus, 0, 0);
+            pci_vga_init(pci_bus);
         } else {
             isa_vga_init();
         }

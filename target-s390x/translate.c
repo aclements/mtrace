@@ -23,8 +23,7 @@
 #include "tcg-op.h"
 #include "qemu-log.h"
 
-void cpu_dump_state(CPUState *env, FILE *f,
-                    int (*cpu_fprintf)(FILE *f, const char *fmt, ...),
+void cpu_dump_state(CPUState *env, FILE *f, fprintf_function cpu_fprintf,
                     int flags)
 {
     int i;
@@ -37,7 +36,7 @@ void cpu_dump_state(CPUState *env, FILE *f,
         }
     }
     for (i = 0; i < 16; i++) {
-        cpu_fprintf(f, "F%02d=%016lx", i, env->fregs[i]);
+        cpu_fprintf(f, "F%02d=%016lx", i, (long)env->fregs[i].i);
         if ((i % 4) == 3) {
             cpu_fprintf(f, "\n");
         } else {

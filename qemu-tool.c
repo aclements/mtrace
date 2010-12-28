@@ -15,6 +15,7 @@
 #include "monitor.h"
 #include "qemu-timer.h"
 #include "qemu-log.h"
+#include "sysemu.h"
 
 #include <sys/time.h>
 
@@ -109,11 +110,4 @@ int qemu_set_fd_handler2(int fd,
                          void *opaque)
 {
     return 0;
-}
-
-int64_t qemu_get_clock(QEMUClock *clock)
-{
-    qemu_timeval tv;
-    qemu_gettimeofday(&tv);
-    return (tv.tv_sec * 1000000000LL + (tv.tv_usec * 1000)) / 1000000;
 }

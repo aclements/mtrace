@@ -383,7 +383,8 @@ static void ppc4xx_opba_init(target_phys_addr_t base)
 #ifdef DEBUG_OPBA
     printf("%s: offset " TARGET_FMT_plx "\n", __func__, base);
 #endif
-    io = cpu_register_io_memory(opba_read, opba_write, opba);
+    io = cpu_register_io_memory(opba_read, opba_write, opba,
+                                DEVICE_NATIVE_ENDIAN);
     cpu_register_physical_memory(base, 0x002, io);
     qemu_register_reset(ppc4xx_opba_reset, opba);
 }
@@ -630,18 +631,11 @@ struct ppc405_dma_t {
 
 static uint32_t dcr_read_dma (void *opaque, int dcrn)
 {
-    ppc405_dma_t *dma;
-
-    dma = opaque;
-
     return 0;
 }
 
 static void dcr_write_dma (void *opaque, int dcrn, uint32_t val)
 {
-    ppc405_dma_t *dma;
-
-    dma = opaque;
 }
 
 static void ppc405_dma_reset (void *opaque)
@@ -739,9 +733,6 @@ struct ppc405_gpio_t {
 
 static uint32_t ppc405_gpio_readb (void *opaque, target_phys_addr_t addr)
 {
-    ppc405_gpio_t *gpio;
-
-    gpio = opaque;
 #ifdef DEBUG_GPIO
     printf("%s: addr " TARGET_FMT_plx "\n", __func__, addr);
 #endif
@@ -752,9 +743,6 @@ static uint32_t ppc405_gpio_readb (void *opaque, target_phys_addr_t addr)
 static void ppc405_gpio_writeb (void *opaque,
                                 target_phys_addr_t addr, uint32_t value)
 {
-    ppc405_gpio_t *gpio;
-
-    gpio = opaque;
 #ifdef DEBUG_GPIO
     printf("%s: addr " TARGET_FMT_plx " val %08" PRIx32 "\n", __func__, addr,
            value);
@@ -763,9 +751,6 @@ static void ppc405_gpio_writeb (void *opaque,
 
 static uint32_t ppc405_gpio_readw (void *opaque, target_phys_addr_t addr)
 {
-    ppc405_gpio_t *gpio;
-
-    gpio = opaque;
 #ifdef DEBUG_GPIO
     printf("%s: addr " TARGET_FMT_plx "\n", __func__, addr);
 #endif
@@ -776,9 +761,6 @@ static uint32_t ppc405_gpio_readw (void *opaque, target_phys_addr_t addr)
 static void ppc405_gpio_writew (void *opaque,
                                 target_phys_addr_t addr, uint32_t value)
 {
-    ppc405_gpio_t *gpio;
-
-    gpio = opaque;
 #ifdef DEBUG_GPIO
     printf("%s: addr " TARGET_FMT_plx " val %08" PRIx32 "\n", __func__, addr,
            value);
@@ -787,9 +769,6 @@ static void ppc405_gpio_writew (void *opaque,
 
 static uint32_t ppc405_gpio_readl (void *opaque, target_phys_addr_t addr)
 {
-    ppc405_gpio_t *gpio;
-
-    gpio = opaque;
 #ifdef DEBUG_GPIO
     printf("%s: addr " TARGET_FMT_plx "\n", __func__, addr);
 #endif
@@ -800,9 +779,6 @@ static uint32_t ppc405_gpio_readl (void *opaque, target_phys_addr_t addr)
 static void ppc405_gpio_writel (void *opaque,
                                 target_phys_addr_t addr, uint32_t value)
 {
-    ppc405_gpio_t *gpio;
-
-    gpio = opaque;
 #ifdef DEBUG_GPIO
     printf("%s: addr " TARGET_FMT_plx " val %08" PRIx32 "\n", __func__, addr,
            value);
@@ -823,9 +799,6 @@ static CPUWriteMemoryFunc * const ppc405_gpio_write[] = {
 
 static void ppc405_gpio_reset (void *opaque)
 {
-    ppc405_gpio_t *gpio;
-
-    gpio = opaque;
 }
 
 static void ppc405_gpio_init(target_phys_addr_t base)
@@ -837,7 +810,8 @@ static void ppc405_gpio_init(target_phys_addr_t base)
 #ifdef DEBUG_GPIO
     printf("%s: offset " TARGET_FMT_plx "\n", __func__, base);
 #endif
-    io = cpu_register_io_memory(ppc405_gpio_read, ppc405_gpio_write, gpio);
+    io = cpu_register_io_memory(ppc405_gpio_read, ppc405_gpio_write, gpio,
+                                DEVICE_NATIVE_ENDIAN);
     cpu_register_physical_memory(base, 0x038, io);
     qemu_register_reset(&ppc405_gpio_reset, gpio);
 }
@@ -1246,7 +1220,8 @@ static void ppc405_i2c_init(target_phys_addr_t base, qemu_irq irq)
 #ifdef DEBUG_I2C
     printf("%s: offset " TARGET_FMT_plx "\n", __func__, base);
 #endif
-    io = cpu_register_io_memory(i2c_read, i2c_write, i2c);
+    io = cpu_register_io_memory(i2c_read, i2c_write, i2c,
+                                DEVICE_NATIVE_ENDIAN);
     cpu_register_physical_memory(base, 0x011, io);
     qemu_register_reset(ppc4xx_i2c_reset, i2c);
 }
@@ -1529,7 +1504,7 @@ static void ppc4xx_gpt_init(target_phys_addr_t base, qemu_irq irqs[5])
 #ifdef DEBUG_GPT
     printf("%s: offset " TARGET_FMT_plx "\n", __func__, base);
 #endif
-    io = cpu_register_io_memory(gpt_read, gpt_write, gpt);
+    io = cpu_register_io_memory(gpt_read, gpt_write, gpt, DEVICE_NATIVE_ENDIAN);
     cpu_register_physical_memory(base, 0x0d4, io);
     qemu_register_reset(ppc4xx_gpt_reset, gpt);
 }

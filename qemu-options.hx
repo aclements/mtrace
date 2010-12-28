@@ -393,6 +393,7 @@ available sound hardware.
 qemu -soundhw sb16,adlib disk.img
 qemu -soundhw es1370 disk.img
 qemu -soundhw ac97 disk.img
+qemu -soundhw hda disk.img
 qemu -soundhw all disk.img
 qemu -soundhw ?
 @end example
@@ -670,6 +671,76 @@ STEXI
 Enable SDL.
 ETEXI
 
+DEF("spice", HAS_ARG, QEMU_OPTION_spice,
+    "-spice <args>   enable spice\n", QEMU_ARCH_ALL)
+STEXI
+@item -spice @var{option}[,@var{option}[,...]]
+@findex -spice
+Enable the spice remote desktop protocol. Valid options are
+
+@table @option
+
+@item port=<nr>
+Set the TCP port spice is listening on for plaintext channels.
+
+@item addr=<addr>
+Set the IP address spice is listening on.  Default is any address.
+
+@item ipv4
+@item ipv6
+Force using the specified IP version.
+
+@item password=<secret>
+Set the password you need to authenticate.
+
+@item disable-ticketing
+Allow client connects without authentication.
+
+@item tls-port=<nr>
+Set the TCP port spice is listening on for encrypted channels.
+
+@item x509-dir=<dir>
+Set the x509 file directory. Expects same filenames as -vnc $display,x509=$dir
+
+@item x509-key-file=<file>
+@item x509-key-password=<file>
+@item x509-cert-file=<file>
+@item x509-cacert-file=<file>
+@item x509-dh-key-file=<file>
+The x509 file names can also be configured individually.
+
+@item tls-ciphers=<list>
+Specify which ciphers to use.
+
+@item tls-channel=[main|display|inputs|record|playback|tunnel]
+@item plaintext-channel=[main|display|inputs|record|playback|tunnel]
+Force specific channel to be used with or without TLS encryption.  The
+options can be specified multiple times to configure multiple
+channels.  The special name "default" can be used to set the default
+mode.  For channels which are not explicitly forced into one mode the
+spice client is allowed to pick tls/plaintext as he pleases.
+
+@item image-compression=[auto_glz|auto_lz|quic|glz|lz|off]
+Configure image compression (lossless).
+Default is auto_glz.
+
+@item jpeg-wan-compression=[auto|never|always]
+@item zlib-glz-wan-compression=[auto|never|always]
+Configure wan image compression (lossy for slow links).
+Default is auto.
+
+@item streaming-video=[off|all|filter]
+Configure video stream detection.  Default is filter.
+
+@item agent-mouse=[on|off]
+Enable/disable passing mouse events via vdagent.  Default is on.
+
+@item playback-compression=[on|off]
+Enable/disable audio stream compression (using celt 0.5.1).  Default is on.
+
+@end table
+ETEXI
+
 DEF("portrait", 0, QEMU_OPTION_portrait,
     "-portrait       rotate graphical output 90 deg left (only PXA LCD)\n",
     QEMU_ARCH_ALL)
@@ -680,7 +751,7 @@ Rotate graphical output 90 deg left (only PXA LCD).
 ETEXI
 
 DEF("vga", HAS_ARG, QEMU_OPTION_vga,
-    "-vga [std|cirrus|vmware|xenfb|none]\n"
+    "-vga [std|cirrus|vmware|qxl|xenfb|none]\n"
     "                select video card type\n", QEMU_ARCH_ALL)
 STEXI
 @item -vga @var{type}
@@ -701,6 +772,10 @@ this option.
 VMWare SVGA-II compatible adapter. Use it if you have sufficiently
 recent XFree86/XOrg server or Windows guest with a driver for this
 card.
+@item qxl
+QXL paravirtual graphic card.  It is VGA compatible (including VESA
+2.0 VBE support).  Works best with qxl guest drivers installed though.
+Recommended choice when using the spice protocol.
 @item none
 Disable VGA card.
 @end table
@@ -1003,8 +1078,9 @@ DEF("net", HAS_ARG, QEMU_OPTION_net,
 #endif
     "-net socket[,vlan=n][,name=str][,fd=h][,listen=[host]:port][,connect=host:port]\n"
     "                connect the vlan 'n' to another VLAN using a socket connection\n"
-    "-net socket[,vlan=n][,name=str][,fd=h][,mcast=maddr:port]\n"
+    "-net socket[,vlan=n][,name=str][,fd=h][,mcast=maddr:port[,localaddr=addr]]\n"
     "                connect the vlan 'n' to multicast maddr and port\n"
+    "                use 'localaddr=addr' to specify the host address to send packets from\n"
 #ifdef CONFIG_VDE
     "-net vde[,vlan=n][,name=str][,sock=socketpath][,port=n][,group=groupname][,mode=octalmode]\n"
     "                connect the vlan 'n' to port 'n' of a vde switch running\n"
@@ -1198,7 +1274,7 @@ qemu linux.img -net nic,macaddr=52:54:00:12:34:57 \
                -net socket,connect=127.0.0.1:1234
 @end example
 
-@item -net socket[,vlan=@var{n}][,name=@var{name}][,fd=@var{h}] [,mcast=@var{maddr}:@var{port}]
+@item -net socket[,vlan=@var{n}][,name=@var{name}][,fd=@var{h}][,mcast=@var{maddr}:@var{port}[,localaddr=@var{addr}]]
 
 Create a VLAN @var{n} shared with another QEMU virtual
 machines using a UDP multicast socket, effectively making a bus for
@@ -1236,6 +1312,12 @@ qemu linux.img -net nic,macaddr=52:54:00:12:34:56 \
                -net socket,mcast=239.192.168.1:1102
 # launch UML
 /path/to/linux ubd0=/path/to/root_fs eth0=mcast
+@end example
+
+Example (send packets from host's 1.2.3.4):
+@example
+qemu linux.img -net nic,macaddr=52:54:00:12:34:56 \
+               -net socket,mcast=239.192.168.1:1102,localaddr=1.2.3.4
 @end example
 
 @item -net vde[,vlan=@var{n}][,name=@var{name}][,sock=@var{socketpath}] [,port=@var{n}][,group=@var{groupname}][,mode=@var{octalmode}]

@@ -28,7 +28,7 @@
 #include "block_int.h"
 #include "block/qcow2.h"
 
-int qcow2_grow_l1_table(BlockDriverState *bs, int min_size)
+int qcow2_grow_l1_table(BlockDriverState *bs, int min_size, bool exact_size)
 {
     BDRVQcowState *s = bs->opaque;
     int new_l1_size, new_l1_size2, ret, i;
@@ -36,15 +36,22 @@ int qcow2_grow_l1_table(BlockDriverState *bs, int min_size)
     int64_t new_l1_table_offset;
     uint8_t data[12];
 
-    new_l1_size = s->l1_size;
-    if (min_size <= new_l1_size)
+    if (min_size <= s->l1_size)
         return 0;
-    if (new_l1_size == 0) {
-        new_l1_size = 1;
+
+    if (exact_size) {
+        new_l1_size = min_size;
+    } else {
+        /* Bump size up to reduce the number of times we have to grow */
+        new_l1_size = s->l1_size;
+        if (new_l1_size == 0) {
+            new_l1_size = 1;
+        }
+        while (min_size > new_l1_size) {
+            new_l1_size = (new_l1_size * 3 + 1) / 2;
+        }
     }
-    while (min_size > new_l1_size) {
-        new_l1_size = (new_l1_size * 3 + 1) / 2;
-    }
+
 #ifdef DEBUG_ALLOC2
     printf("grow l1_table from %d to %d\n", s->l1_size, new_l1_size);
 #endif
@@ -181,6 +188,7 @@ static int l2_load(BlockDriverState *bs, uint64_t l2_offset,
     ret = bdrv_pread(bs->file, l2_offset, *l2_table,
         s->l2_size * sizeof(uint64_t));
     if (ret < 0) {
+        qcow2_l2_cache_reset(bs);
         return ret;
     }
 
@@ -344,8 +352,8 @@ void qcow2_encrypt_sectors(BDRVQcowState *s, int64_t sector_num,
 }
 
 
-static int qcow_read(BlockDriverState *bs, int64_t sector_num,
-                     uint8_t *buf, int nb_sectors)
+static int qcow2_read(BlockDriverState *bs, int64_t sector_num,
+                      uint8_t *buf, int nb_sectors)
 {
     BDRVQcowState *s = bs->opaque;
     int ret, index_in_cluster, n, n1;
@@ -411,7 +419,7 @@ static int copy_sectors(BlockDriverState *bs, uint64_t start_sect,
     if (n <= 0)
         return 0;
     BLKDBG_EVENT(bs->file, BLKDBG_COW_READ);
-    ret = qcow_read(bs, start_sect + n_start, s->cluster_data, n);
+    ret = qcow2_read(bs, start_sect + n_start, s->cluster_data, n);
     if (ret < 0)
         return ret;
     if (s->crypt_method) {
@@ -550,7 +558,7 @@ static int get_cluster_table(BlockDriverState *bs, uint64_t offset,
 
     l1_index = offset >> (s->l2_bits + s->cluster_bits);
     if (l1_index >= s->l1_size) {
-        ret = qcow2_grow_l1_table(bs, l1_index + 1);
+        ret = qcow2_grow_l1_table(bs, l1_index + 1, false);
         if (ret < 0) {
             return ret;
         }

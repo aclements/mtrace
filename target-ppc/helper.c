@@ -1172,9 +1172,7 @@ static int mmu40x_get_physical_address (CPUState *env, mmu_ctx_t *ctx,
         case 0x1:
         check_perms:
             /* Check from TLB entry */
-            /* XXX: there is a problem here or in the TLB fill code... */
             ctx->prot = tlb->prot;
-            ctx->prot |= PAGE_EXEC;
             ret = check_prot(ctx->prot, rw, access_type);
             if (ret == -2)
                 env->spr[SPR_40x_ESR] = 0;
@@ -2228,17 +2226,6 @@ static inline void powerpc_excp(CPUState *env, int excp_model, int excp)
             new_msr |= (target_ulong)MSR_HVB;
         goto store_current;
     case POWERPC_EXCP_SYSCALL:   /* System call exception                    */
-        /* NOTE: this is a temporary hack to support graphics OSI
-           calls from the MOL driver */
-        /* XXX: To be removed */
-        if (env->gpr[3] == 0x113724fa && env->gpr[4] == 0x77810f9b &&
-            env->osi_call) {
-            if (env->osi_call(env) != 0) {
-                env->exception_index = POWERPC_EXCP_NONE;
-                env->error_code = 0;
-                return;
-            }
-        }
         dump_syscall(env);
         lev = env->error_code;
         if (lev == 1 || (lpes0 == 0 && lpes1 == 0))

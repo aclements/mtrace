@@ -70,6 +70,39 @@ static BlockDriverState *bs_snapshots;
 /* If non-zero, use only whitelisted block drivers */
 static int use_bdrv_whitelist;
 
+#ifdef _WIN32
+static int is_windows_drive_prefix(const char *filename)
+{
+    return (((filename[0] >= 'a' && filename[0] <= 'z') ||
+             (filename[0] >= 'A' && filename[0] <= 'Z')) &&
+            filename[1] == ':');
+}
+
+int is_windows_drive(const char *filename)
+{
+    if (is_windows_drive_prefix(filename) &&
+        filename[2] == '\0')
+        return 1;
+    if (strstart(filename, "\\\\.\\", NULL) ||
+        strstart(filename, "//./", NULL))
+        return 1;
+    return 0;
+}
+#endif
+
+/* check if the path starts with "<protocol>:" */
+static int path_has_protocol(const char *path)
+{
+#ifdef _WIN32
+    if (is_windows_drive(path) ||
+        is_windows_drive_prefix(path)) {
+        return 0;
+    }
+#endif
+
+    return strchr(path, ':') != NULL;
+}
+
 int path_is_absolute(const char *path)
 {
     const char *p;
@@ -215,7 +248,7 @@ int bdrv_create_file(const char* filename, QEMUOptionParameter *options)
 
     drv = bdrv_find_protocol(filename);
     if (drv == NULL) {
-        drv = bdrv_find_format("file");
+        return -ENOENT;
     }
 
     return bdrv_create(drv, filename, options);
@@ -241,26 +274,6 @@ void get_tmp_filename(char *filename, int size)
     snprintf(filename, size, "%s/vl.XXXXXX", tmpdir);
     fd = mkstemp(filename);
     close(fd);
-}
-#endif
-
-#ifdef _WIN32
-static int is_windows_drive_prefix(const char *filename)
-{
-    return (((filename[0] >= 'a' && filename[0] <= 'z') ||
-             (filename[0] >= 'A' && filename[0] <= 'Z')) &&
-            filename[1] == ':');
-}
-
-int is_windows_drive(const char *filename)
-{
-    if (is_windows_drive_prefix(filename) &&
-        filename[2] == '\0')
-        return 1;
-    if (strstart(filename, "\\\\.\\", NULL) ||
-        strstart(filename, "//./", NULL))
-        return 1;
-    return 0;
 }
 #endif
 
@@ -307,16 +320,11 @@ BlockDriver *bdrv_find_protocol(const char *filename)
         return drv1;
     }
 
-#ifdef _WIN32
-     if (is_windows_drive(filename) ||
-         is_windows_drive_prefix(filename))
-         return bdrv_find_format("file");
-#endif
-
-    p = strchr(filename, ':');
-    if (!p) {
+    if (!path_has_protocol(filename)) {
         return bdrv_find_format("file");
     }
+    p = strchr(filename, ':');
+    assert(p != NULL);
     len = p - filename;
     if (len > sizeof(protocol) - 1)
         len = sizeof(protocol) - 1;
@@ -603,10 +611,18 @@ int bdrv_open(BlockDriverState *bs, const char *filename, int flags,
         BlockDriver *back_drv = NULL;
 
         bs->backing_hd = bdrv_new("");
-        path_combine(backing_filename, sizeof(backing_filename),
-                     filename, bs->backing_file);
-        if (bs->backing_format[0] != '\0')
+
+        if (path_has_protocol(bs->backing_file)) {
+            pstrcpy(backing_filename, sizeof(backing_filename),
+                    bs->backing_file);
+        } else {
+            path_combine(backing_filename, sizeof(backing_filename),
+                         filename, bs->backing_file);
+        }
+
+        if (bs->backing_format[0] != '\0') {
             back_drv = bdrv_find_format(bs->backing_format);
+        }
 
         /* backing files always opened read-only */
         back_flags =
@@ -930,14 +946,14 @@ static void set_dirty_bitmap(BlockDriverState *bs, int64_t sector_num,
         bit = start % (sizeof(unsigned long) * 8);
         val = bs->dirty_bitmap[idx];
         if (dirty) {
-            if (!(val & (1 << bit))) {
+            if (!(val & (1UL << bit))) {
                 bs->dirty_count++;
-                val |= 1 << bit;
+                val |= 1UL << bit;
             }
         } else {
-            if (val & (1 << bit)) {
+            if (val & (1UL << bit)) {
                 bs->dirty_count--;
-                val &= ~(1 << bit);
+                val &= ~(1UL << bit);
             }
         }
         bs->dirty_bitmap[idx] = val;
@@ -1453,14 +1469,27 @@ const char *bdrv_get_device_name(BlockDriverState *bs)
     return bs->device_name;
 }
 
-void bdrv_flush(BlockDriverState *bs)
+int bdrv_flush(BlockDriverState *bs)
 {
     if (bs->open_flags & BDRV_O_NO_FLUSH) {
-        return;
+        return 0;
     }
 
-    if (bs->drv && bs->drv->bdrv_flush)
-        bs->drv->bdrv_flush(bs);
+    if (bs->drv && bs->drv->bdrv_flush) {
+        return bs->drv->bdrv_flush(bs);
+    }
+
+    /*
+     * Some block drivers always operate in either writethrough or unsafe mode
+     * and don't support bdrv_flush therefore. Usually qemu doesn't know how
+     * the server works (because the behaviour is hardcoded or depends on
+     * server-side configuration), so we can't ensure that everything is safe
+     * on disk. Returning an error doesn't work because that would break guests
+     * even if the server operates in writethrough mode.
+     *
+     * Let's hope the user knows what he's doing.
+     */
+    return 0;
 }
 
 void bdrv_flush_all(void)
@@ -1484,6 +1513,17 @@ int bdrv_has_zero_init(BlockDriverState *bs)
     }
 
     return 1;
+}
+
+int bdrv_discard(BlockDriverState *bs, int64_t sector_num, int nb_sectors)
+{
+    if (!bs->drv) {
+        return -ENOMEDIUM;
+    }
+    if (!bs->drv->bdrv_discard) {
+        return 0;
+    }
+    return bs->drv->bdrv_discard(bs, sector_num, nb_sectors);
 }
 
 /*
@@ -1899,6 +1939,22 @@ int bdrv_snapshot_list(BlockDriverState *bs,
     return -ENOTSUP;
 }
 
+int bdrv_snapshot_load_tmp(BlockDriverState *bs,
+        const char *snapshot_name)
+{
+    BlockDriver *drv = bs->drv;
+    if (!drv) {
+        return -ENOMEDIUM;
+    }
+    if (!bs->read_only) {
+        return -EINVAL;
+    }
+    if (drv->bdrv_snapshot_load_tmp) {
+        return drv->bdrv_snapshot_load_tmp(bs, snapshot_name);
+    }
+    return -ENOTSUP;
+}
+
 #define NB_SUFFIXES 4
 
 char *get_human_readable_size(char *buf, int buf_size, int64_t size)
@@ -1983,6 +2039,8 @@ BlockDriverAIOCB *bdrv_aio_readv(BlockDriverState *bs, int64_t sector_num,
     BlockDriver *drv = bs->drv;
     BlockDriverAIOCB *ret;
 
+    trace_bdrv_aio_readv(bs, sector_num, nb_sectors, opaque);
+
     if (!drv)
         return NULL;
     if (bdrv_check_request(bs, sector_num, nb_sectors))
@@ -2000,12 +2058,51 @@ BlockDriverAIOCB *bdrv_aio_readv(BlockDriverState *bs, int64_t sector_num,
     return ret;
 }
 
+typedef struct BlockCompleteData {
+    BlockDriverCompletionFunc *cb;
+    void *opaque;
+    BlockDriverState *bs;
+    int64_t sector_num;
+    int nb_sectors;
+} BlockCompleteData;
+
+static void block_complete_cb(void *opaque, int ret)
+{
+    BlockCompleteData *b = opaque;
+
+    if (b->bs->dirty_bitmap) {
+        set_dirty_bitmap(b->bs, b->sector_num, b->nb_sectors, 1);
+    }
+    b->cb(b->opaque, ret);
+    qemu_free(b);
+}
+
+static BlockCompleteData *blk_dirty_cb_alloc(BlockDriverState *bs,
+                                             int64_t sector_num,
+                                             int nb_sectors,
+                                             BlockDriverCompletionFunc *cb,
+                                             void *opaque)
+{
+    BlockCompleteData *blkdata = qemu_mallocz(sizeof(BlockCompleteData));
+
+    blkdata->bs = bs;
+    blkdata->cb = cb;
+    blkdata->opaque = opaque;
+    blkdata->sector_num = sector_num;
+    blkdata->nb_sectors = nb_sectors;
+
+    return blkdata;
+}
+
 BlockDriverAIOCB *bdrv_aio_writev(BlockDriverState *bs, int64_t sector_num,
                                   QEMUIOVector *qiov, int nb_sectors,
                                   BlockDriverCompletionFunc *cb, void *opaque)
 {
     BlockDriver *drv = bs->drv;
     BlockDriverAIOCB *ret;
+    BlockCompleteData *blk_cb_data;
+
+    trace_bdrv_aio_writev(bs, sector_num, nb_sectors, opaque);
 
     if (!drv)
         return NULL;
@@ -2015,7 +2112,10 @@ BlockDriverAIOCB *bdrv_aio_writev(BlockDriverState *bs, int64_t sector_num,
         return NULL;
 
     if (bs->dirty_bitmap) {
-        set_dirty_bitmap(bs, sector_num, nb_sectors, 1);
+        blk_cb_data = blk_dirty_cb_alloc(bs, sector_num, nb_sectors, cb,
+                                         opaque);
+        cb = &block_complete_cb;
+        opaque = blk_cb_data;
     }
 
     ret = drv->bdrv_aio_writev(bs, sector_num, qiov, nb_sectors,
@@ -2652,8 +2752,8 @@ int bdrv_get_dirty(BlockDriverState *bs, int64_t sector)
 
     if (bs->dirty_bitmap &&
         (sector << BDRV_SECTOR_BITS) < bdrv_getlength(bs)) {
-        return bs->dirty_bitmap[chunk / (sizeof(unsigned long) * 8)] &
-            (1 << (chunk % (sizeof(unsigned long) * 8)));
+        return !!(bs->dirty_bitmap[chunk / (sizeof(unsigned long) * 8)] &
+            (1UL << (chunk % (sizeof(unsigned long) * 8))));
     } else {
         return 0;
     }
@@ -2668,4 +2768,149 @@ void bdrv_reset_dirty(BlockDriverState *bs, int64_t cur_sector,
 int64_t bdrv_get_dirty_count(BlockDriverState *bs)
 {
     return bs->dirty_count;
+}
+
+int bdrv_img_create(const char *filename, const char *fmt,
+                    const char *base_filename, const char *base_fmt,
+                    char *options, uint64_t img_size, int flags)
+{
+    QEMUOptionParameter *param = NULL, *create_options = NULL;
+    QEMUOptionParameter *backing_fmt, *backing_file;
+    BlockDriverState *bs = NULL;
+    BlockDriver *drv, *proto_drv;
+    int ret = 0;
+
+    /* Find driver and parse its options */
+    drv = bdrv_find_format(fmt);
+    if (!drv) {
+        error_report("Unknown file format '%s'", fmt);
+        ret = -EINVAL;
+        goto out;
+    }
+
+    proto_drv = bdrv_find_protocol(filename);
+    if (!proto_drv) {
+        error_report("Unknown protocol '%s'", filename);
+        ret = -EINVAL;
+        goto out;
+    }
+
+    create_options = append_option_parameters(create_options,
+                                              drv->create_options);
+    create_options = append_option_parameters(create_options,
+                                              proto_drv->create_options);
+
+    /* Create parameter list with default values */
+    param = parse_option_parameters("", create_options, param);
+
+    set_option_parameter_int(param, BLOCK_OPT_SIZE, img_size);
+
+    /* Parse -o options */
+    if (options) {
+        param = parse_option_parameters(options, create_options, param);
+        if (param == NULL) {
+            error_report("Invalid options for file format '%s'.", fmt);
+            ret = -EINVAL;
+            goto out;
+        }
+    }
+
+    if (base_filename) {
+        if (set_option_parameter(param, BLOCK_OPT_BACKING_FILE,
+                                 base_filename)) {
+            error_report("Backing file not supported for file format '%s'",
+                         fmt);
+            ret = -EINVAL;
+            goto out;
+        }
+    }
+
+    if (base_fmt) {
+        if (set_option_parameter(param, BLOCK_OPT_BACKING_FMT, base_fmt)) {
+            error_report("Backing file format not supported for file "
+                         "format '%s'", fmt);
+            ret = -EINVAL;
+            goto out;
+        }
+    }
+
+    backing_file = get_option_parameter(param, BLOCK_OPT_BACKING_FILE);
+    if (backing_file && backing_file->value.s) {
+        if (!strcmp(filename, backing_file->value.s)) {
+            error_report("Error: Trying to create an image with the "
+                         "same filename as the backing file");
+            ret = -EINVAL;
+            goto out;
+        }
+    }
+
+    backing_fmt = get_option_parameter(param, BLOCK_OPT_BACKING_FMT);
+    if (backing_fmt && backing_fmt->value.s) {
+        if (!bdrv_find_format(backing_fmt->value.s)) {
+            error_report("Unknown backing file format '%s'",
+                         backing_fmt->value.s);
+            ret = -EINVAL;
+            goto out;
+        }
+    }
+
+    // The size for the image must always be specified, with one exception:
+    // If we are using a backing file, we can obtain the size from there
+    if (get_option_parameter(param, BLOCK_OPT_SIZE)->value.n == -1) {
+        if (backing_file && backing_file->value.s) {
+            uint64_t size;
+            const char *fmt = NULL;
+            char buf[32];
+
+            if (backing_fmt && backing_fmt->value.s) {
+                fmt = backing_fmt->value.s;
+            }
+
+            bs = bdrv_new("");
+
+            ret = bdrv_open(bs, backing_file->value.s, flags, drv);
+            if (ret < 0) {
+                error_report("Could not open '%s'", filename);
+                goto out;
+            }
+            bdrv_get_geometry(bs, &size);
+            size *= 512;
+
+            snprintf(buf, sizeof(buf), "%" PRId64, size);
+            set_option_parameter(param, BLOCK_OPT_SIZE, buf);
+        } else {
+            error_report("Image creation needs a size parameter");
+            ret = -EINVAL;
+            goto out;
+        }
+    }
+
+    printf("Formatting '%s', fmt=%s ", filename, fmt);
+    print_option_parameters(param);
+    puts("");
+
+    ret = bdrv_create(drv, filename, param);
+
+    if (ret < 0) {
+        if (ret == -ENOTSUP) {
+            error_report("Formatting or formatting option not supported for "
+                         "file format '%s'", fmt);
+        } else if (ret == -EFBIG) {
+            error_report("The image size is too large for file format '%s'",
+                         fmt);
+        } else {
+            error_report("%s: error while creating %s: %s", filename, fmt,
+                         strerror(-ret));
+        }
+    }
+
+out:
+    free_option_parameters(create_options);
+    free_option_parameters(param);
+
+    if (bs) {
+        bdrv_delete(bs);
+    }
+
+    return ret;
 }

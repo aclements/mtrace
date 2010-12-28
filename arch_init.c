@@ -23,6 +23,7 @@
  */
 #include <stdint.h>
 #include <stdarg.h>
+#include <stdlib.h>
 #ifndef _WIN32
 #include <sys/types.h>
 #include <sys/mman.h>
@@ -212,6 +213,39 @@ uint64_t ram_bytes_total(void)
     return total;
 }
 
+static int block_compar(const void *a, const void *b)
+{
+    RAMBlock * const *ablock = a;
+    RAMBlock * const *bblock = b;
+    if ((*ablock)->offset < (*bblock)->offset) {
+        return -1;
+    } else if ((*ablock)->offset > (*bblock)->offset) {
+        return 1;
+    }
+    return 0;
+}
+
+static void sort_ram_list(void)
+{
+    RAMBlock *block, *nblock, **blocks;
+    int n;
+    n = 0;
+    QLIST_FOREACH(block, &ram_list.blocks, next) {
+        ++n;
+    }
+    blocks = qemu_malloc(n * sizeof *blocks);
+    n = 0;
+    QLIST_FOREACH_SAFE(block, &ram_list.blocks, next, nblock) {
+        blocks[n++] = block;
+        QLIST_REMOVE(block, next);
+    }
+    qsort(blocks, n, sizeof *blocks, block_compar);
+    while (--n >= 0) {
+        QLIST_INSERT_HEAD(&ram_list.blocks, blocks[n], next);
+    }
+    qemu_free(blocks);
+}
+
 int ram_save_live(Monitor *mon, QEMUFile *f, int stage, void *opaque)
 {
     ram_addr_t addr;
@@ -234,6 +268,7 @@ int ram_save_live(Monitor *mon, QEMUFile *f, int stage, void *opaque)
         bytes_transferred = 0;
         last_block = NULL;
         last_offset = 0;
+        sort_ram_list();
 
         /* Make sure all dirty bits are set */
         QLIST_FOREACH(block, &ram_list.blocks, next) {
@@ -390,6 +425,9 @@ int ram_load(QEMUFile *f, void *opaque, int version_id)
                 host = qemu_get_ram_ptr(addr);
             else
                 host = host_from_stream_offset(f, addr, flags);
+            if (!host) {
+                return -EINVAL;
+            }
 
             ch = qemu_get_byte(f);
             memset(host, ch, TARGET_PAGE_SIZE);
@@ -496,6 +534,16 @@ struct soundhw soundhw[] = {
         0,
         0,
         { .init_pci = es1370_init }
+    },
+#endif
+
+#ifdef CONFIG_HDA
+    {
+        "hda",
+        "Intel HD Audio",
+        0,
+        0,
+        { .init_pci = intel_hda_and_codec_init }
     },
 #endif
 

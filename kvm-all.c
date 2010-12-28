@@ -137,6 +137,24 @@ static KVMSlot *kvm_lookup_overlapping_slot(KVMState *s,
     return found;
 }
 
+int kvm_physical_memory_addr_from_ram(KVMState *s, ram_addr_t ram_addr,
+                                      target_phys_addr_t *phys_addr)
+{
+    int i;
+
+    for (i = 0; i < ARRAY_SIZE(s->slots); i++) {
+        KVMSlot *mem = &s->slots[i];
+
+        if (ram_addr >= mem->phys_offset &&
+            ram_addr < mem->phys_offset + mem->memory_size) {
+            *phys_addr = mem->start_addr + (ram_addr - mem->phys_offset);
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
 static int kvm_set_user_memory_region(KVMState *s, KVMSlot *slot)
 {
     struct kvm_userspace_memory_region mem;
@@ -144,7 +162,7 @@ static int kvm_set_user_memory_region(KVMState *s, KVMSlot *slot)
     mem.slot = slot->slot;
     mem.guest_phys_addr = slot->start_addr;
     mem.memory_size = slot->memory_size;
-    mem.userspace_addr = (unsigned long)qemu_get_ram_ptr(slot->phys_offset);
+    mem.userspace_addr = (unsigned long)qemu_safe_ram_ptr(slot->phys_offset);
     mem.flags = slot->flags;
     if (s->migration_log) {
         mem.flags |= KVM_MEM_LOG_DIRTY_PAGES;

@@ -765,15 +765,13 @@ int page_check_range(target_ulong start, target_ulong len, int flags);
 CPUState *cpu_copy(CPUState *env);
 CPUState *qemu_get_cpu(int cpu);
 
-void cpu_dump_state(CPUState *env, FILE *f,
-                    int (*cpu_fprintf)(FILE *f, const char *fmt, ...),
+void cpu_dump_state(CPUState *env, FILE *f, fprintf_function cpu_fprintf,
                     int flags);
-void cpu_dump_statistics (CPUState *env, FILE *f,
-                          int (*cpu_fprintf)(FILE *f, const char *fmt, ...),
-                          int flags);
+void cpu_dump_statistics(CPUState *env, FILE *f, fprintf_function cpu_fprintf,
+                         int flags);
 
 void QEMU_NORETURN cpu_abort(CPUState *env, const char *fmt, ...)
-    __attribute__ ((__format__ (__printf__, 2, 3)));
+    GCC_FMT_ATTR(2, 3);
 extern CPUState *first_cpu;
 extern CPUState *cpu_single_env;
 
@@ -960,8 +958,7 @@ int cpu_physical_memory_get_dirty_tracking(void);
 int cpu_physical_sync_dirty_bitmap(target_phys_addr_t start_addr,
                                    target_phys_addr_t end_addr);
 
-void dump_exec_info(FILE *f,
-                    int (*cpu_fprintf)(FILE *f, const char *fmt, ...));
+void dump_exec_info(FILE *f, fprintf_function cpu_fprintf);
 #endif /* !CONFIG_USER_ONLY */
 
 int cpu_memory_rw_debug(CPUState *env, target_ulong addr,

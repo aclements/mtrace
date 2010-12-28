@@ -30,6 +30,7 @@
 #include "net.h"
 #include "net/checksum.h"
 #include "loader.h"
+#include "sysemu.h"
 
 #include "e1000_hw.h"
 
@@ -384,9 +385,12 @@ xmit_seg(E1000State *s)
         } else	// UDP
             cpu_to_be16wu((uint16_t *)(tp->data+css+4), len);
         if (tp->sum_needed & E1000_TXD_POPTS_TXSM) {
+            unsigned int phsum;
             // add pseudo-header length before checksum calculation
             sp = (uint16_t *)(tp->data + tp->tucso);
-            cpu_to_be16wu(sp, be16_to_cpup(sp) + len);
+            phsum = be16_to_cpup(sp) + len;
+            phsum = (phsum >> 16) + (phsum & 0xffff);
+            cpu_to_be16wu(sp, phsum);
         }
         tp->tso_frames++;
     }
@@ -444,9 +448,10 @@ process_tx_desc(E1000State *s, struct e1000_tx_desc *dp)
         // data descriptor
         tp->sum_needed = le32_to_cpu(dp->upper.data) >> 8;
         tp->cptse = ( txd_lower & E1000_TXD_CMD_TSE ) ? 1 : 0;
-    } else
+    } else {
         // legacy descriptor
         tp->cptse = 0;
+    }
 
     if (vlan_enabled(s) && is_vlan_txd(txd_lower) &&
         (tp->cptse || txd_lower & E1000_TXD_CMD_EOP)) {
@@ -682,8 +687,9 @@ e1000_receive(VLANClientState *nc, const uint8_t *buf, size_t size)
                                       (void *)(buf + vlan_offset), size);
             desc.length = cpu_to_le16(size + fcs_len(s));
             desc.status |= E1000_RXD_STAT_EOP|E1000_RXD_STAT_IXSM;
-        } else // as per intel docs; skip descriptors with null buf addr
+        } else { // as per intel docs; skip descriptors with null buf addr
             DBGOUT(RX, "Null RX descriptor!!\n");
+        }
         cpu_physical_memory_write(base, (void *)&desc, sizeof(desc));
 
         if (++s->mac_reg[RDH] * sizeof(desc) >= s->mac_reg[RDLEN])
@@ -852,16 +858,14 @@ e1000_mmio_writel(void *opaque, target_phys_addr_t addr, uint32_t val)
     E1000State *s = opaque;
     unsigned int index = (addr & 0x1ffff) >> 2;
 
-#ifdef TARGET_WORDS_BIGENDIAN
-    val = bswap32(val);
-#endif
-    if (index < NWRITEOPS && macreg_writeops[index])
+    if (index < NWRITEOPS && macreg_writeops[index]) {
         macreg_writeops[index](s, index, val);
-    else if (index < NREADOPS && macreg_readops[index])
+    } else if (index < NREADOPS && macreg_readops[index]) {
         DBGOUT(MMIO, "e1000_mmio_writel RO %x: 0x%04x\n", index<<2, val);
-    else
+    } else {
         DBGOUT(UNKNOWN, "MMIO unknown write addr=0x%08x,val=0x%08x\n",
                index<<2, val);
+    }
 }
 
 static void
@@ -888,11 +892,7 @@ e1000_mmio_readl(void *opaque, target_phys_addr_t addr)
 
     if (index < NREADOPS && macreg_readops[index])
     {
-        uint32_t val = macreg_readops[index](s, index);
-#ifdef TARGET_WORDS_BIGENDIAN
-        val = bswap32(val);
-#endif
-        return val;
+        return macreg_readops[index](s, index);
     }
     DBGOUT(UNKNOWN, "MMIO unknown read addr=0x%08x\n", index<<2);
     return 0;
@@ -1125,12 +1125,12 @@ static int pci_e1000_init(PCIDevice *pci_dev)
     pci_conf[PCI_INTERRUPT_PIN] = 1; // interrupt pin 0
 
     d->mmio_index = cpu_register_io_memory(e1000_mmio_read,
-            e1000_mmio_write, d);
+            e1000_mmio_write, d, DEVICE_LITTLE_ENDIAN);
 
-    pci_register_bar((PCIDevice *)d, 0, PNPMMIO_SIZE,
+    pci_register_bar(&d->dev, 0, PNPMMIO_SIZE,
                            PCI_BASE_ADDRESS_SPACE_MEMORY, e1000_mmio_map);
 
-    pci_register_bar((PCIDevice *)d, 1, IOPORT_SIZE,
+    pci_register_bar(&d->dev, 1, IOPORT_SIZE,
                            PCI_BASE_ADDRESS_SPACE_IO, ioport_map);
 
     memmove(d->eeprom_data, e1000_eeprom_template,
@@ -1148,6 +1148,9 @@ static int pci_e1000_init(PCIDevice *pci_dev)
                           d->dev.qdev.info->name, d->dev.qdev.id, d);
 
     qemu_format_nic_info_str(&d->nic->nc, macaddr);
+
+    add_boot_device_path(d->conf.bootindex, &pci_dev->qdev, "/ethernet-phy@0");
+
     return 0;
 }
 

@@ -103,6 +103,7 @@ static int load_refcount_block(BlockDriverState *bs,
     ret = bdrv_pread(bs->file, refcount_block_offset, s->refcount_block_cache,
                      s->cluster_size);
     if (ret < 0) {
+        s->refcount_block_cache_offset = 0;
         return ret;
     }
 
@@ -551,6 +552,7 @@ fail:
     if (ret < 0) {
         int dummy;
         dummy = update_refcount(bs, offset, cluster_offset - offset, -addend);
+        (void)dummy;
     }
 
     return ret;

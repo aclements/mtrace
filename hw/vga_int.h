@@ -106,14 +106,12 @@ typedef void (* vga_update_retrace_info_fn)(struct VGACommonState *s);
 typedef struct VGACommonState {
     uint8_t *vram_ptr;
     ram_addr_t vram_offset;
-    unsigned int vram_size;
+    uint32_t vram_size;
     uint32_t lfb_addr;
     uint32_t lfb_end;
     uint32_t map_addr;
     uint32_t map_end;
     uint32_t lfb_vram_mapped; /* whether 0xa0000 is mapped as ram */
-    uint32_t bios_offset;
-    uint32_t bios_size;
     uint32_t latch;
     uint8_t sr_index;
     uint8_t sr[256];

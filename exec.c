@@ -23,17 +23,10 @@
 #include <sys/types.h>
 #include <sys/mman.h>
 #endif
-#include <stdlib.h>
-#include <stdio.h>
-#include <stdarg.h>
-#include <string.h>
-#include <errno.h>
-#include <unistd.h>
-#include <inttypes.h>
 
+#include "qemu-common.h"
 #include "cpu.h"
 #include "exec-all.h"
-#include "qemu-common.h"
 #include "tcg.h"
 #include "hw/hw.h"
 #include "hw/qdev.h"
@@ -526,7 +519,8 @@ static void code_gen_alloc(unsigned long tb_size)
             exit(1);
         }
     }
-#elif defined(__FreeBSD__) || defined(__FreeBSD_kernel__) || defined(__DragonFly__)
+#elif defined(__FreeBSD__) || defined(__FreeBSD_kernel__) \
+    || defined(__DragonFly__) || defined(__OpenBSD__)
     {
         int flags;
         void *addr = NULL;
@@ -2039,10 +2033,10 @@ void cpu_physical_memory_reset_dirty(ram_addr_t start, ram_addr_t end,
 
     /* we modify the TLB cache so that the dirty bit will be set again
        when accessing the range */
-    start1 = (unsigned long)qemu_get_ram_ptr(start);
+    start1 = (unsigned long)qemu_safe_ram_ptr(start);
     /* Chek that we don't span multiple blocks - this breaks the
        address comparisons below.  */
-    if ((unsigned long)qemu_get_ram_ptr(end - 1) - start1
+    if ((unsigned long)qemu_safe_ram_ptr(end - 1) - start1
             != (end - 1) - start) {
         abort();
     }
@@ -2087,7 +2081,7 @@ static inline void tlb_update_dirty(CPUTLBEntry *tlb_entry)
     if ((tlb_entry->addr_write & ~TARGET_PAGE_MASK) == IO_MEM_RAM) {
         p = (void *)(unsigned long)((tlb_entry->addr_write & TARGET_PAGE_MASK)
             + tlb_entry->addend);
-        ram_addr = qemu_ram_addr_from_host(p);
+        ram_addr = qemu_ram_addr_from_host_nofail(p);
         if (!cpu_physical_memory_is_dirty(ram_addr)) {
             tlb_entry->addr_write |= TLB_NOTDIRTY;
         }
@@ -2945,23 +2939,50 @@ void *qemu_get_ram_ptr(ram_addr_t addr)
     return NULL;
 }
 
-/* Some of the softmmu routines need to translate from a host pointer
-   (typically a TLB entry) back to a ram offset.  */
-ram_addr_t qemu_ram_addr_from_host(void *ptr)
+/* Return a host pointer to ram allocated with qemu_ram_alloc.
+ * Same as qemu_get_ram_ptr but avoid reordering ramblocks.
+ */
+void *qemu_safe_ram_ptr(ram_addr_t addr)
+{
+    RAMBlock *block;
+
+    QLIST_FOREACH(block, &ram_list.blocks, next) {
+        if (addr - block->offset < block->length) {
+            return block->host + (addr - block->offset);
+        }
+    }
+
+    fprintf(stderr, "Bad ram offset %" PRIx64 "\n", (uint64_t)addr);
+    abort();
+
+    return NULL;
+}
+
+int qemu_ram_addr_from_host(void *ptr, ram_addr_t *ram_addr)
 {
     RAMBlock *block;
     uint8_t *host = ptr;
 
     QLIST_FOREACH(block, &ram_list.blocks, next) {
         if (host - block->host < block->length) {
-            return block->offset + (host - block->host);
+            *ram_addr = block->offset + (host - block->host);
+            return 0;
         }
     }
+    return -1;
+}
 
-    fprintf(stderr, "Bad ram pointer %p\n", ptr);
-    abort();
+/* Some of the softmmu routines need to translate from a host pointer
+   (typically a TLB entry) back to a ram offset.  */
+ram_addr_t qemu_ram_addr_from_host_nofail(void *ptr)
+{
+    ram_addr_t ram_addr;
 
-    return 0;
+    if (qemu_ram_addr_from_host(ptr, &ram_addr)) {
+        fprintf(stderr, "Bad ram pointer %p\n", ptr);
+        abort();
+    }
+    return ram_addr;
 }
 
 /* This is used only by mtrace. */
@@ -3336,7 +3357,8 @@ static subpage_t *subpage_init (target_phys_addr_t base, ram_addr_t *phys,
     mmio = qemu_mallocz(sizeof(subpage_t));
 
     mmio->base = base;
-    subpage_memory = cpu_register_io_memory(subpage_read, subpage_write, mmio);
+    subpage_memory = cpu_register_io_memory(subpage_read, subpage_write, mmio,
+                                            DEVICE_NATIVE_ENDIAN);
 #if defined(DEBUG_SUBPAGE)
     printf("%s: %p base " TARGET_FMT_plx " len %08x %d\n", __func__,
            mmio, base, TARGET_PAGE_SIZE, subpage_memory);
@@ -3360,6 +3382,106 @@ static int get_free_io_mem_idx(void)
     return -1;
 }
 
+/*
+ * Usually, devices operate in little endian mode. There are devices out
+ * there that operate in big endian too. Each device gets byte swapped
+ * mmio if plugged onto a CPU that does the other endianness.
+ *
+ * CPU          Device           swap?
+ *
+ * little       little           no
+ * little       big              yes
+ * big          little           yes
+ * big          big              no
+ */
+
+typedef struct SwapEndianContainer {
+    CPUReadMemoryFunc *read[3];
+    CPUWriteMemoryFunc *write[3];
+    void *opaque;
+} SwapEndianContainer;
+
+static uint32_t swapendian_mem_readb (void *opaque, target_phys_addr_t addr)
+{
+    uint32_t val;
+    SwapEndianContainer *c = opaque;
+    val = c->read[0](c->opaque, addr);
+    return val;
+}
+
+static uint32_t swapendian_mem_readw(void *opaque, target_phys_addr_t addr)
+{
+    uint32_t val;
+    SwapEndianContainer *c = opaque;
+    val = bswap16(c->read[1](c->opaque, addr));
+    return val;
+}
+
+static uint32_t swapendian_mem_readl(void *opaque, target_phys_addr_t addr)
+{
+    uint32_t val;
+    SwapEndianContainer *c = opaque;
+    val = bswap32(c->read[2](c->opaque, addr));
+    return val;
+}
+
+static CPUReadMemoryFunc * const swapendian_readfn[3]={
+    swapendian_mem_readb,
+    swapendian_mem_readw,
+    swapendian_mem_readl
+};
+
+static void swapendian_mem_writeb(void *opaque, target_phys_addr_t addr,
+                                  uint32_t val)
+{
+    SwapEndianContainer *c = opaque;
+    c->write[0](c->opaque, addr, val);
+}
+
+static void swapendian_mem_writew(void *opaque, target_phys_addr_t addr,
+                                  uint32_t val)
+{
+    SwapEndianContainer *c = opaque;
+    c->write[1](c->opaque, addr, bswap16(val));
+}
+
+static void swapendian_mem_writel(void *opaque, target_phys_addr_t addr,
+                                  uint32_t val)
+{
+    SwapEndianContainer *c = opaque;
+    c->write[2](c->opaque, addr, bswap32(val));
+}
+
+static CPUWriteMemoryFunc * const swapendian_writefn[3]={
+    swapendian_mem_writeb,
+    swapendian_mem_writew,
+    swapendian_mem_writel
+};
+
+static void swapendian_init(int io_index)
+{
+    SwapEndianContainer *c = qemu_malloc(sizeof(SwapEndianContainer));
+    int i;
+
+    /* Swap mmio for big endian targets */
+    c->opaque = io_mem_opaque[io_index];
+    for (i = 0; i < 3; i++) {
+        c->read[i] = io_mem_read[io_index][i];
+        c->write[i] = io_mem_write[io_index][i];
+
+        io_mem_read[io_index][i] = swapendian_readfn[i];
+        io_mem_write[io_index][i] = swapendian_writefn[i];
+    }
+    io_mem_opaque[io_index] = c;
+}
+
+static void swapendian_del(int io_index)
+{
+    if (io_mem_read[io_index][0] == swapendian_readfn[0]) {
+        qemu_free(io_mem_opaque[io_index]);
+    }
+}
+
 /* mem_read and mem_write are arrays of functions containing the
    function to access byte (index 0), word (index 1) and dword (index
    2). Functions can be omitted with a NULL function pointer.
@@ -3370,7 +3492,7 @@ static int get_free_io_mem_idx(void)
 static int cpu_register_io_memory_fixed(int io_index,
                                         CPUReadMemoryFunc * const *mem_read,
                                         CPUWriteMemoryFunc * const *mem_write,
-                                        void *opaque)
+                                        void *opaque, enum device_endian endian)
 {
     int i;
 
@@ -3394,20 +3516,38 @@ static int cpu_register_io_memory_fixed(int io_index,
     }
     io_mem_opaque[io_index] = opaque;
 
+    switch (endian) {
+    case DEVICE_BIG_ENDIAN:
+#ifndef TARGET_WORDS_BIGENDIAN
+        swapendian_init(io_index);
+#endif
+        break;
+    case DEVICE_LITTLE_ENDIAN:
+#ifdef TARGET_WORDS_BIGENDIAN
+        swapendian_init(io_index);
+#endif
+        break;
+    case DEVICE_NATIVE_ENDIAN:
+    default:
+        break;
+    }
+
     return (io_index << IO_MEM_SHIFT);
 }
 
 int cpu_register_io_memory(CPUReadMemoryFunc * const *mem_read,
                            CPUWriteMemoryFunc * const *mem_write,
-                           void *opaque)
+                           void *opaque, enum device_endian endian)
 {
-    return cpu_register_io_memory_fixed(0, mem_read, mem_write, opaque);
+    return cpu_register_io_memory_fixed(0, mem_read, mem_write, opaque, endian);
 }
 
 void cpu_unregister_io_memory(int io_table_address)
 {
     int i;
     int io_index = io_table_address >> IO_MEM_SHIFT;
+
+    swapendian_del(io_index);
 
     for (i=0;i < 3; i++) {
         io_mem_read[io_index][i] = unassigned_mem_read[i];
@@ -3421,14 +3561,21 @@ static void io_mem_init(void)
 {
     int i;
 
-    cpu_register_io_memory_fixed(IO_MEM_ROM, error_mem_read, unassigned_mem_write, NULL);
-    cpu_register_io_memory_fixed(IO_MEM_UNASSIGNED, unassigned_mem_read, unassigned_mem_write, NULL);
-    cpu_register_io_memory_fixed(IO_MEM_NOTDIRTY, error_mem_read, notdirty_mem_write, NULL);
+    cpu_register_io_memory_fixed(IO_MEM_ROM, error_mem_read,
+                                 unassigned_mem_write, NULL,
+                                 DEVICE_NATIVE_ENDIAN);
+    cpu_register_io_memory_fixed(IO_MEM_UNASSIGNED, unassigned_mem_read,
+                                 unassigned_mem_write, NULL,
+                                 DEVICE_NATIVE_ENDIAN);
+    cpu_register_io_memory_fixed(IO_MEM_NOTDIRTY, error_mem_read,
+                                 notdirty_mem_write, NULL,
+                                 DEVICE_NATIVE_ENDIAN);
     for (i=0; i<5; i++)
         io_mem_used[i] = 1;
 
     io_mem_watch = cpu_register_io_memory(watch_mem_read,
-                                          watch_mem_write, NULL);
+                                          watch_mem_write, NULL,
+                                          DEVICE_NATIVE_ENDIAN);
 }
 
 #endif /* !defined(CONFIG_USER_ONLY) */
@@ -3728,7 +3875,7 @@ void cpu_physical_memory_unmap(void *buffer, target_phys_addr_t len,
 {
     if (buffer != bounce.buffer) {
         if (is_write) {
-            ram_addr_t addr1 = qemu_ram_addr_from_host(buffer);
+            ram_addr_t addr1 = qemu_ram_addr_from_host_nofail(buffer);
             while (access_len) {
                 unsigned l;
                 l = TARGET_PAGE_SIZE;
@@ -4113,8 +4260,7 @@ void cpu_io_recompile(CPUState *env, void *retaddr)
 
 #if !defined(CONFIG_USER_ONLY)
 
-void dump_exec_info(FILE *f,
-                    int (*cpu_fprintf)(FILE *f, const char *fmt, ...))
+void dump_exec_info(FILE *f, fprintf_function cpu_fprintf)
 {
     int i, target_code_size, max_target_code_size;
     int direct_jmp_count, direct_jmp2_count, cross_page;
@@ -4141,14 +4287,14 @@ void dump_exec_info(FILE *f,
     }
     /* XXX: avoid using doubles ? */
     cpu_fprintf(f, "Translation buffer state:\n");
-    cpu_fprintf(f, "gen code size       %ld/%ld\n",
+    cpu_fprintf(f, "gen code size       %td/%ld\n",
                 code_gen_ptr - code_gen_buffer, code_gen_buffer_max_size);
     cpu_fprintf(f, "TB count            %d/%d\n", 
                 nb_tbs, code_gen_max_blocks);
     cpu_fprintf(f, "TB avg target size  %d max=%d bytes\n",
                 nb_tbs ? target_code_size / nb_tbs : 0,
                 max_target_code_size);
-    cpu_fprintf(f, "TB avg host size    %d bytes (expansion ratio: %0.1f)\n",
+    cpu_fprintf(f, "TB avg host size    %td bytes (expansion ratio: %0.1f)\n",
                 nb_tbs ? (code_gen_ptr - code_gen_buffer) / nb_tbs : 0,
                 target_code_size ? (double) (code_gen_ptr - code_gen_buffer) / target_code_size : 0);
     cpu_fprintf(f, "cross page TB count %d (%d%%)\n",

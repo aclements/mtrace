@@ -18,15 +18,18 @@ TMPE="${TMPDIR1}/qemu-conf-${RANDOM}-$$-${RANDOM}.exe"
 # NB: do not call "exit" in the trap handler; this is buggy with some shells;
 # see <1285349658-3122-1-git-send-email-loic.minier@linaro.org>
 trap "rm -f $TMPC $TMPO $TMPE" EXIT INT QUIT TERM
+rm -f config.log
 
 compile_object() {
-  $cc $QEMU_CFLAGS -c -o $TMPO $TMPC > /dev/null 2> /dev/null
+  echo $cc $QEMU_CFLAGS -c -o $TMPO $TMPC >> config.log
+  $cc $QEMU_CFLAGS -c -o $TMPO $TMPC >> config.log 2>&1
 }
 
 compile_prog() {
   local_cflags="$1"
   local_ldflags="$2"
-  $cc $QEMU_CFLAGS $local_cflags -o $TMPE $TMPC $LDFLAGS $local_ldflags > /dev/null 2> /dev/null
+  echo $cc $QEMU_CFLAGS $local_cflags -o $TMPE $TMPC $LDFLAGS $local_ldflags >> config.log
+  $cc $QEMU_CFLAGS $local_cflags -o $TMPE $TMPC $LDFLAGS $local_ldflags >> config.log 2>&1
 }
 
 # check whether a command is available to this shell (may be either an
@@ -73,8 +76,8 @@ sparc_cpu=""
 cross_prefix=""
 cc="gcc"
 audio_drv_list=""
-audio_card_list="ac97 es1370 sb16"
-audio_possible_cards="ac97 es1370 sb16 cs4231a adlib gus"
+audio_card_list="ac97 es1370 sb16 hda"
+audio_possible_cards="ac97 es1370 sb16 cs4231a adlib gus hda"
 block_drv_whitelist=""
 host_cc="gcc"
 ar="ar"
@@ -89,6 +92,7 @@ libs_softmmu=""
 libs_tools=""
 audio_pt_int=""
 audio_win_int=""
+cc_i386=i386-pc-linux-gnu-gcc
 
 # parse CC options first
 for opt do
@@ -151,7 +155,7 @@ int main(void) { return 0; }
 EOF
 for flag in $gcc_flags; do
     if compile_prog "-Werror $QEMU_CFLAGS" "-Werror $flag" ; then
-	QEMU_CFLAGS="$flag $QEMU_CFLAGS"
+	QEMU_CFLAGS="$QEMU_CFLAGS $flag"
     fi
 done
 
@@ -284,6 +288,7 @@ xen=""
 linux_aio=""
 attr=""
 vhost_net=""
+xfs=""
 
 gprof="no"
 debug_tcg="no"
@@ -327,6 +332,8 @@ user_pie="no"
 zero_malloc=""
 trace_backend="nop"
 trace_file="trace"
+spice=""
+rbd=""
 
 # OS specific
 if check_define __linux__ ; then
@@ -639,6 +646,10 @@ for opt do
   ;;
   --enable-kvm) kvm="yes"
   ;;
+  --disable-spice) spice="no"
+  ;;
+  --enable-spice) spice="yes"
+  ;;
   --enable-profiler) profiler="yes"
   ;;
   --enable-cocoa)
@@ -732,6 +743,10 @@ for opt do
   ;;
   --*dir)
   ;;
+  --disable-rbd) rbd="no"
+  ;;
+  --enable-rbd) rbd="yes"
+  ;;
   *) echo "ERROR: unknown option $opt"; show_help="yes"
   ;;
   esac
@@ -781,12 +796,14 @@ case "$cpu" in
     i386)
            QEMU_CFLAGS="-m32 $QEMU_CFLAGS"
            LDFLAGS="-m32 $LDFLAGS"
+           cc_i386='$(CC) -m32'
            helper_cflags="-fomit-frame-pointer"
            host_guest_base="yes"
            ;;
     x86_64)
            QEMU_CFLAGS="-m64 $QEMU_CFLAGS"
            LDFLAGS="-m64 $LDFLAGS"
+           cc_i386='$(CC) -m32'
            host_guest_base="yes"
            ;;
     arm*)
@@ -918,9 +935,12 @@ echo "  --enable-docs            enable documentation build"
 echo "  --disable-docs           disable documentation build"
 echo "  --disable-vhost-net      disable vhost-net acceleration support"
 echo "  --enable-vhost-net       enable vhost-net acceleration support"
-echo "  --trace-backend=B        Trace backend nop simple ust"
+echo "  --trace-backend=B        Trace backend nop simple ust dtrace"
 echo "  --trace-file=NAME        Full PATH,NAME of file to store traces"
 echo "                           Default:trace-<pid>"
+echo "  --disable-spice          disable spice"
+echo "  --enable-spice           enable spice"
+echo "  --enable-rbd             enable building the rados block device (rbd)"
 echo ""
 echo "NOTE: The object files are built at the place where configure is launched"
 exit 1
@@ -1319,6 +1339,7 @@ if test "$vnc_png" != "no" ; then
 cat > $TMPC <<EOF
 //#include <stdio.h>
 #include <png.h>
+#include <stddef.h>
 int main(void) {
     png_structp png_ptr;
     png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
@@ -1375,6 +1396,27 @@ EOF
       feature_not_found "uuid"
     fi
     uuid=no
+  fi
+fi
+
+##########################################
+# xfsctl() probe, used for raw-posix
+if test "$xfs" != "no" ; then
+  cat > $TMPC << EOF
+#include <xfs/xfs.h>
+int main(void)
+{
+    xfsctl(NULL, 0, 0, NULL);
+    return 0;
+}
+EOF
+  if compile_prog "" "" ; then
+    xfs="yes"
+  else
+    if test "$xfs" = "yes" ; then
+      feature_not_found "xfs"
+    fi
+    xfs=no
   fi
 fi
 
@@ -1503,6 +1545,7 @@ if test "$brlapi" != "no" ; then
   brlapi_libs="-lbrlapi"
   cat > $TMPC << EOF
 #include <brlapi.h>
+#include <stddef.h>
 int main( void ) { return brlapi__openConnection (NULL, NULL, NULL); }
 EOF
   if compile_prog "" "$brlapi_libs" ; then
@@ -1731,12 +1774,55 @@ if test "$mingw32" != yes -a "$pthread" = no; then
 fi
 
 ##########################################
+# rbd probe
+if test "$rbd" != "no" ; then
+  cat > $TMPC <<EOF
+#include <stdio.h>
+#include <rados/librados.h>
+int main(void) { rados_initialize(0, NULL); return 0; }
+EOF
+  rbd_libs="-lrados -lcrypto"
+  if compile_prog "" "$rbd_libs" ; then
+    librados_too_old=no
+    cat > $TMPC <<EOF
+#include <stdio.h>
+#include <rados/librados.h>
+#ifndef CEPH_OSD_TMAP_SET
+#error missing CEPH_OSD_TMAP_SET
+#endif
+int main(void) {
+    int (*func)(const rados_pool_t pool, uint64_t *snapid) = rados_selfmanaged_snap_create;
+    rados_initialize(0, NULL);
+    return 0;
+}
+EOF
+    if compile_prog "" "$rbd_libs" ; then
+      rbd=yes
+      libs_tools="$rbd_libs $libs_tools"
+      libs_softmmu="$rbd_libs $libs_softmmu"
+    else
+      rbd=no
+      librados_too_old=yes
+    fi
+  else
+    if test "$rbd" = "yes" ; then
+      feature_not_found "rados block device"
+    fi
+    rbd=no
+  fi
+  if test "$librados_too_old" = "yes" ; then
+    echo "-> Your librados version is too old - upgrade needed to have rbd support"
+  fi
+fi
+
+##########################################
 # linux-aio probe
 
 if test "$linux_aio" != "no" ; then
   cat > $TMPC <<EOF
 #include <libaio.h>
 #include <sys/eventfd.h>
+#include <stddef.h>
 int main(void) { io_setup(0, NULL); io_set_eventfd(NULL, 0); eventfd(0, 0); return 0; }
 EOF
   if compile_prog "" "-laio" ; then
@@ -1878,7 +1964,6 @@ fi
 utimens=no
 cat > $TMPC << EOF
 #define _ATFILE_SOURCE
-#define _GNU_SOURCE
 #include <stddef.h>
 #include <fcntl.h>
 
@@ -1896,7 +1981,6 @@ fi
 # check if pipe2 is there
 pipe2=no
 cat > $TMPC << EOF
-#define _GNU_SOURCE
 #include <unistd.h>
 #include <fcntl.h>
 
@@ -1914,7 +1998,6 @@ fi
 # check if accept4 is there
 accept4=no
 cat > $TMPC << EOF
-#define _GNU_SOURCE
 #include <sys/socket.h>
 #include <stddef.h>
 
@@ -1931,7 +2014,6 @@ fi
 # check if tee/splice is there. vmsplice was added same time.
 splice=no
 cat > $TMPC << EOF
-#define _GNU_SOURCE
 #include <unistd.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -1946,6 +2028,21 @@ int main(void)
 EOF
 if compile_prog "" "" ; then
   splice=yes
+fi
+
+##########################################
+# signalfd probe
+signalfd="no"
+cat > $TMPC << EOF
+#define _GNU_SOURCE
+#include <unistd.h>
+#include <sys/syscall.h>
+#include <signal.h>
+int main(void) { return syscall(SYS_signalfd, -1, NULL, _NSIG / 8); }
+EOF
+
+if compile_prog "" "" ; then
+  signalfd=yes
 fi
 
 # check if eventfd is supported
@@ -2075,6 +2172,29 @@ if compile_prog "" ""; then
     gcc_attribute_warn_unused_result=yes
 fi
 
+# spice probe
+if test "$spice" != "no" ; then
+  cat > $TMPC << EOF
+#include <spice.h>
+int main(void) { spice_server_new(); return 0; }
+EOF
+  spice_cflags=$($pkgconfig --cflags spice-protocol spice-server 2>/dev/null)
+  spice_libs=$($pkgconfig --libs spice-protocol spice-server 2>/dev/null)
+  if $pkgconfig --atleast-version=0.5.3 spice-server >/dev/null 2>&1 && \
+     compile_prog "$spice_cflags" "$spice_libs" ; then
+    spice="yes"
+    libs_softmmu="$libs_softmmu $spice_libs"
+    QEMU_CFLAGS="$QEMU_CFLAGS $spice_cflags"
+  else
+    if test "$spice" = "yes" ; then
+      feature_not_found "spice"
+    fi
+    spice="no"
+  fi
+fi
+
+##########################################
+
 ##########################################
 # check if we have fdatasync
 
@@ -2094,6 +2214,7 @@ madvise=no
 cat > $TMPC << EOF
 #include <sys/types.h>
 #include <sys/mman.h>
+#include <stddef.h>
 int main(void) { return madvise(NULL, 0, MADV_DONTNEED); }
 EOF
 if compile_prog "" "" ; then
@@ -2106,6 +2227,7 @@ fi
 posix_madvise=no
 cat > $TMPC << EOF
 #include <sys/mman.h>
+#include <stddef.h>
 int main(void) { return posix_madvise(NULL, 0, POSIX_MADV_DONTNEED); }
 EOF
 if compile_prog "" "" ; then
@@ -2141,6 +2263,22 @@ EOF
     exit 1
   fi
 fi
+
+##########################################
+# For 'dtrace' backend, test if 'dtrace' command is present
+if test "$trace_backend" = "dtrace"; then
+  if ! has 'dtrace' ; then
+    echo
+    echo "Error: dtrace command is not found in PATH $PATH"
+    echo
+    exit 1
+  fi
+  trace_backend_stap="no"
+  if has 'stap' ; then
+    trace_backend_stap="yes"
+  fi
+fi
+
 ##########################################
 # End of CC checks
 # After here, no more $cc or $ld runs
@@ -2285,6 +2423,9 @@ echo "uuid support      $uuid"
 echo "vhost-net support $vhost_net"
 echo "Trace backend     $trace_backend"
 echo "Trace output file $trace_file-<pid>"
+echo "spice support     $spice"
+echo "rbd support       $rbd"
+echo "xfsctl support    $xfs"
 
 if test $sdl_too_old = "yes"; then
 echo "-> Your SDL version is too old - please upgrade to have SDL support"
@@ -2298,6 +2439,7 @@ printf "# Configured with:" >> $config_host_mak
 printf " '%s'" "$0" "$@" >> $config_host_mak
 echo >> $config_host_mak
 
+echo all: >> $config_host_mak
 echo "prefix=$prefix" >> $config_host_mak
 echo "bindir=$bindir" >> $config_host_mak
 echo "mandir=$mandir" >> $config_host_mak
@@ -2429,6 +2571,9 @@ fi
 if test "$uuid" = "yes" ; then
   echo "CONFIG_UUID=y" >> $config_host_mak
 fi
+if test "$xfs" = "yes" ; then
+  echo "CONFIG_XFS=y" >> $config_host_mak
+fi
 qemu_version=`head $source_path/VERSION`
 echo "VERSION=$qemu_version" >>$config_host_mak
 echo "PKGVERSION=$pkgversion" >>$config_host_mak
@@ -2524,6 +2669,9 @@ fi
 if test "$fdt" = "yes" ; then
   echo "CONFIG_FDT=y" >> $config_host_mak
 fi
+if test "$signalfd" = "yes" ; then
+  echo "CONFIG_SIGNALFD=y" >> $config_host_mak
+fi
 if test "$need_offsetof" = "yes" ; then
   echo "CONFIG_NEED_OFFSETOF=y" >> $config_host_mak
 fi
@@ -2540,6 +2688,10 @@ if test "$posix_madvise" = "yes" ; then
   echo "CONFIG_POSIX_MADVISE=y" >> $config_host_mak
 fi
 
+if test "$spice" = "yes" ; then
+  echo "CONFIG_SPICE=y" >> $config_host_mak
+fi
+
 # XXX: suppress that
 if [ "$bsd" = "yes" ] ; then
   echo "CONFIG_BSD=y" >> $config_host_mak
@@ -2549,6 +2701,9 @@ echo "CONFIG_UNAME_RELEASE=\"$uname_release\"" >> $config_host_mak
 
 if test "$zero_malloc" = "yes" ; then
   echo "CONFIG_ZERO_MALLOC=y" >> $config_host_mak
+fi
+if test "$rbd" = "yes" ; then
+  echo "CONFIG_RBD=y" >> $config_host_mak
 fi
 
 # USB host support
@@ -2572,6 +2727,9 @@ fi
 if test "$trace_backend" = "simple"; then
   trace_file="\"$trace_file-%u\""
 fi
+if test "$trace_backend" = "dtrace" -a "$trace_backend_stap" = "yes" ; then
+  echo "CONFIG_SYSTEMTAP_TRACE=y" >> $config_host_mak
+fi
 echo "CONFIG_TRACE_FILE=$trace_file" >> $config_host_mak
 
 echo "TOOLS=$tools" >> $config_host_mak
@@ -2582,6 +2740,7 @@ echo "INSTALL_DIR=$install -d -m0755 -p" >> $config_host_mak
 echo "INSTALL_DATA=$install -m0644 -p" >> $config_host_mak
 echo "INSTALL_PROG=$install -m0755 -p" >> $config_host_mak
 echo "CC=$cc" >> $config_host_mak
+echo "CC_I386=$cc_i386" >> $config_host_mak
 echo "HOST_CC=$host_cc" >> $config_host_mak
 if test "$sparse" = "yes" ; then
   echo "CC      := REAL_CC=\"\$(CC)\" cgcc"       >> $config_host_mak
@@ -3045,7 +3204,7 @@ if test "$source_path_used" = "yes" ; then
     FILES="Makefile tests/Makefile"
     FILES="$FILES tests/cris/Makefile tests/cris/.gdbinit"
     FILES="$FILES tests/test-mmap.c"
-    FILES="$FILES pc-bios/optionrom/Makefile pc-bios/keymaps pc-bios/video.x"
+    FILES="$FILES pc-bios/optionrom/Makefile pc-bios/keymaps"
     FILES="$FILES roms/seabios/Makefile roms/vgabios/Makefile"
     for bios_file in $source_path/pc-bios/*.bin $source_path/pc-bios/*.dtb $source_path/pc-bios/openbios-*; do
         FILES="$FILES pc-bios/`basename $bios_file`"

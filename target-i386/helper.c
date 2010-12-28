@@ -28,6 +28,7 @@
 #include "qemu-common.h"
 #include "kvm.h"
 #include "mtrace.h"
+#include "kvm_x86.h"
 
 //#define DEBUG_MMU
 
@@ -169,19 +170,18 @@ static const char *cc_op_str[] = {
 };
 
 static void
-cpu_x86_dump_seg_cache(CPUState *env, FILE *f,
-                       int (*cpu_fprintf)(FILE *f, const char *fmt, ...),
+cpu_x86_dump_seg_cache(CPUState *env, FILE *f, fprintf_function cpu_fprintf,
                        const char *name, struct SegmentCache *sc)
 {
 #ifdef TARGET_X86_64
     if (env->hflags & HF_CS64_MASK) {
         cpu_fprintf(f, "%-3s=%04x %016" PRIx64 " %08x %08x", name,
-                    sc->selector, sc->base, sc->limit, sc->flags);
+                    sc->selector, sc->base, sc->limit, sc->flags & 0x00ffff00);
     } else
 #endif
     {
         cpu_fprintf(f, "%-3s=%04x %08x %08x %08x", name, sc->selector,
-                    (uint32_t)sc->base, sc->limit, sc->flags);
+                    (uint32_t)sc->base, sc->limit, sc->flags & 0x00ffff00);
     }
 
     if (!(env->hflags & HF_PE_MASK) || !(sc->flags & DESC_P_MASK))
@@ -224,8 +224,7 @@ done:
     cpu_fprintf(f, "\n");
 }
 
-void cpu_dump_state(CPUState *env, FILE *f,
-                    int (*cpu_fprintf)(FILE *f, const char *fmt, ...),
+void cpu_dump_state(CPUState *env, FILE *f, fprintf_function cpu_fprintf,
                     int flags)
 {
     int eflags, i, nb;
@@ -335,9 +334,11 @@ void cpu_dump_state(CPUState *env, FILE *f,
                     (uint32_t)env->cr[2],
                     (uint32_t)env->cr[3],
                     (uint32_t)env->cr[4]);
-        for(i = 0; i < 4; i++)
-            cpu_fprintf(f, "DR%d=%08x ", i, env->dr[i]);
-        cpu_fprintf(f, "\nDR6=%08x DR7=%08x\n", env->dr[6], env->dr[7]);
+        for(i = 0; i < 4; i++) {
+            cpu_fprintf(f, "DR%d=" TARGET_FMT_lx " ", i, env->dr[i]);
+        }
+        cpu_fprintf(f, "\nDR6=" TARGET_FMT_lx " DR7=" TARGET_FMT_lx "\n",
+                    env->dr[6], env->dr[7]);
     }
     if (flags & X86_DUMP_CCOP) {
         if ((unsigned)env->cc_op < CC_OP_NB)
@@ -1030,6 +1031,11 @@ void cpu_inject_x86_mce(CPUState *cenv, int bank, uint64_t status,
 
     if (bank >= bank_num || !(status & MCI_STATUS_VAL))
         return;
+
+    if (kvm_enabled()) {
+        kvm_inject_x86_mce(cenv, bank, status, mcg_status, addr, misc, 0);
+        return;
+    }
 
     /*
      * if MSR_MCG_CTL is not all 1s, the uncorrected error

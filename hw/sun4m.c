@@ -41,8 +41,7 @@
 #include "loader.h"
 #include "elf.h"
 #include "blockdev.h"
-
-//#define DEBUG_IRQ
+#include "trace.h"
 
 /*
  * Sun4m architecture was used in the following machines:
@@ -71,13 +70,6 @@
  *
  * See for example: http://www.sunhelp.org/faq/sunref1.html
  */
-
-#ifdef DEBUG_IRQ
-#define DPRINTF(fmt, ...)                                       \
-    do { printf("CPUIRQ: " fmt , ## __VA_ARGS__); } while (0)
-#else
-#define DPRINTF(fmt, ...)
-#endif
 
 #define KERNEL_LOAD_ADDR     0x00004000
 #define CMDLINE_ADDR         0x007ff000
@@ -248,14 +240,14 @@ void cpu_check_irqs(CPUState *env)
 
                 env->interrupt_index = TT_EXTINT | i;
                 if (old_interrupt != env->interrupt_index) {
-                    DPRINTF("Set CPU IRQ %d\n", i);
+                    trace_sun4m_cpu_interrupt(i);
                     cpu_interrupt(env, CPU_INTERRUPT_HARD);
                 }
                 break;
             }
         }
     } else if (!env->pil_in && (env->interrupt_index & ~15) == TT_EXTINT) {
-        DPRINTF("Reset CPU IRQ %d\n", env->interrupt_index & 15);
+        trace_sun4m_cpu_reset_interrupt(env->interrupt_index & 15);
         env->interrupt_index = 0;
         cpu_reset_interrupt(env, CPU_INTERRUPT_HARD);
     }
@@ -266,12 +258,12 @@ static void cpu_set_irq(void *opaque, int irq, int level)
     CPUState *env = opaque;
 
     if (level) {
-        DPRINTF("Raise CPU IRQ %d\n", irq);
+        trace_sun4m_cpu_set_irq_raise(irq);
         env->halted = 0;
         env->pil_in |= 1 << irq;
         cpu_check_irqs(env);
     } else {
-        DPRINTF("Lower CPU IRQ %d\n", irq);
+        trace_sun4m_cpu_set_irq_lower(irq);
         env->pil_in &= ~(1 << irq);
         cpu_check_irqs(env);
     }
@@ -386,13 +378,14 @@ static void *iommu_init(target_phys_addr_t addr, uint32_t version, qemu_irq irq)
 }
 
 static void *sparc32_dma_init(target_phys_addr_t daddr, qemu_irq parent_irq,
-                              void *iommu, qemu_irq *dev_irq)
+                              void *iommu, qemu_irq *dev_irq, int is_ledma)
 {
     DeviceState *dev;
     SysBusDevice *s;
 
     dev = qdev_create(NULL, "sparc32_dma");
     qdev_prop_set_ptr(dev, "iommu_opaque", iommu);
+    qdev_prop_set_uint32(dev, "is_ledma", is_ledma);
     qdev_init_nofail(dev);
     s = sysbus_from_qdev(dev);
     sysbus_connect_irq(s, 0, parent_irq);
@@ -870,10 +863,10 @@ static void sun4m_hw_init(const struct sun4m_hwdef *hwdef, ram_addr_t RAM_size,
     }
 
     espdma = sparc32_dma_init(hwdef->dma_base, slavio_irq[18],
-                              iommu, &espdma_irq);
+                              iommu, &espdma_irq, 0);
 
     ledma = sparc32_dma_init(hwdef->dma_base + 16ULL,
-                             slavio_irq[16], iommu, &ledma_irq);
+                             slavio_irq[16], iommu, &ledma_irq, 1);
 
     if (graphic_depth != 8 && graphic_depth != 24) {
         fprintf(stderr, "qemu: Unsupported depth: %d\n", graphic_depth);
@@ -1532,10 +1525,11 @@ static void sun4d_hw_init(const struct sun4d_hwdef *hwdef, ram_addr_t RAM_size,
                                     sbi_irq[0]);
 
     espdma = sparc32_dma_init(hwdef->espdma_base, sbi_irq[3],
-                              iounits[0], &espdma_irq);
+                              iounits[0], &espdma_irq, 0);
 
+    /* should be lebuffer instead */
     ledma = sparc32_dma_init(hwdef->ledma_base, sbi_irq[4],
-                             iounits[0], &ledma_irq);
+                             iounits[0], &ledma_irq, 0);
 
     if (graphic_depth != 8 && graphic_depth != 24) {
         fprintf(stderr, "qemu: Unsupported depth: %d\n", graphic_depth);
@@ -1715,10 +1709,10 @@ static void sun4c_hw_init(const struct sun4c_hwdef *hwdef, ram_addr_t RAM_size,
                        slavio_irq[1]);
 
     espdma = sparc32_dma_init(hwdef->dma_base, slavio_irq[2],
-                              iommu, &espdma_irq);
+                              iommu, &espdma_irq, 0);
 
     ledma = sparc32_dma_init(hwdef->dma_base + 16ULL,
-                             slavio_irq[3], iommu, &ledma_irq);
+                             slavio_irq[3], iommu, &ledma_irq, 1);
 
     if (graphic_depth != 8 && graphic_depth != 24) {
         fprintf(stderr, "qemu: Unsupported depth: %d\n", graphic_depth);

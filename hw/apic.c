@@ -21,23 +21,7 @@
 #include "qemu-timer.h"
 #include "host-utils.h"
 #include "sysbus.h"
-
-//#define DEBUG_APIC
-//#define DEBUG_COALESCING
-
-#ifdef DEBUG_APIC
-#define DPRINTF(fmt, ...)                                       \
-    do { printf("apic: " fmt , ## __VA_ARGS__); } while (0)
-#else
-#define DPRINTF(fmt, ...)
-#endif
-
-#ifdef DEBUG_COALESCING
-#define DPRINTF_C(fmt, ...)                                     \
-    do { printf("apic: " fmt , ## __VA_ARGS__); } while (0)
-#else
-#define DPRINTF_C(fmt, ...)
-#endif
+#include "trace.h"
 
 /* APIC Local Vector Table */
 #define APIC_LVT_TIMER   0
@@ -168,8 +152,8 @@ static void apic_local_deliver(APICState *s, int vector)
     uint32_t lvt = s->lvt[vector];
     int trigger_mode;
 
-    DPRINTF("%s: vector %d delivery mode %d\n", __func__, vector,
-            (lvt >> 8) & 7);
+    trace_apic_local_deliver(vector, (lvt >> 8) & 7);
+
     if (lvt & APIC_LVT_MASKED)
         return;
 
@@ -300,9 +284,9 @@ void apic_deliver_irq(uint8_t dest, uint8_t dest_mode,
 {
     uint32_t deliver_bitmask[MAX_APIC_WORDS];
 
-    DPRINTF("%s: dest %d dest_mode %d delivery_mode %d vector %d"
-            " polarity %d trigger_mode %d\n", __func__, dest, dest_mode,
-            delivery_mode, vector_num, polarity, trigger_mode);
+    trace_apic_deliver_irq(dest, dest_mode, delivery_mode, vector_num,
+                           polarity, trigger_mode);
+
     apic_get_delivery_bitmask(deliver_bitmask, dest, dest_mode);
     apic_bus_deliver(deliver_bitmask, delivery_mode, vector_num, polarity,
                      trigger_mode);
@@ -312,7 +296,8 @@ void cpu_set_apic_base(DeviceState *d, uint64_t val)
 {
     APICState *s = DO_UPCAST(APICState, busdev.qdev, d);
 
-    DPRINTF("cpu_set_apic_base: %016" PRIx64 "\n", val);
+    trace_cpu_set_apic_base(val);
+
     if (!s)
         return;
     s->apicbase = (val & 0xfffff000) |
@@ -329,8 +314,8 @@ uint64_t cpu_get_apic_base(DeviceState *d)
 {
     APICState *s = DO_UPCAST(APICState, busdev.qdev, d);
 
-    DPRINTF("cpu_get_apic_base: %016" PRIx64 "\n",
-            s ? (uint64_t)s->apicbase: 0);
+    trace_cpu_get_apic_base(s ? (uint64_t)s->apicbase: 0);
+
     return s ? s->apicbase : 0;
 }
 
@@ -402,20 +387,23 @@ static void apic_update_irq(APICState *s)
 
 void apic_reset_irq_delivered(void)
 {
-    DPRINTF_C("%s: old coalescing %d\n", __func__, apic_irq_delivered);
+    trace_apic_reset_irq_delivered(apic_irq_delivered);
+
     apic_irq_delivered = 0;
 }
 
 int apic_get_irq_delivered(void)
 {
-    DPRINTF_C("%s: returning coalescing %d\n", __func__, apic_irq_delivered);
+    trace_apic_get_irq_delivered(apic_irq_delivered);
+
     return apic_irq_delivered;
 }
 
 static void apic_set_irq(APICState *s, int vector_num, int trigger_mode)
 {
     apic_irq_delivered += !get_bit(s->irr, vector_num);
-    DPRINTF_C("%s: coalescing %d\n", __func__, apic_irq_delivered);
+
+    trace_apic_set_irq(apic_irq_delivered);
 
     set_bit(s->irr, vector_num);
     if (trigger_mode)
@@ -449,6 +437,8 @@ static int apic_find_dest(uint8_t dest)
         apic = local_apics[i];
 	if (apic && apic->id == dest)
             return i;
+        if (!apic)
+            break;
     }
 
     return -1;
@@ -484,6 +474,8 @@ static void apic_get_delivery_bitmask(uint32_t *deliver_bitmask,
                         set_bit(deliver_bitmask, i);
                     }
                 }
+            } else {
+                break;
             }
         }
     }
@@ -769,11 +761,11 @@ static uint32_t apic_mem_readl(void *opaque, target_phys_addr_t addr)
         val = 0;
         break;
     }
-    DPRINTF("read: " TARGET_FMT_plx " = %08x\n", addr, val);
+    trace_apic_mem_readl(addr, val);
     return val;
 }
 
-static void apic_send_msi(target_phys_addr_t addr, uint32 data)
+static void apic_send_msi(target_phys_addr_t addr, uint32_t data)
 {
     uint8_t dest = (addr & MSI_ADDR_DEST_ID_MASK) >> MSI_ADDR_DEST_ID_SHIFT;
     uint8_t vector = (data & MSI_DATA_VECTOR_MASK) >> MSI_DATA_VECTOR_SHIFT;
@@ -805,7 +797,7 @@ static void apic_mem_writel(void *opaque, target_phys_addr_t addr, uint32_t val)
     }
     s = DO_UPCAST(APICState, busdev.qdev, d);
 
-    DPRINTF("write: " TARGET_FMT_plx " = %08x\n", addr, val);
+    trace_apic_mem_writel(addr, val);
 
     switch(index) {
     case 0x02:
@@ -988,7 +980,8 @@ static int apic_init1(SysBusDevice *dev)
         return -1;
     }
     apic_io_memory = cpu_register_io_memory(apic_mem_read,
-                                            apic_mem_write, NULL);
+                                            apic_mem_write, NULL,
+                                            DEVICE_NATIVE_ENDIAN);
     sysbus_init_mmio(dev, MSI_ADDR_SIZE, apic_io_memory);
 
     s->timer = qemu_new_timer(vm_clock, apic_timer, s);

@@ -254,8 +254,8 @@ static void virtio_ioport_write(void *opaque, uint32_t addr, uint32_t val)
         virtio_queue_set_vector(vdev, vdev->queue_sel, val);
         break;
     default:
-        fprintf(stderr, "%s: unexpected address 0x%x value 0x%x\n",
-                __func__, addr, val);
+        error_report("%s: unexpected address 0x%x value 0x%x",
+                     __func__, addr, val);
         break;
     }
 }
@@ -451,6 +451,33 @@ static int virtio_pci_set_guest_notifier(void *opaque, int n, bool assign)
     return 0;
 }
 
+static int virtio_pci_set_guest_notifiers(void *opaque, bool assign)
+{
+    VirtIOPCIProxy *proxy = opaque;
+    VirtIODevice *vdev = proxy->vdev;
+    int r, n;
+
+    for (n = 0; n < VIRTIO_PCI_QUEUE_MAX; n++) {
+        if (!virtio_queue_get_num(vdev, n)) {
+            break;
+        }
+
+        r = virtio_pci_set_guest_notifier(opaque, n, assign);
+        if (r < 0) {
+            goto assign_error;
+        }
+    }
+
+    return 0;
+
+assign_error:
+    /* We get here on assignment failure. Recover by undoing for VQs 0 .. n. */
+    while (--n >= 0) {
+        virtio_pci_set_guest_notifier(opaque, n, !assign);
+    }
+    return r;
+}
+
 static int virtio_pci_set_host_notifier(void *opaque, int n, bool assign)
 {
     VirtIOPCIProxy *proxy = opaque;
@@ -488,7 +515,7 @@ static const VirtIOBindings virtio_pci_bindings = {
     .load_queue = virtio_pci_load_queue,
     .get_features = virtio_pci_get_features,
     .set_host_notifier = virtio_pci_set_host_notifier,
-    .set_guest_notifier = virtio_pci_set_guest_notifier,
+    .set_guest_notifiers = virtio_pci_set_guest_notifiers,
 };
 
 static void virtio_init_pci(VirtIOPCIProxy *proxy, VirtIODevice *vdev,
@@ -657,12 +684,14 @@ static int virtio_9p_init_pci(PCIDevice *pci_dev)
     VirtIODevice *vdev;
 
     vdev = virtio_9p_init(&pci_dev->qdev, &proxy->fsconf);
+    vdev->nvectors = proxy->nvectors;
     virtio_init_pci(proxy, vdev,
                     PCI_VENDOR_ID_REDHAT_QUMRANET,
                     0x1009,
                     0x2,
                     0x00);
-
+    /* make the actual value visible */
+    proxy->nvectors = vdev->nvectors;
     return 0;
 }
 #endif
@@ -670,6 +699,7 @@ static int virtio_9p_init_pci(PCIDevice *pci_dev)
 static PCIDeviceInfo virtio_info[] = {
     {
         .qdev.name = "virtio-blk-pci",
+        .qdev.alias = "virtio-blk",
         .qdev.size = sizeof(VirtIOPCIProxy),
         .init      = virtio_blk_init_pci,
         .exit      = virtio_blk_exit_pci,
@@ -731,6 +761,7 @@ static PCIDeviceInfo virtio_info[] = {
         .qdev.size = sizeof(VirtIOPCIProxy),
         .init      = virtio_9p_init_pci,
         .qdev.props = (Property[]) {
+            DEFINE_PROP_UINT32("vectors", VirtIOPCIProxy, nvectors, 2),
             DEFINE_VIRTIO_COMMON_FEATURES(VirtIOPCIProxy, host_features),
             DEFINE_PROP_STRING("mount_tag", VirtIOPCIProxy, fsconf.tag),
             DEFINE_PROP_STRING("fsdev", VirtIOPCIProxy, fsconf.fsdev_id),

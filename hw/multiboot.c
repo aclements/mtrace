@@ -171,6 +171,12 @@ int load_multiboot(void *fw_cfg,
         uint64_t elf_low, elf_high;
         int kernel_size;
         fclose(f);
+
+        if (((struct elf64_hdr*)header)->e_machine == EM_X86_64) {
+            fprintf(stderr, "Cannot load x86-64 image, give a 32bit one.\n");
+            exit(1);
+        }
+
         kernel_size = load_elf(kernel_filename, NULL, NULL, &elf_entry,
                                &elf_low, &elf_high, 0, ELF_MACHINE, 0);
         if (kernel_size < 0) {
@@ -325,7 +331,8 @@ int load_multiboot(void *fw_cfg,
     fw_cfg_add_bytes(fw_cfg, FW_CFG_INITRD_DATA, mb_bootinfo_data,
                      sizeof(bootinfo));
 
-    option_rom[nb_option_roms] = "multiboot.bin";
+    option_rom[nb_option_roms].name = "multiboot.bin";
+    option_rom[nb_option_roms].bootindex = 0;
     nb_option_roms++;
 
     return 1; /* yes, we are multiboot */

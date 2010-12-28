@@ -167,6 +167,12 @@ static TranslationBlock *tb_find_slow(target_ulong pc,
     tb = tb_gen_code(env, pc, cs_base, flags, 0);
 
  found:
+    /* Move the last found TB to the head of the list */
+    if (likely(*ptb1)) {
+        *ptb1 = tb->phys_hash_next;
+        tb->phys_hash_next = tb_phys_hash[h];
+        tb_phys_hash[h] = tb;
+    }
     /* we add the TB in the virtual pc hash table */
     env->tb_jmp_cache[tb_jmp_cache_hash_func(pc)] = tb;
     return tb;
@@ -448,11 +454,7 @@ int cpu_exec(CPUState *env1)
                     }
 #elif defined(TARGET_MIPS)
                     if ((interrupt_request & CPU_INTERRUPT_HARD) &&
-                        cpu_mips_hw_interrupts_pending(env) &&
-                        (env->CP0_Status & (1 << CP0St_IE)) &&
-                        !(env->CP0_Status & (1 << CP0St_EXL)) &&
-                        !(env->CP0_Status & (1 << CP0St_ERL)) &&
-                        !(env->hflags & MIPS_HFLAG_DM)) {
+                        cpu_mips_hw_interrupts_pending(env)) {
                         /* Raise it */
                         env->exception_index = EXCP_EXT_INTERRUPT;
                         env->error_code = 0;
