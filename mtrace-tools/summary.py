@@ -12,6 +12,7 @@ default_print           = [ 'sum-inst', 'sum-type', 'clines' ]
 default_pickledir       = '.'
 default_type_print      = 5
 default_inst_print      = 5
+default_ignores         = [ ]
 
 mtrace_label_heap       = 1
 mtrace_label_block      = 2
@@ -36,6 +37,23 @@ def checksum(fileName):
     m.update(d)
     f.close()
     return m.digest()
+
+class InstanceSummary:
+    def __init__(self, name, allocPc, count, labelId):
+        self.name = name
+        self.allocPc = allocPc
+        self.count = count
+        self.labelId = labelId
+
+class TypeSummary:
+    def __init__(self, name, count, instanceNum):
+        self.name = name
+        self.count = count
+        self.instanceNum = instanceNum
+
+class IgnoreName:
+    def __init__(self, labelName):
+        pass
 
 class CallSummary:
     def __init__(self, dbFile, name, pc):
@@ -166,7 +184,7 @@ class CallSummary:
             objs = self.get_top_objs(labelType)
 
             for higher in objs:
-                tmp[higher[1][1]] = 1
+                tmp[higher.name] = 1
 
             self.uniqueType[labelType] = len(tmp)
 
@@ -203,16 +221,18 @@ class CallSummary:
             tmpDict = {}
 
             for higher in topObjs:
-                typename = higher[1][1]
-                accessCount = higher[1][0]
-                # XXX add number of instances and number of total counts
+                typename = higher.name
+                accessCount = higher.count
+
                 if typename in tmpDict:
                     entry = tmpDict[typename]
-                    tmpDict[typename] = [ entry[0] + accessCount, entry[1] + 1]
+                    entry.count += accessCount
+                    entry.instanceNum += 1
+                    tmpDict[typename] = entry
                 else:
-                    tmpDict[typename] = [ accessCount, 1]
+                    tmpDict[typename] = TypeSummary(typename, accessCount, 1)
 
-            s = sorted(tmpDict.iteritems(), key=lambda k: k[1][0], reverse=True)
+            s = sorted(tmpDict.values(), key=lambda k: k.count, reverse=True)
             self.topTypes[labelType] = s
 
         return self.topTypes[labelType]
@@ -259,11 +279,12 @@ class CallSummary:
                     raise Exception('unexpected result')            
 
                 count = rs2[0][0]
-                tmpDict[labelId] = [ count, 
-                                     self.get_label_str(labelId, labelType), 
-                                     self.get_label_alloc_pc(labelId, labelType) ]
+                tmpDict[labelId] = InstanceSummary(self.get_label_str(labelId, labelType), 
+                                                   self.get_label_alloc_pc(labelId, labelType), 
+                                                   count,
+                                                   labelId)
 
-            s = sorted(tmpDict.iteritems(), key=lambda k: k[1][0], reverse=True)
+            s = sorted(tmpDict.values(), key=lambda k: k.count, reverse=True)
             self.topObjs[labelType] = s
 
         return self.topObjs[labelType]
@@ -414,10 +435,10 @@ class MtraceSummary:
 
                 top = cs.get_top_objs(labelType)
                 for higher in top[0:numPrint]:
-                    print '      %-20s %016lx %16u %16u' % (higher[1][1], 
-                                                            uhex(higher[1][2]), 
-                                                            higher[1][0], 
-                                                            higher[0])
+                    print '      %-20s %016lx %16u %16u' % (higher.name, 
+                                                            uhex(higher.allocPc), 
+                                                            higher.count, 
+                                                            higher.labelId)
                 print ''
 
     def print_top_types(self, numPrint):
@@ -439,9 +460,9 @@ class MtraceSummary:
 
                 top = cs.get_top_types(labelType)
                 for higher in top[0:numPrint]:
-                    print '      %-20s %16u %16u' % (higher[0], 
-                                                     higher[1][0],
-                                                     higher[1][1])
+                    print '      %-20s %16u %16u' % (higher.name, 
+                                                     higher.count,
+                                                     higher.instanceNum)
                 print ''
 
 def parse_args(argv):
@@ -465,11 +486,17 @@ def parse_args(argv):
         default_inst_print = int(val)
         default_type_print = int(val)
 
+    def ignorename_handler(val):
+        global default_ignores
+        ig = IgnoreName(val)
+        default_ignores.append(ig)
+
     handler = {
-        '-sort'      : sort_handler,
-        '-print'     : print_handler,
-        '-pickledir' : pickledir_handler,
-        '-numprint'  : numprint_handler,
+        '-sort'       : sort_handler,
+        '-print'      : print_handler,
+        '-pickledir'  : pickledir_handler,
+        '-numprint'   : numprint_handler,
+        '-ignorename' : ignorename_handler,
     }
 
     for i in range(0, len(args), 2):
@@ -477,7 +504,7 @@ def parse_args(argv):
 
 def usage():
     print """Usage: summary.py DB-file name [ -sort col -print col 
-               -pickledir pickledir -numprint numprint ]
+               -pickledir pickledir -numprint numprint -ignorename ignorename ]
 
     'col' is the name of a column.  Valid values are:
       'heap-inst'    -- heap allocated object instances
@@ -498,6 +525,8 @@ def usage():
 
     'numprint' is the number of rows to print for the inst and type
       summaries (the default is 5)
+
+    'ignorename' is a label name to exclude from the summary
 """
     exit(1)
 
