@@ -146,29 +146,6 @@ class CallSummary:
 
         return s
 
-    def get_unique_obj(self, labelType):
-        if labelType not in self.uniqueObj:
-            q = 'SELECT COUNT(DISTINCT label_id) FROM %s_accesses WHERE label_type = %u ' + \
-                'AND label_id != 0 AND EXISTS ' + \
-                '(SELECT * FROM %s_calls WHERE ' + \
-                '%s_calls.cpu = %s_accesses.cpu ' + \
-                'AND %s_calls.call_tag = %s_accesses.call_tag ' + \
-                'AND %s_calls.pc = %ld)'
-
-            q = q % (self.name, labelType,
-                     self.name,
-                     self.name, self.name,
-                     self.name, self.name,
-                     self.name, self.pc)
-            c = self.get_conn().cursor()
-            c.execute(q)    
-            rs = c.fetchall()
-            if len(rs) != 1:
-                raise Exception('unexpected result')
-            self.uniqueObj[labelType] = rs[0][0]
-
-        return self.uniqueObj[labelType]
-
     def get_total_unique_type(self):
         s = 0
         for labelType in range(mtrace_label_heap, mtrace_label_percpu + 1):
@@ -178,17 +155,11 @@ class CallSummary:
 
         return s
 
+    def get_unique_obj(self, labelType):
+        return len(self.get_top_objs(labelType))
+
     def get_unique_type(self, labelType):
-        if labelType not in self.uniqueType:
-            tmp = {}
-            objs = self.get_top_objs(labelType)
-
-            for higher in objs:
-                tmp[higher.name] = 1
-
-            self.uniqueType[labelType] = len(tmp)
-
-        return self.uniqueType[labelType]
+        return len(self.get_top_types(labelType))
 
     def get_label_str(self, labelId, labelType):
         q = 'SELECT str FROM %s_labels%u WHERE label_id = %lu'
