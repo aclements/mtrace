@@ -12,7 +12,7 @@ default_print           = [ 'sum-inst', 'sum-type', 'clines' ]
 default_pickledir       = '.'
 default_type_print      = 5
 default_inst_print      = 5
-default_ignores         = [ ]
+default_filters         = [ ]
 
 mtrace_label_heap       = 1
 mtrace_label_block      = 2
@@ -51,9 +51,12 @@ class TypeSummary:
         self.count = count
         self.instanceNum = instanceNum
 
-class IgnoreName:
+class FilterLabel:
     def __init__(self, labelName):
-        pass
+        self.labelName = labelName
+
+    def filter(self, summaryObject):
+        return self.labelName != summaryObject.name
 
 class CallSummary:
     def __init__(self, dbFile, name, pc):
@@ -61,6 +64,7 @@ class CallSummary:
         self.name = name
         self.dbFile = dbFile
 
+        self.filters = []
         self.csum = None
         self.conn = None
         self.sysName = None
@@ -68,17 +72,32 @@ class CallSummary:
         self.uniqueCline = None
         self.uniqueObj = {}
         self.topObjs = {}
-        self.topTypes = {}
         self.uniqueType = {}
 
     def __getstate__(self):
         odict = self.__dict__.copy()
+        # This following members are ephemeral
         del odict['conn']
+        del odict['filters']
         return odict
 
     def __setstate__(self, dict):
         self.__dict__.update(dict)
         self.conn = None
+        self.filters = []
+
+    def set_filters(self, filters):
+        self.filters = filters
+
+    def apply_filters(self, lst):
+        if len(self.filters) > 0:
+            lst2 = []
+            for e in lst:
+                for f in self.filters:
+                    if f.filter(e):
+                        lst2.append(e)
+            lst = lst2
+        return lst
 
     def get_conn(self):
         if self.conn == None:
@@ -186,27 +205,22 @@ class CallSummary:
         return rs[0][0]
 
     def get_top_types(self, labelType):
-        if labelType not in self.topTypes:
-            topObjs = self.get_top_objs(labelType)
-            
-            tmpDict = {}
+        topObjs = self.get_top_objs(labelType)
+        tmpDict = {}
 
-            for higher in topObjs:
-                typename = higher.name
-                accessCount = higher.count
+        for higher in topObjs:
+            typename = higher.name
+            accessCount = higher.count
 
-                if typename in tmpDict:
-                    entry = tmpDict[typename]
-                    entry.count += accessCount
-                    entry.instanceNum += 1
-                    tmpDict[typename] = entry
-                else:
-                    tmpDict[typename] = TypeSummary(typename, accessCount, 1)
+            if typename in tmpDict:
+                entry = tmpDict[typename]
+                entry.count += accessCount
+                entry.instanceNum += 1
+                tmpDict[typename] = entry
+            else:
+                tmpDict[typename] = TypeSummary(typename, accessCount, 1)
 
-            s = sorted(tmpDict.values(), key=lambda k: k.count, reverse=True)
-            self.topTypes[labelType] = s
-
-        return self.topTypes[labelType]
+        return sorted(tmpDict.values(), key=lambda k: k.count, reverse=True)
 
     def get_top_objs(self, labelType):
         if labelType not in self.topObjs:
@@ -258,7 +272,7 @@ class CallSummary:
             s = sorted(tmpDict.values(), key=lambda k: k.count, reverse=True)
             self.topObjs[labelType] = s
 
-        return self.topObjs[labelType]
+        return self.apply_filters(self.topObjs[labelType])
 
     def get_col_value(self, col):
         colValueFuncs = {
@@ -318,7 +332,9 @@ class MtraceSummary:
             if stats.csum != checksum(dbFile):
                 raise Exception('checksum mismatch: stale pickle?')
 
+            # This following members are ephemeral
             stats.dbFile = dbFile
+
             pickleFile.close()
         except IOError, e:
             if e.errno != errno.ENOENT:
@@ -363,6 +379,10 @@ class MtraceSummary:
         }
 
         self.call_summary = sortFuncs[sortType]()
+
+    def set_filters(self, filters):
+        for cs in self.call_summary:
+            cs.set_filters(filters)
 
     def print_summary(self, printCols):
         print 'summary'
@@ -457,17 +477,17 @@ def parse_args(argv):
         default_inst_print = int(val)
         default_type_print = int(val)
 
-    def ignorename_handler(val):
-        global default_ignores
-        ig = IgnoreName(val)
-        default_ignores.append(ig)
+    def filterlabel_handler(val):
+        global default_filters
+        ig = FilterLabel(val)
+        default_filters.append(ig)
 
     handler = {
         '-sort'       : sort_handler,
         '-print'      : print_handler,
         '-pickledir'  : pickledir_handler,
         '-numprint'   : numprint_handler,
-        '-ignorename' : ignorename_handler,
+        '-filterlabel' : filterlabel_handler,
     }
 
     for i in range(0, len(args), 2):
@@ -475,7 +495,7 @@ def parse_args(argv):
 
 def usage():
     print """Usage: summary.py DB-file name [ -sort col -print col 
-               -pickledir pickledir -numprint numprint -ignorename ignorename ]
+               -pickledir pickledir -numprint numprint -filterlabel filterlabel ]
 
     'col' is the name of a column.  Valid values are:
       'heap-inst'    -- heap allocated object instances
@@ -497,7 +517,7 @@ def usage():
     'numprint' is the number of rows to print for the inst and type
       summaries (the default is 5)
 
-    'ignorename' is a label name to exclude from the summary
+    'filterlabel' is a label name to filter from the summary
 """
     exit(1)
 
@@ -521,7 +541,8 @@ def main(argv=None):
     printCols = the_print_columns
     if len(printCols) == 0:
         printCols = default_print
-    
+
+    stats.set_filters(default_filters)    
     stats.sort(default_sort)
     
     stats.print_summary(printCols)
