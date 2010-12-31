@@ -93,9 +93,11 @@ class CallSummary:
         if len(self.filters) > 0:
             lst2 = []
             for e in lst:
+                lst2.append(e)
                 for f in self.filters:
-                    if f.filter(e):
-                        lst2.append(e)
+                    if f.filter(e) == False:
+                        lst.pop()
+                        break
             lst = lst2
         return lst
 
