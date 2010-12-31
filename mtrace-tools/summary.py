@@ -412,12 +412,18 @@ class MtraceSummary:
         print '------------'
 
         for cs in self.call_summary:
+            if cs.get_total_unique_obj() == 0:
+                continue
+
             print '  name=%s ' % ( cs.get_str_name() )
             print '  ----'
 
             for labelType in range(mtrace_label_heap, mtrace_label_percpu + 1):
                 if labelType == mtrace_label_block:
                     continue
+                if cs.get_unique_obj(labelType) == 0:
+                    continue
+
                 print '    type=%s' % ( mtrace_label_str[labelType] )
                 print '    ----'
 
@@ -437,12 +443,18 @@ class MtraceSummary:
         print '------------'
 
         for cs in self.call_summary:
+            if cs.get_total_unique_type() == 0:
+                continue
+
             print '  name=%s ' % ( cs.get_str_name() )
             print '  ----'
 
             for labelType in range(mtrace_label_heap, mtrace_label_percpu + 1):
                 if labelType == mtrace_label_block:
                     continue
+                if cs.get_unique_type(labelType) == 0:
+                    continue
+
                 print '    type=%s' % ( mtrace_label_str[labelType] )
                 print '    ----'
 
