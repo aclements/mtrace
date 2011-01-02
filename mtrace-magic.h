@@ -14,6 +14,7 @@ typedef enum {
     mtrace_entry_enable,
     mtrace_entry_fcall,
     mtrace_entry_segment,
+    mtrace_entry_call,
 } mtrace_entry_t;
 
 typedef enum {
@@ -53,6 +54,15 @@ struct mtrace_fcall_entry {
     uint64_t tag;
     uint16_t depth;
     uint8_t end;
+} __pack__;
+
+struct mtrace_call_entry {
+    mtrace_entry_t type;    
+    uint64_t access_count;
+
+    uint16_t cpu;
+    uint64_t target_pc;
+    uint64_t return_pc;    
 } __pack__;
 
 /*
@@ -111,6 +121,7 @@ union mtrace_entry {
     struct mtrace_enable_entry enable;
     struct mtrace_fcall_entry fcall;
     struct mtrace_segment_entry seg;
+    struct mtrace_call_entry call;
 }__pack__;
 
 #ifndef QEMU_MTRACE

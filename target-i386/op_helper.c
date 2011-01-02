@@ -5672,3 +5672,13 @@ void helper_mtrace_inst_exec(void)
 {
     mtrace_inst_exec(EAX, EBX, ECX, EDX, ESI, EDI);
 }
+
+void helper_mtrace_inst_call(target_ulong target_pc, target_ulong return_pc)
+{
+    mtrace_inst_call(target_pc, return_pc, 0);
+}
+
+void helper_mtrace_inst_ret(target_ulong target_pc)
+{
+    mtrace_inst_call(target_pc, 0, 1);
+}

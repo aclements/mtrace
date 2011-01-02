@@ -218,5 +218,7 @@ DEF_HELPER_2(rcrq, tl, tl, tl)
 #endif
 
 DEF_HELPER_0(mtrace_inst_exec, void)
+DEF_HELPER_2(mtrace_inst_call, void, tl, tl)
+DEF_HELPER_1(mtrace_inst_ret, void, tl)
 
 #include "def-helper.h"

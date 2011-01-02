@@ -4632,6 +4632,7 @@ static target_ulong disas_insn(DisasContext *s, target_ulong pc_start)
             if (s->dflag == 0)
                 gen_op_andl_T0_ffff();
             next_eip = s->pc - s->cs_base;
+	    gen_helper_mtrace_inst_call(cpu_T[0], tcg_const_i64(next_eip));
             gen_movtl_T1_im(next_eip);
             gen_push_T1(s);
             gen_op_jmp_T0();
@@ -6268,6 +6269,8 @@ static target_ulong disas_insn(DisasContext *s, target_ulong pc_start)
                 tval &= 0xffff;
             else if(!CODE64(s))
                 tval &= 0xffffffff;
+	    gen_helper_mtrace_inst_call(tcg_const_i64(tval), 
+					tcg_const_i64(next_eip));
             gen_movtl_T0_im(next_eip);
             gen_push_T0(s);
             gen_jmp(s, tval);

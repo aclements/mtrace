@@ -40,6 +40,7 @@ static FILE *mtrace_file;
 static void (*mtrace_log_entry)(union mtrace_entry *);
 static int mtrace_cline_track = 1;
 static uint64_t mtrace_access_count;
+static int mtrace_call_stack_active[255];
 
 void mtrace_log_file_set(const char *path)
 {
@@ -112,6 +113,14 @@ static void mtrace_log_entry_text(union mtrace_entry *entry)
 		entry->seg.baseaddr,
 		entry->seg.endaddr);
 	break;
+    case mtrace_entry_call:
+	fprintf(mtrace_file, "%-3s [%-3u  %16lu  %16lx %16lx]\n",
+		"L",
+		entry->call.cpu,
+		entry->call.access_count,
+		entry->call.target_pc,
+		entry->call.return_pc);
+	break;
     default:
 	fprintf(stderr, "mtrace_log_entry: bad type %u\n", entry->type);
 	abort();
@@ -137,6 +146,9 @@ static void mtrace_log_entry_binary(union mtrace_entry *entry)
 	break;
     case mtrace_entry_segment:
 	n = sizeof(struct mtrace_segment_entry);
+	break;
+    case mtrace_entry_call:
+	n = sizeof(struct mtrace_call_entry);
 	break;
     default:
 	fprintf(stderr, "mtrace_log_entry: bad type %u\n", entry->type);
@@ -460,6 +472,9 @@ static void mtrace_fcall_register(target_ulong tid, target_ulong pc,
 				  target_ulong end)
 {
     struct mtrace_fcall_entry fcall;
+    int cpu;
+
+    cpu = cpu_single_env->cpu_index;
 
     fcall.type = mtrace_entry_fcall;
     fcall.tid = tid;
@@ -467,10 +482,11 @@ static void mtrace_fcall_register(target_ulong tid, target_ulong pc,
     fcall.tag = tag;
     fcall.depth = depth;
     fcall.end = !!end;
-    fcall.cpu = cpu_single_env->cpu_index;
+    fcall.cpu = cpu;
     fcall.access_count = mtrace_access_count;
 
     mtrace_log_entry((union mtrace_entry *)&fcall);
+    mtrace_call_stack_active[cpu] = !end;
 }
 
 static void mtrace_segment_register(target_ulong baseaddr, target_ulong endaddr,
@@ -514,6 +530,27 @@ void mtrace_inst_exec(target_ulong a0, target_ulong a1,
     }
     
     mtrace_call[a0](a1, a2, a3, a4, a5);
+}
+
+void mtrace_inst_call(target_ulong target_pc, target_ulong return_pc,
+		      int ret)
+{
+    struct mtrace_call_entry call;    
+    int cpu;
+
+    cpu = cpu_single_env->cpu_index;
+
+    if (!mtrace_call_stack_active[cpu])
+	return;
+    
+    call.type = mtrace_entry_call;
+    call.access_count = mtrace_access_count;
+    
+    call.cpu = cpu;
+    call.target_pc = target_pc;
+    call.return_pc = return_pc;
+
+    mtrace_log_entry((union mtrace_entry *)&call);
 }
 
 uint8_t *mtrace_cline_track_alloc(size_t size)
