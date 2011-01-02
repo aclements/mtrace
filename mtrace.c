@@ -114,9 +114,10 @@ static void mtrace_log_entry_text(union mtrace_entry *entry)
 		entry->seg.endaddr);
 	break;
     case mtrace_entry_call:
-	fprintf(mtrace_file, "%-3s [%-3u  %16lu  %16lx %16lx]\n",
+	fprintf(mtrace_file, "%-3s [%-3u  %4s  %16lu  %16lx %16lx]\n",
 		"L",
 		entry->call.cpu,
+		entry->call.ret ? "ret" : "call",
 		entry->call.access_count,
 		entry->call.target_pc,
 		entry->call.return_pc);
@@ -549,6 +550,7 @@ void mtrace_inst_call(target_ulong target_pc, target_ulong return_pc,
     call.cpu = cpu;
     call.target_pc = target_pc;
     call.return_pc = return_pc;
+    call.ret = ret;
 
     mtrace_log_entry((union mtrace_entry *)&call);
 }

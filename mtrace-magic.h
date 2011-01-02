@@ -63,6 +63,7 @@ struct mtrace_call_entry {
     uint16_t cpu;
     uint64_t target_pc;
     uint64_t return_pc;    
+    int ret;
 } __pack__;
 
 /*

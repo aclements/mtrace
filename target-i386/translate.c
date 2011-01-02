@@ -6200,6 +6200,7 @@ static target_ulong disas_insn(DisasContext *s, target_ulong pc_start)
         gen_pop_update(s);
         if (s->dflag == 0)
             gen_op_andl_T0_ffff();
+	gen_helper_mtrace_inst_ret(cpu_T[0]);
         gen_op_jmp_T0();
         gen_eob(s);
         break;
