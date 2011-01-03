@@ -103,7 +103,7 @@ static void mtrace_log_entry_text(union mtrace_entry *entry)
 		entry->fcall.pc,
 		entry->fcall.tag,
 		entry->fcall.depth,
-		entry->fcall.end);
+		entry->fcall.state);
 	break;
     case mtrace_entry_segment:
 	fprintf(mtrace_file, "%-3s [%-3u  %3u  %16lx %16lx]\n",
@@ -470,7 +470,7 @@ static void mtrace_label_register(target_ulong label_addr, target_ulong n2,
 
 static void mtrace_fcall_register(target_ulong tid, target_ulong pc, 
 				  target_ulong tag, target_ulong depth, 
-				  target_ulong end)
+				  target_ulong state)
 {
     struct mtrace_fcall_entry fcall;
     int cpu;
@@ -482,12 +482,13 @@ static void mtrace_fcall_register(target_ulong tid, target_ulong pc,
     fcall.pc = pc;
     fcall.tag = tag;
     fcall.depth = depth;
-    fcall.end = !!end;
+    fcall.state = state;
     fcall.cpu = cpu;
     fcall.access_count = mtrace_access_count;
 
     mtrace_log_entry((union mtrace_entry *)&fcall);
-    mtrace_call_stack_active[cpu] = !end;
+    mtrace_call_stack_active[cpu] = 
+	(state == mtrace_start || state == mtrace_resume);
 }
 
 static void mtrace_segment_register(target_ulong baseaddr, target_ulong endaddr,

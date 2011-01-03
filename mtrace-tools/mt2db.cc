@@ -111,6 +111,7 @@ typedef hash_map<uint64_t, struct mtrace_label_entry *> LabelHash;
 typedef list<ObjectLabel> 	  		     	ObjectList;
 typedef list<struct mtrace_access_entry *> 		AccessList;
 typedef list<CompleteFcall> 				FcallList;
+typedef hash_map<uint64_t, struct mtrace_call_entry *>  CallStackHash;
 
 typedef list<struct mtrace_label_entry *>	     	LabelList;
 
@@ -118,6 +119,7 @@ static LabelHash    outstanding_labels[mtrace_label_end];
 static ObjectList   complete_labels[mtrace_label_end];;
 static AccessList   accesses;
 static FcallList    complete_fcalls;
+static CallStackHash call_stacks;
 
 static LabelList    percpu_labels;
 
@@ -165,7 +167,7 @@ static void insert_complete_label(ObjectLabel ol)
 // so this problem never shows up.
 //
 // Use INTEGER, because it is much faster than BLOB.
-// Use BLOB, because it prints much nicer than BLOB in the sqlite3 shell.
+// Use BLOB, because it prints much nicer than INTEGER in the sqlite3 shell.
 
 #if 0
 #define ADDR_TYPE "BLOB"
@@ -542,8 +544,11 @@ static void handle_fcall(struct mtrace_fcall_entry *f)
 	if (cpu >= MAX_CPU)
 		die("handle_fcall: cpu is too large: %u", cpu);
 
+	if (f->state != mtrace_done && f->state != mtrace_start)
+		die("handle_fcall: bad state %u", f->state);
+
 	if (mtrace_fcall[cpu]) {
-		if (!f->end)
+		if (f->state != mtrace_done)
 			die("handle_fcall: two starts?");
 		if (mtrace_fcall[cpu]->tag != f->tag)
 			die("handle_fcall: tag mismatch");
@@ -554,12 +559,28 @@ static void handle_fcall(struct mtrace_fcall_entry *f)
 			complete_fcalls.push_back(CompleteFcall(mtrace_fcall[cpu], f));
 		}
 
+		call_stacks.erase(mtrace_fcall[cpu]->tag);
+
 		mtrace_fcall[cpu] = NULL;
 	} else {
-		if (f->end)
+		if (f->state == mtrace_done)
 			die("handle_fcall: end of what?");
 		mtrace_fcall[cpu] = f;
+
+		call_stacks[f->tag] = NULL;
 	}
+}
+
+static void handle_call(struct mtrace_call_entry *f)
+{
+	int cpu = f->cpu;
+
+	if (cpu >= MAX_CPU)
+		die("handle_call: cpu is too large: %u", cpu);
+
+	if (mtrace_fcall[cpu] == NULL)
+		die("handle_call: no call stack");
+
 }
 
 static void handle_access(struct mtrace_access_entry *a)
@@ -667,6 +688,11 @@ static void process_log(void *arg, union mtrace_entry *entry, unsigned long size
 			handle_segment(&entry->seg);
 			entry = (union mtrace_entry *)
 				(((char *)entry) + sizeof(entry->seg));
+			break;
+		case mtrace_entry_call:
+			handle_call(&entry->call);
+			entry = (union mtrace_entry *)
+				(((char *)entry) + sizeof(entry->call));
 			break;
 		default:
 			die("bad type %u", entry->type);
