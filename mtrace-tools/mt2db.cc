@@ -547,30 +547,48 @@ static void handle_fcall(struct mtrace_fcall_entry *f)
 		die("handle_fcall: cpu is too large: %u", cpu);
 
 	switch (f->state) {
-	case mtrace_resume:
-	case mtrace_start: {
+	case mtrace_resume: {
+		CallStackHash::const_iterator it;
 		CallStack *cs;
 
 		if (current_stack[cpu] != NULL)
-			die("handle_stack_state: two starts?");
+			die("handle_stack_state: start -> resume");
+
+		it = call_stack.find(f->tag);
+		if (it == call_stack.end())
+			die("handle_stack_state: unable to find %lu", f->tag);
+
+		cs = it->second;
+
+		/* XXX */
+		call_stack.erase(f->tag);
+		delete cs;
 
 		cs = new CallStack(f);
 		call_stack[cs->start_->tag] = cs;
 		current_stack[cpu] = cs;
 		break;
 	}
-	case mtrace_pause:
-	case mtrace_done: {
+	case mtrace_start: {
+		CallStack *cs;
+
+		if (current_stack[cpu] != NULL)
+			die("handle_stack_state: start -> start");
+
+		cs = new CallStack(f);
+		call_stack[cs->start_->tag] = cs;
+		current_stack[cpu] = cs;
+
+		break;
+	}
+	case mtrace_pause: {
 		CallStack *cs;
 
 		if (current_stack[cpu] == NULL)
-			die("handle_stack_state: done missing start");
+			die("handle_stack_state: NULL -> pause %lu", f->tag);
 
 		cs = current_stack[cpu];
 		cs->complete();
-
-		if (f->state == mtrace_done)
-			call_stack.erase(cs->start_->tag);
 
 		current_stack[cpu] = NULL;
 
@@ -579,6 +597,29 @@ static void handle_fcall(struct mtrace_fcall_entry *f)
 		{
 			complete_fcalls.push_back(CompleteFcall(cs->start_, f));
 		}
+
+		break;
+	}
+	case mtrace_done: {
+		CallStack *cs;
+
+		if (current_stack[cpu] == NULL)
+			die("handle_stack_state: NULL -> start");
+
+		cs = current_stack[cpu];
+		cs->complete();
+
+		call_stack.erase(cs->start_->tag);
+
+		current_stack[cpu] = NULL;
+
+		if (mtrace_enable.enable ||
+		    cs->start_->access_count <= mtrace_enable.access_count)
+		{
+			complete_fcalls.push_back(CompleteFcall(cs->start_, f));
+		}
+
+		delete cs;
 		break;
 	}
 	default:
@@ -725,6 +766,9 @@ static void process_symbols(void *arg, const char *nm_file)
 	FILE *f;
 	int r;
 	size_t len;
+
+	percpu_start = 0;
+	percpu_end = 0;
 
 	f = fopen(nm_file, "r");
 	if (f == NULL)
