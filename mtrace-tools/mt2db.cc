@@ -761,7 +761,7 @@ static void process_symbols(void *arg, const char *nm_file)
 	uint64_t percpu_start;
 	uint64_t percpu_end;
 	char str[128];
-	char* line;
+	char* line = NULL;
 	char type;
 	FILE *f;
 	int r;
@@ -773,8 +773,6 @@ static void process_symbols(void *arg, const char *nm_file)
 	f = fopen(nm_file, "r");
 	if (f == NULL)
 		edie("fopen %s failed", nm_file);
-
-	line = (char*) malloc(128);
 
 	printf("Processing nm file ...");
 	fflush(0);
