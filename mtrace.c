@@ -41,6 +41,7 @@ static void (*mtrace_log_entry)(union mtrace_entry *);
 static int mtrace_cline_track = 1;
 static uint64_t mtrace_access_count;
 static int mtrace_call_stack_active[255];
+static int mtrace_call_trace;
 
 void mtrace_log_file_set(const char *path)
 {
@@ -59,6 +60,11 @@ void mtrace_cline_trace_set(int b)
 void mtrace_system_enable_set(int b)
 {
     mtrace_system_enable = b;
+}
+
+void mtrace_call_trace_set(int b)
+{
+    mtrace_call_trace = b;
 }
 
 static void mtrace_log_entry_text(union mtrace_entry *entry)
@@ -539,6 +545,9 @@ void mtrace_inst_call(target_ulong target_pc, target_ulong return_pc,
 {
     struct mtrace_call_entry call;    
     int cpu;
+
+    if (!mtrace_system_enable || !mtrace_call_trace)
+	return;
 
     cpu = cpu_single_env->cpu_index;
 

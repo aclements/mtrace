@@ -1014,8 +1014,7 @@ Specify SMBIOS type 1 fields
 ETEXI
 
 DEF("mtrace-enable", 0, QEMU_OPTION_mtrace_enable,
-    "-mtrace-enable  Enable the memory trace system\n"
-    "                (the default is only the shared cache lines)\n", QEMU_ARCH_I386)
+    "-mtrace-enable  Enable the memory trace system\n", QEMU_ARCH_I386)
 DEF("mtrace-file", HAS_ARG, QEMU_OPTION_mtrace_file,
     "-mtrace-file filename\n"
     "                specify memory trace log file\n", QEMU_ARCH_I386)
@@ -1025,6 +1024,9 @@ DEF("mtrace-format", HAS_ARG, QEMU_OPTION_mtrace_format,
 DEF("mtrace-all", 0, QEMU_OPTION_mtrace_all,
     "-mtrace-all     Log all memory accesses\n"
     "                (the default is only the shared cache lines)\n", QEMU_ARCH_I386)
+DEF("mtrace-calls", 0, QEMU_OPTION_mtrace_calls,
+    "-mtrace-calls   Log all retired call and ret instructions\n"
+    "                (the default is to ignore call and ret instructions)\n", QEMU_ARCH_I386)
 
 DEFHEADING()
 STEXI
