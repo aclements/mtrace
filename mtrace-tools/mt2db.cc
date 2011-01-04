@@ -46,7 +46,8 @@ extern "C" {
 #include <mtrace-magic.h>
 }
 
-#include "syms.h"
+#include "callstack.hh"
+#include "syms.hh"
 
 using namespace::std;
 using namespace::__gnu_cxx;
@@ -111,7 +112,7 @@ typedef hash_map<uint64_t, struct mtrace_label_entry *> LabelHash;
 typedef list<ObjectLabel> 	  		     	ObjectList;
 typedef list<struct mtrace_access_entry *> 		AccessList;
 typedef list<CompleteFcall> 				FcallList;
-typedef hash_map<uint64_t, struct mtrace_call_entry *>  CallStackHash;
+typedef hash_map<uint64_t, CallStack *>  		CallStackHash;
 
 typedef list<struct mtrace_label_entry *>	     	LabelList;
 
@@ -119,14 +120,15 @@ static LabelHash    outstanding_labels[mtrace_label_end];
 static ObjectList   complete_labels[mtrace_label_end];;
 static AccessList   accesses;
 static FcallList    complete_fcalls;
-static CallStackHash call_stacks;
 
 static LabelList    percpu_labels;
 
 static Syms 	    addr_to_fname;
 
+static CallStack    *current_stack[MAX_CPU];
+static CallStackHash call_stack;
+
 static struct mtrace_enable_entry mtrace_enable;
-static struct mtrace_fcall_entry *mtrace_fcall[MAX_CPU];
 
 static void __noret__ __chfmt__ die(const char* errstr, ...) 
 {
@@ -544,30 +546,84 @@ static void handle_fcall(struct mtrace_fcall_entry *f)
 	if (cpu >= MAX_CPU)
 		die("handle_fcall: cpu is too large: %u", cpu);
 
-	if (f->state != mtrace_done && f->state != mtrace_start)
-		die("handle_fcall: bad state %u", f->state);
+	switch (f->state) {
+	case mtrace_resume: {
+		CallStackHash::const_iterator it;
+		CallStack *cs;
 
-	if (mtrace_fcall[cpu]) {
-		if (f->state != mtrace_done)
-			die("handle_fcall: two starts?");
-		if (mtrace_fcall[cpu]->tag != f->tag)
-			die("handle_fcall: tag mismatch");
+		if (current_stack[cpu] != NULL)
+			die("handle_stack_state: start -> resume");
+
+		it = call_stack.find(f->tag);
+		if (it == call_stack.end())
+			die("handle_stack_state: unable to find %lu", f->tag);
+
+		cs = it->second;
+
+		/* XXX */
+		call_stack.erase(f->tag);
+		delete cs;
+
+		cs = new CallStack(f);
+		call_stack[cs->start_->tag] = cs;
+		current_stack[cpu] = cs;
+		break;
+	}
+	case mtrace_start: {
+		CallStack *cs;
+
+		if (current_stack[cpu] != NULL)
+			die("handle_stack_state: start -> start");
+
+		cs = new CallStack(f);
+		call_stack[cs->start_->tag] = cs;
+		current_stack[cpu] = cs;
+
+		break;
+	}
+	case mtrace_pause: {
+		CallStack *cs;
+
+		if (current_stack[cpu] == NULL)
+			die("handle_stack_state: NULL -> pause %lu", f->tag);
+
+		cs = current_stack[cpu];
+		cs->complete();
+
+		current_stack[cpu] = NULL;
 
 		if (mtrace_enable.enable ||
-		    mtrace_fcall[cpu]->access_count <= mtrace_enable.access_count)
+		    cs->start_->access_count <= mtrace_enable.access_count)
 		{
-			complete_fcalls.push_back(CompleteFcall(mtrace_fcall[cpu], f));
+			complete_fcalls.push_back(CompleteFcall(cs->start_, f));
 		}
 
-		call_stacks.erase(mtrace_fcall[cpu]->tag);
+		break;
+	}
+	case mtrace_done: {
+		CallStack *cs;
 
-		mtrace_fcall[cpu] = NULL;
-	} else {
-		if (f->state == mtrace_done)
-			die("handle_fcall: end of what?");
-		mtrace_fcall[cpu] = f;
+		if (current_stack[cpu] == NULL)
+			die("handle_stack_state: NULL -> start");
 
-		call_stacks[f->tag] = NULL;
+		cs = current_stack[cpu];
+		cs->complete();
+
+		call_stack.erase(cs->start_->tag);
+
+		current_stack[cpu] = NULL;
+
+		if (mtrace_enable.enable ||
+		    cs->start_->access_count <= mtrace_enable.access_count)
+		{
+			complete_fcalls.push_back(CompleteFcall(cs->start_, f));
+		}
+
+		delete cs;
+		break;
+	}
+	default:
+		die("handle_stack_state: bad state %u", f->state);		
 	}
 }
 
@@ -577,10 +633,6 @@ static void handle_call(struct mtrace_call_entry *f)
 
 	if (cpu >= MAX_CPU)
 		die("handle_call: cpu is too large: %u", cpu);
-
-	if (mtrace_fcall[cpu] == NULL)
-		die("handle_call: no call stack");
-
 }
 
 static void handle_access(struct mtrace_access_entry *a)
@@ -714,6 +766,9 @@ static void process_symbols(void *arg, const char *nm_file)
 	FILE *f;
 	int r;
 	size_t len;
+
+	percpu_start = 0;
+	percpu_end = 0;
 
 	f = fopen(nm_file, "r");
 	if (f == NULL)
