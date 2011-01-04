@@ -296,12 +296,12 @@ static void build_label_db(void *arg, const char *name)
 	}
 }
 
-static void build_call_db(void *arg, const char *name)
+static void build_call_trace_db(void *arg, const char *name)
 {
 	const char *create_calls_table = 
-		"CREATE TABLE %s_calls ("
-		"call_id integer primary key, "
-		"call_tag integer, "
+		"CREATE TABLE %s_call_traces ("
+		"call_trace_id integer primary key, "
+		"call_trace_tag integer, "
 		"cpu integer, "
 		"tid "ADDR_TYPE", "
 		"pc "ADDR_TYPE", "
@@ -312,15 +312,15 @@ static void build_call_db(void *arg, const char *name)
 		")";
 
 	const char *insert_call = 
-		"INSERT INTO %s_calls (call_tag, cpu, tid, "
+		"INSERT INTO %s_call_traces (call_trace_tag, cpu, tid, "
 		"pc, name, depth, access_start, access_end) "
 		"VALUES (%lu, %u, "ADDR_FMT", "ADDR_FMT", \"%s\", %u, %lu, %lu)";
 
 	const char *create_index[] = {
-		"CREATE INDEX %s_idx_calls%u ON %s_calls"
+		"CREATE INDEX %s_idx_calls%u ON %s_call_traces"
 		"(cpu, access_start, access_end)",
-		"CREATE INDEX %s_idx_calls%u ON %s_calls"
-		"(cpu, call_tag)" 
+		"CREATE INDEX %s_idx_calls%u ON %s_call_traces"
+		"(cpu, call_trace_tag)" 
 	};
 		
 
@@ -328,7 +328,7 @@ static void build_call_db(void *arg, const char *name)
 	Progress p(complete_fcalls.size(), 0);
 	unsigned int i;
 
-	exec_stmt_noerr(db, NULL, NULL, "DROP TABLE %s_calls", name);
+	exec_stmt_noerr(db, NULL, NULL, "DROP TABLE %s_call_traces", name);
 	exec_stmt(db, NULL, NULL, create_calls_table, name);
 
 	FcallList::iterator it = complete_fcalls.begin();
@@ -422,18 +422,18 @@ static void build_access_db(void *arg, const char *name)
 		"guest_addr "ADDR_TYPE", "
 		"label_id integer, "
 		"label_type integer, "
-		"call_tag integer"
+		"call_trace_tag integer"
 		")";
 
 	const char *select_call = 
-		"SELECT call_tag FROM %s_calls WHERE "
+		"SELECT call_trace_tag FROM %s_call_traces WHERE "
 		"cpu = %u and "
 		"access_start <= %lu and access_end > %lu";
 
 	const char *insert_access = 
 		"INSERT INTO %s_accesses ("
 		"access_id, access_type, cpu, pc, "
-		"host_addr, guest_addr, label_id, label_type, call_tag) "
+		"host_addr, guest_addr, label_id, label_type, call_trace_tag) "
 		"VALUES (%lu, %u, %u, "ADDR_FMT", "ADDR_FMT", "ADDR_FMT", "
 		"%lu, %lu, %lu)";
 
@@ -668,7 +668,7 @@ static void handle_enable(void *arg, struct mtrace_enable_entry *e)
 
 		printf("Building call db '%s' ... ", name);
 		fflush(0);
-		build_call_db(arg, name);
+		build_call_trace_db(arg, name);
 		printf("done!\n");
 		
 		printf("Building access db '%s' ... ", name);

@@ -109,7 +109,7 @@ class CallSummary:
     def get_call_count(self):
         if self.count == None:
             # XXX there might be multiple fcalls per function invocation
-            q = 'SELECT COUNT(*) FROM %s_calls where pc = %ld' % (self.name, self.pc)
+            q = 'SELECT COUNT(*) FROM %s_call_traces where pc = %ld' % (self.name, self.pc)
             c = self.get_conn().cursor()
             c.execute(q)            
             rs = c.fetchall()
@@ -121,7 +121,7 @@ class CallSummary:
 
     def get_sys_name(self):
         if self.sysName == None:
-            q = 'SELECT DISTINCT name FROM %s_calls where pc = %ld' % (self.name, self.pc)
+            q = 'SELECT DISTINCT name FROM %s_call_traces where pc = %ld' % (self.name, self.pc)
             c = self.get_conn().cursor()
             c.execute(q)            
             rs = c.fetchall()
@@ -140,10 +140,10 @@ class CallSummary:
     def get_unique_cline(self):
         if self.uniqueCline == None:
             q = 'SELECT COUNT(DISTINCT guest_addr) FROM %s_accesses WHERE EXISTS ' + \
-                '(SELECT * FROM %s_calls WHERE ' + \
-                '%s_calls.cpu = %s_accesses.cpu ' + \
-                'AND %s_calls.call_tag = %s_accesses.call_tag ' + \
-                'AND %s_calls.pc = %ld)'
+                '(SELECT * FROM %s_call_traces WHERE ' + \
+                '%s_call_traces.cpu = %s_accesses.cpu ' + \
+                'AND %s_call_traces.call_trace_tag = %s_accesses.call_trace_tag ' + \
+                'AND %s_call_traces.pc = %ld)'
 
             q = q % (self.name, self.name,
                      self.name, self.name,
@@ -230,10 +230,10 @@ class CallSummary:
 
             q = 'SELECT DISTINCT label_id FROM %s_accesses WHERE label_type = %u ' + \
                 'AND label_id != 0 AND EXISTS ' + \
-                '(SELECT * FROM %s_calls WHERE ' + \
-                '%s_calls.cpu = %s_accesses.cpu ' + \
-                'AND %s_calls.call_tag = %s_accesses.call_tag ' + \
-                'AND %s_calls.pc = %ld)'
+                '(SELECT * FROM %s_call_traces WHERE ' + \
+                '%s_call_traces.cpu = %s_accesses.cpu ' + \
+                'AND %s_call_traces.call_trace_tag = %s_accesses.call_trace_tag ' + \
+                'AND %s_call_traces.pc = %ld)'
 
             q = q % (self.name, labelType,
                      self.name,
@@ -247,10 +247,10 @@ class CallSummary:
                 labelId = row[0]
                 q = 'SELECT COUNT(label_id) from %s_accesses where label_type = %u ' + \
                     'AND label_id = %u AND EXISTS ' + \
-                    '(SELECT * FROM %s_calls WHERE ' + \
-                    '%s_calls.cpu = %s_accesses.cpu ' + \
-                    'AND %s_calls.call_tag = %s_accesses.call_tag ' + \
-                    'AND %s_calls.pc = %ld)'
+                    '(SELECT * FROM %s_call_traces WHERE ' + \
+                    '%s_call_traces.cpu = %s_accesses.cpu ' + \
+                    'AND %s_call_traces.call_trace_tag = %s_accesses.call_trace_tag ' + \
+                    'AND %s_call_traces.pc = %ld)'
                 q = q % (self.name, labelType,
                          labelId,
                          self.name,
@@ -305,7 +305,7 @@ class MtraceSummary:
         self.dbFile = dbFile
         self.csum = None
 
-        count_calls = 'SELECT pc, COUNT(*) FROM %s_calls GROUP BY pc ORDER BY COUNT(*) DESC' % name
+        count_calls = 'SELECT pc, COUNT(*) FROM %s_call_traces GROUP BY pc ORDER BY COUNT(*) DESC' % name
 
         conn = sqlite3.connect(dbFile)
         c = conn.cursor()
