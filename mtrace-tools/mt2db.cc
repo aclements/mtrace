@@ -44,16 +44,16 @@
 
 extern "C" {
 #include <mtrace-magic.h>
+#include "util.h"
 }
 
 #include "callstack.hh"
 #include "syms.hh"
 
+uint64_t CallStack::call_interval_count;
+
 using namespace::std;
 using namespace::__gnu_cxx;
-
-#define __noret__ __attribute__((noreturn))
-#define __chfmt__ __attribute__ ((format (printf, 1, 2)))
 
 #define MAX_CPU 4
 
@@ -116,6 +116,8 @@ typedef hash_map<uint64_t, CallStack *>  		CallStackHash;
 
 typedef list<struct mtrace_label_entry *>	     	LabelList;
 
+typedef list< list<CallInterval *> >   			CallIntervalListList;
+
 static LabelHash    outstanding_labels[mtrace_label_end];
 static ObjectList   complete_labels[mtrace_label_end];;
 static AccessList   accesses;
@@ -128,29 +130,9 @@ static Syms 	    addr_to_fname;
 static CallStack    *current_stack[MAX_CPU];
 static CallStackHash call_stack;
 
+static CallIntervalListList complete_intervals;
+
 static struct mtrace_enable_entry mtrace_enable;
-
-static void __noret__ __chfmt__ die(const char* errstr, ...) 
-{
-	va_list ap;
-
-	va_start(ap, errstr);
-	vfprintf(stderr, errstr, ap);
-	va_end(ap);
-	fprintf(stderr, "\n");
-	exit(EXIT_FAILURE);
-}
-
-static void __noret__ __chfmt__ edie(const char* errstr, ...) 
-{
-        va_list ap;
-
-        va_start(ap, errstr);
-        vfprintf(stderr, errstr, ap);
-        va_end(ap);
-        fprintf(stderr, ": %s\n", strerror(errno));
-        exit(EXIT_FAILURE);
-}
 
 static void insert_complete_label(ObjectLabel ol)
 {
@@ -348,6 +330,43 @@ static void build_call_trace_db(void *arg, const char *name)
 
 	for (i = 0; i < sizeof(create_index) / sizeof(create_index[0]); i++)
 		exec_stmt(db, NULL, NULL, create_index[i], name, i, name);
+}
+
+static void build_call_interval_db(void *arg, const char *name)
+{
+	const char *create_intervals_table = 
+		"CREATE TABLE %s_call_intervals ("
+		"id integer primary key, "
+		"call_trace_tag integer, "
+		"start_pc "ADDR_TYPE")";
+
+	const char *insert_interval = 
+		"INSERT INTO %s_call_intervals (call_trace_tag, start_pc)"
+		"VALUES (%lu, "ADDR_FMT")";
+
+	sqlite3 *db = (sqlite3 *) arg;
+	Progress p(complete_intervals.size(), 0);
+
+	exec_stmt_noerr(db, NULL, NULL, "DROP TABLE %s_call_intervals", name);
+	exec_stmt(db, NULL, NULL, create_intervals_table, name);
+
+	CallIntervalListList::iterator it = complete_intervals.begin();
+	for (; it != complete_intervals.end(); ++it) {
+		list<CallInterval *> ci_list = (*it);
+
+		while (!ci_list.empty()) {
+			CallInterval *ci = ci_list.front();
+			
+			exec_stmt(db, NULL, NULL, insert_interval, name, 
+				  ci->call_trace_tag_, 
+				  ci->start_pc_);
+
+			ci_list.pop_front();
+			delete ci;
+		}
+
+		p.tick();
+	}
 }
 
 static int get_access_var(void *arg, int ac, char **av, char **colname)
@@ -561,11 +580,14 @@ static void handle_fcall(struct mtrace_fcall_entry *f)
 		cs = it->second;
 
 		/* XXX */
-		call_stack.erase(f->tag);
-		delete cs;
+		//call_stack.erase(f->tag);
+		//delete cs;
 
-		cs = new CallStack(f);
-		call_stack[cs->start_->tag] = cs;
+		//cs = new CallStack(f);
+		//call_stack[cs->start_->tag] = cs;
+
+		cs->start_ = f;
+
 		current_stack[cpu] = cs;
 		break;
 	}
@@ -588,7 +610,7 @@ static void handle_fcall(struct mtrace_fcall_entry *f)
 			die("handle_stack_state: NULL -> pause %lu", f->tag);
 
 		cs = current_stack[cpu];
-		cs->complete();
+		cs->end_current(f->access_count);
 
 		current_stack[cpu] = NULL;
 
@@ -607,7 +629,7 @@ static void handle_fcall(struct mtrace_fcall_entry *f)
 			die("handle_stack_state: NULL -> start");
 
 		cs = current_stack[cpu];
-		cs->complete();
+		cs->end_current(f->access_count);
 
 		call_stack.erase(cs->start_->tag);
 
@@ -617,6 +639,7 @@ static void handle_fcall(struct mtrace_fcall_entry *f)
 		    cs->start_->access_count <= mtrace_enable.access_count)
 		{
 			complete_fcalls.push_back(CompleteFcall(cs->start_, f));
+			complete_intervals.push_back(cs->timeline_);
 		}
 
 		delete cs;
@@ -629,10 +652,22 @@ static void handle_fcall(struct mtrace_fcall_entry *f)
 
 static void handle_call(struct mtrace_call_entry *f)
 {
-	int cpu = f->cpu;
+	CallStack *cs;
+	int cpu;
 
+	cpu = f->cpu;
 	if (cpu >= MAX_CPU)
 		die("handle_call: cpu is too large: %u", cpu);
+
+	if (current_stack[cpu] == NULL)
+		die("handle_stack_state: NULL -> start");
+
+	cs = current_stack[cpu];
+
+	if (f->ret)
+		cs->pop(f);
+	else
+		cs->push(f);
 }
 
 static void handle_access(struct mtrace_access_entry *a)
@@ -666,9 +701,14 @@ static void handle_enable(void *arg, struct mtrace_enable_entry *e)
 
 		build_label_db(arg, name);
 
-		printf("Building call db '%s' ... ", name);
+		printf("Building call_traces db '%s' ... ", name);
 		fflush(0);
 		build_call_trace_db(arg, name);
+		printf("done!\n");
+
+		printf("Building call_intervals db '%s' ... ", name);
+		fflush(0);
+		build_call_interval_db(arg, name);
 		printf("done!\n");
 		
 		printf("Building access db '%s' ... ", name);

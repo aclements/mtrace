@@ -13,7 +13,7 @@ CWARNS	= -Wformat=2 -Wextra -Wmissing-noreturn -Wwrite-strings -Wshadow \
 CFLAGS  = -Wall -Werror $(CWARNS) -I$(QEMUDIR) -g -O2
 LDFLAGS = -lsqlite3
 
-HDRS	= $(QEMUDIR)/mtrace-magic.h syms.hh callstack.hh
+HDRS	= $(QEMUDIR)/mtrace-magic.h syms.hh callstack.hh util.h
 
 all: mt2db
 
