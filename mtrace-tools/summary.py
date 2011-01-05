@@ -535,7 +535,7 @@ def usage():
 """
     exit(1)
 
-def main(argv=None):
+def main(argv = None):
     if argv is None:
         argv = sys.argv
     if len(argv) < 3:
