@@ -760,34 +760,40 @@ static void handle_segment(struct mtrace_segment_entry *seg)
 
 static void process_log(void *arg, gzFile log)
 {
-	union mtrace_entry entry;
+	union mtrace_entry *entry;
 	int r;
+
+	// XXX temp fix.
+	entry = (union mtrace_entry *)malloc(sizeof(*entry));
 
 	printf("Scanning log file ...\n");
 	fflush(0);
-        while ((r = read_entry(log, &entry)) > 0) {
-		switch(entry.h.type) {
+        while ((r = read_entry(log, entry)) > 0) {
+		switch(entry->h.type) {
 		case mtrace_entry_label:
-			handle_label(&entry.label);
+			handle_label(&entry->label);
 			break;
 		case mtrace_entry_access:
-			handle_access(&entry.access);
+			handle_access(&entry->access);
 			break;
 		case mtrace_entry_enable:
-			handle_enable(arg, &entry.enable);
+			handle_enable(arg, &entry->enable);
 			break;
 		case mtrace_entry_fcall:
-			handle_fcall(&entry.fcall);
+			handle_fcall(&entry->fcall);
 			break;
 		case mtrace_entry_segment:
-			handle_segment(&entry.seg);
+			handle_segment(&entry->seg);
 			break;
 		case mtrace_entry_call:
-			handle_call(&entry.call);
+			handle_call(&entry->call);
 			break;
 		default:
-			die("bad type %u", entry.h.type);
+			die("bad type %u", entry->h.type);
 		}
+
+		// XXX temp fix.
+		entry = (union mtrace_entry *)malloc(sizeof(*entry));
 	}
 	if (r < 0)
 		die("failed to read log file");
