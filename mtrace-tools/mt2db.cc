@@ -752,40 +752,39 @@ static void handle_segment(struct mtrace_segment_entry *seg)
 	// we handle the final segment.
 }
 
-static void process_log(void *arg, union mtrace_entry *entry, unsigned long size)
+static void process_log(void *arg, gzFile log)
 {
-	char *end;
-
-	end = ((char *)entry) + size;
+	union mtrace_entry entry;
+	int r;
 
 	printf("Scanning log file ...\n");
 	fflush(0);
-	while ((char *)entry != end) {
-		switch(entry->h.type) {
+        while ((r = read_entry(log, &entry)) > 0) {
+		switch(entry.h.type) {
 		case mtrace_entry_label:
-			handle_label(&entry->label);
+			handle_label(&entry.label);
 			break;
 		case mtrace_entry_access:
-			handle_access(&entry->access);
+			handle_access(&entry.access);
 			break;
 		case mtrace_entry_enable:
-			handle_enable(arg, &entry->enable);
+			handle_enable(arg, &entry.enable);
 			break;
 		case mtrace_entry_fcall:
-			handle_fcall(&entry->fcall);
+			handle_fcall(&entry.fcall);
 			break;
 		case mtrace_entry_segment:
-			handle_segment(&entry->seg);
+			handle_segment(&entry.seg);
 			break;
 		case mtrace_entry_call:
-			handle_call(&entry->call);
+			handle_call(&entry.call);
 			break;
 		default:
-			die("bad type %u", entry->h.type);
+			die("bad type %u", entry.h.type);
 		}
-                entry = (union mtrace_entry *)(((char *)entry) + entry->h.size);
 	}
-
+	if (r < 0)
+		die("failed to read log file");
 	printf("all done!\n");
 }
 
@@ -878,28 +877,18 @@ static void process_symbols(void *arg, const char *nm_file)
 
 int main(int ac, char **av)
 {
-	union mtrace_entry *entry;
-	struct stat buf;
 	void *arg;
-	int fd;
-	
+        gzFile log;
+
 	if (ac != 4)
 		die("usage: %s mtrace-log-file symbol-file database", av[0]);
 
-	fd = open(av[1], O_RDONLY);
-	if (fd < 0)
-		edie("open %s", av[1]);
-
-	if (fstat(fd, &buf))
-		edie("fstat %s", av[1]);
-
-	entry = (union mtrace_entry *)mmap(NULL, buf.st_size, 
-					   PROT_READ, MAP_PRIVATE, fd, 0);
-	if (entry == MAP_FAILED)
-		edie("mmap failed");
+        log = gzopen(av[1], "rb");
+        if (!log)
+		edie("gzopen %s", av[1]);
 
 	arg = open_db(av[3]);
 	process_symbols(arg, av[2]);
-	process_log(arg, entry, buf.st_size);
+	process_log(arg, log);
 	return 0;
 }

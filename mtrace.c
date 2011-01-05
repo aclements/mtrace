@@ -27,6 +27,7 @@
 #define QEMU_MTRACE
 #include "mtrace-magic.h"
 #include "mtrace.h"
+#include <zlib.h>
 
 /* 64-byte cache lines */
 #define MTRACE_CLINE_SHIFT	6
@@ -36,7 +37,7 @@
 
 static int mtrace_system_enable;
 static int mtrace_enable;
-static FILE *mtrace_file;
+static gzFile mtrace_file;
 static void (*mtrace_log_entry)(union mtrace_entry *);
 static int mtrace_cline_track = 1;
 static uint64_t mtrace_access_count;
@@ -45,9 +46,9 @@ static int mtrace_call_trace;
 
 void mtrace_log_file_set(const char *path)
 {
-    mtrace_file = fopen(path, "w");
+    mtrace_file = gzopen(path, "wb");
     if (mtrace_file == NULL) {
-	perror("mtrace: fopen");
+	perror("mtrace: gzopen");
 	abort();
     }
 }
@@ -77,7 +78,7 @@ static void mtrace_log_entry_text(union mtrace_entry *entry)
 
     switch(entry->h.type) {
     case mtrace_entry_label:
-	fprintf(mtrace_file, "%-3s [%-3u  %16s  %016lx  %016lx  %016lx  %016lx]\n",
+	gzprintf(mtrace_file, "%-3s [%-3u  %16s  %016lx  %016lx  %016lx  %016lx]\n",
 		"T",
 		entry->label.label_type,
 		entry->label.str,
@@ -87,7 +88,7 @@ static void mtrace_log_entry_text(union mtrace_entry *entry)
 		entry->h.access_count);
 	break;
     case mtrace_entry_access:
-	fprintf(mtrace_file, "%-3s [%-3u %16lu  %016lx  %016lx  %016lx]\n", 
+	gzprintf(mtrace_file, "%-3s [%-3u %16lu  %016lx  %016lx  %016lx]\n", 
 		access_type_to_str[entry->access.access_type],
 		entry->h.cpu,
 		entry->h.access_count,
@@ -96,11 +97,11 @@ static void mtrace_log_entry_text(union mtrace_entry *entry)
 		entry->access.guest_addr);
 	break;
     case mtrace_entry_enable:
-	fprintf(mtrace_file, "%-3s [%u]\n", 
+	gzprintf(mtrace_file, "%-3s [%u]\n", 
 		"E", entry->enable.enable);
 	break;
     case mtrace_entry_fcall:
-	fprintf(mtrace_file, "%-3s [%-3u  %16lu  %16lu  %016lx"
+	gzprintf(mtrace_file, "%-3s [%-3u  %16lu  %16lu  %016lx"
 		"  %016lx  %4u  %1u]\n",
 		"C",
 		entry->h.cpu,
@@ -112,7 +113,7 @@ static void mtrace_log_entry_text(union mtrace_entry *entry)
 		entry->fcall.state);
 	break;
     case mtrace_entry_segment:
-	fprintf(mtrace_file, "%-3s [%-3u  %3u  %16lx %16lx]\n",
+	gzprintf(mtrace_file, "%-3s [%-3u  %3u  %16lx %16lx]\n",
 		"S",
 		entry->h.cpu,
 		entry->h.type,
@@ -120,7 +121,7 @@ static void mtrace_log_entry_text(union mtrace_entry *entry)
 		entry->seg.endaddr);
 	break;
     case mtrace_entry_call:
-	fprintf(mtrace_file, "%-3s [%-3u  %4s  %16lu  %16lx %16lx]\n",
+	gzprintf(mtrace_file, "%-3s [%-3u  %4s  %16lu  %16lx %16lx]\n",
 		"L",
 		entry->h.cpu,
 		entry->call.ret ? "ret" : "call",
@@ -137,9 +138,9 @@ static void mtrace_log_entry_text(union mtrace_entry *entry)
 static void mtrace_log_entry_binary(union mtrace_entry *entry)
 {
     size_t r;
-    r = fwrite(entry, entry->h.size, 1, mtrace_file);
-    if (r != 1) {
-	perror("mtrace_log_entry_binary: fwrite");
+    r = gzwrite(mtrace_file, entry, entry->h.size);
+    if (r != entry->h.size) {
+	perror("mtrace_log_entry_binary: gzwrite");
 	abort();
     }
 }
@@ -549,6 +550,13 @@ void mtrace_cline_track_free(uint8_t *cline_track)
 	qemu_vfree(cline_track);
 }
 
+static void mtrace_cleanup(void)
+{
+    if (mtrace_file)
+	gzclose(mtrace_file);
+    mtrace_file = NULL;
+}
+
 void mtrace_init(void)
 {
     if (!mtrace_system_enable)
@@ -558,4 +566,5 @@ void mtrace_init(void)
 	mtrace_file = stderr;
     if (mtrace_log_entry == NULL)
 	mtrace_log_entry = mtrace_log_entry_text;
+    atexit(mtrace_cleanup);
 }
