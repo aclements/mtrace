@@ -111,31 +111,6 @@ class MtraceBacktracer:
     def __iter__(self):
         return MtraceBacktracer.Iter(self)
 
-def walk_call_stack(conn, dataName, topId):
-    c = conn.cursor()
-
-    print 'topId %lu'  % (topId)
-
-    q = 'SELECT ret_id, end_pc FROM %s_call_intervals WHERE id = %lu'
-    q = q % (dataName,
-             topId)
-    c.execute(q)
-    rs = c.fetchall()
-    if len(rs) != 1:
-        raise Exception('unexpected result')
-
-    retId = rs[0][0]
-    startPc = rs[0][1]
-
-    print 'startPc %lx' % ( uhex(startPc) )
-
-    if retId == 0:
-        print 'End'
-    else:
-        walk_call_stack(conn, dataName, retId)
-
-    c.close()
-
 def main(argv = None):
     if argv is None:
         argv = sys.argv
@@ -147,47 +122,9 @@ def main(argv = None):
     accessId = int(argv[3])
 
     bt = MtraceBacktracer(dbFile, dataName, accessId)
-    print bt.get_depth()
 
     for interval in bt:
         print interval
-
-    print '------------'
-
-    conn = sqlite3.connect(dbFile)
-    c = conn.cursor()
-
-    q = 'SELECT cpu, pc FROM %s_accesses WHERE access_id = %u'
-    q = q % (dataName,
-             accessId)
-
-    c.execute(q)
-    rs = c.fetchall()
-    if len(rs) != 1:
-        raise Exception('unexpected result')
-
-    cpu = rs[0][0]
-    pc = rs[0][1]
-
-    print 'cpu %u pc %lx' % (cpu, uhex(pc))
-    
-    q = 'SELECT id FROM %s_call_intervals WHERE cpu = %u AND ' + \
-        'access_start < %lu AND %lu <= access_end'
-    q = q % (dataName,
-             cpu,
-             accessId,
-             accessId)
-    c.execute(q)
-    rs = c.fetchall()
-    if len(rs) != 1:
-        raise Exception('unexpected result')
-
-    topId = rs[0][0]
-    print topId
-
-    walk_call_stack(conn, dataName, topId);
-    
-    c.close()
 
 if __name__ == "__main__":
     sys.exit(main())
