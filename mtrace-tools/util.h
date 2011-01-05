@@ -27,17 +27,17 @@ static void __noret__ __chfmt__ edie(const char* errstr, ...)
         exit(EXIT_FAILURE);
 }
 
-static int read_entry(gzFile fp, union mtrace_entry *entryOut)
+static int read_entry(gzFile fp, union mtrace_entry *entry_out)
 {
 	size_t r, left;
-	r = gzread(fp, entryOut, sizeof entryOut->h);
-	if (r != sizeof entryOut->h)
+	r = gzread(fp, entry_out, sizeof(entry_out->h));
+	if (r != sizeof(entry_out->h))
 		return r == 0 ? 0 : -1;
-	if (entryOut->h.size > sizeof *entryOut)
+	if (entry_out->h.size > sizeof(*entry_out))
 		die("entry too big: %u > %u",
-		    (unsigned)entryOut->h.size, (unsigned)sizeof *entryOut);
-	left = entryOut->h.size - sizeof entryOut->h;
-	r = gzread(fp, ((char*)entryOut) + sizeof entryOut->h, left);
+		    (unsigned)entry_out->h.size, (unsigned)sizeof(*entry_out));
+	left = entry_out->h.size - sizeof(entry_out->h);
+	r = gzread(fp, ((char*)entry_out) + sizeof(entry_out->h), left);
 	if (r != left)
 		return -1;
 	return 1;

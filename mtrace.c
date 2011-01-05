@@ -227,7 +227,7 @@ static void mtrace_access_dump(mtrace_access_t type, target_ulong host_addr,
 	return;
     
     entry.h.type = mtrace_entry_access;
-    entry.h.size = sizeof entry;
+    entry.h.size = sizeof(entry);
     entry.h.cpu = cpu_single_env->cpu_index;
     entry.h.access_count = access_count;
     entry.access_type = type;
@@ -369,7 +369,7 @@ static void mtrace_enable_set(target_ulong b, target_ulong str_addr,
 
     mtrace_enable = !!b;
     enable.h.type = mtrace_entry_enable;
-    enable.h.size = sizeof enable;
+    enable.h.size = sizeof(enable);
     enable.h.cpu = 0;
     enable.h.access_count = mtrace_access_count;
     enable.enable = mtrace_enable;
@@ -427,13 +427,13 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
     union mtrace_entry entry;
     int r;
 
-    if (len > sizeof entry) {
+    if (len > sizeof(entry)) {
 	fprintf(stderr, "mtrace_entry_register: entry too big: %lu > %u\n",
-		(unsigned long)len, (unsigned)sizeof entry);
+		(unsigned long)len, (unsigned)sizeof(entry));
 	return;
     }
 
-    // (Could skip copying the header)
+    /* (Could skip copying the header) */
     r = cpu_memory_rw_debug(cpu_single_env, entry_addr, (uint8_t *)&entry, len, 0);
     if (r) {
 	fprintf(stderr, "mtrace_entry_register: cpu_memory_rw_debug failed\n");
@@ -448,7 +448,7 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
         entry.h.cpu = cpu;
     entry.h.access_count = mtrace_access_count;
 
-    // Special handling
+    /* Special handling */
     if (type == mtrace_entry_label) {
 	/*
 	 * XXX bug -- guest_addr might cross multiple host memory allocations,
@@ -466,7 +466,7 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
 
     mtrace_log_entry(&entry);
 
-    // Special handling
+    /* Special handling */
     if (type == mtrace_entry_fcall)
         mtrace_call_stack_active[entry.h.cpu] =
             (entry.fcall.state == mtrace_start ||
@@ -512,7 +512,7 @@ void mtrace_inst_call(target_ulong target_pc, target_ulong return_pc,
 	return;
 
     call.h.type = mtrace_entry_call;
-    call.h.size = sizeof call;
+    call.h.size = sizeof(call);
     call.h.cpu = cpu;
     call.h.access_count = mtrace_access_count;
     
