@@ -212,16 +212,16 @@ static void build_labelx_db(void *arg, const char *name,
 {
 	const char *create_label_table = 
 		"CREATE TABLE %s_labels%u ("
-		"label_id integer primary key, "
-		"str char(32), "
-		"alloc_pc "ADDR_TYPE", "
-		"host_addr "ADDR_TYPE", "
-		"host_addr_end "ADDR_TYPE", "
-		"guest_addr "ADDR_TYPE", "
-		"guest_addr_end "ADDR_TYPE", "
-		"bytes integer, "
-		"access_start integer, "
-		"access_end integer"
+		"label_id     	     INTEGER PRIMARY KEY, "
+		"str 		     CHAR(32), "
+		"alloc_pc 	     "ADDR_TYPE", "
+		"host_addr 	     "ADDR_TYPE", "
+		"host_addr_end 	     "ADDR_TYPE", "
+		"guest_addr 	     "ADDR_TYPE", "
+		"guest_addr_end      "ADDR_TYPE", "
+		"bytes 		     INTEGER, "
+		"access_start 	     INTEGER, "
+		"access_end 	     INTEGER"
 		")";
 
 	const char *insert_label = 
@@ -282,15 +282,15 @@ static void build_call_trace_db(void *arg, const char *name)
 {
 	const char *create_calls_table = 
 		"CREATE TABLE %s_call_traces ("
-		"call_trace_id integer primary key, "
-		"call_trace_tag integer, "
-		"cpu integer, "
-		"tid "ADDR_TYPE", "
-		"pc "ADDR_TYPE", "
-		"name VARCHAR(32), "
-		"depth integer, "
-		"access_start integer, "
-		"access_end integer"
+		"call_trace_id 	   INTEGER primary key, "
+		"call_trace_tag    INTEGER, "
+		"cpu 		   INTEGER, "
+		"tid 		   "ADDR_TYPE", "
+		"pc 		   "ADDR_TYPE", "
+		"name 		   VARCHAR(32), "
+		"depth 		   INTEGER, "
+		"access_start 	   INTEGER, "
+		"access_end 	   INTEGER"
 		")";
 
 	const char *insert_call = 
@@ -336,12 +336,13 @@ static void build_call_interval_db(void *arg, const char *name)
 {
 	const char *create_intervals_table = 
 		"CREATE TABLE %s_call_intervals ("
-		"id integer PRIMARY KEY, "
+		"id 	      	INTEGER PRIMARY KEY, "
 		"call_trace_tag INTEGER, "
-		"cpu INTEGER, "
-		"start_pc "ADDR_TYPE", "
-		"access_start INTEGER, "
-		"access_end INTEGER)";
+		"cpu 		INTEGER, "
+		"start_pc 	"ADDR_TYPE", "
+		"access_start 	INTEGER, "
+		"access_end 	INTEGER"
+		")";
 
 	const char *insert_interval = 
 		"INSERT INTO %s_call_intervals (call_trace_tag, cpu, start_pc, "
@@ -438,15 +439,15 @@ static void build_access_db(void *arg, const char *name)
 {
 	const char *create_access_table = 
 		"CREATE TABLE %s_accesses ("
-		"access_id integer, "
-		"access_type integer, "
-		"cpu integer, "
-		"pc "ADDR_TYPE", "
-		"host_addr "ADDR_TYPE", "
-		"guest_addr "ADDR_TYPE", "
-		"label_id integer, "
-		"label_type integer, "
-		"call_trace_tag integer"
+		"access_id    		  INTEGER, "
+		"access_type 		  INTEGER, "
+		"cpu 			  INTEGER, "
+		"pc 			  "ADDR_TYPE", "
+		"host_addr 		  "ADDR_TYPE", "
+		"guest_addr 		  "ADDR_TYPE", "
+		"label_id 		  INTEGER, "
+		"label_type 		  INTEGER, "
+		"call_trace_tag 	  INTEGER"
 		")";
 
 	const char *select_call = 
