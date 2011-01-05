@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-import sqlite3
+import mtrace
 import sys
 
 # XXX there must be a better way..
@@ -21,45 +21,36 @@ class MtraceCallInterval:
 
 class MtraceBacktracer:
     def __init__(self, dbFile, dataName, accessId):
-        self.dbFile = dbFile
+        self.mtraceDB = mtrace.MtraceDB(dbFile)
         self.dataName = dataName
         self.accessId = accessId
 
         self.topId = None
         self.frames = None
 
-    def __walk_call_stack(self, c, currentId):
+    def __walk_call_stack(self, currentId):
         q = 'SELECT ret_id, end_pc FROM %s_call_intervals WHERE id = %lu'
         q = q % (self.dataName,
                  currentId)
-        c.execute(q)
-        rs = c.fetchall()
-        if len(rs) != 1:
-            raise Exception('unexpected result')
-        
-        retId = rs[0][0]
-        pc = rs[0][1]
+
+        r = self.mtraceDB.exec_single(q)
+
+        retId = r[0]
+        pc = r[1]
 
         self.frames.append(MtraceCallInterval(pc))
-                
+
         if retId != 0:
-            self.__walk_call_stack(c, retId)
+            self.__walk_call_stack(retId)
 
     def __build_frames(self):
-        conn = sqlite3.connect(self.dbFile)
-        c = conn.cursor()
-
         q = 'SELECT cpu, pc FROM %s_accesses WHERE access_id = %u'
         q = q % (self.dataName,
                  self.accessId)
 
-        c.execute(q)
-        rs = c.fetchall()
-        if len(rs) != 1:
-            raise Exception('unexpected result')
-
-        cpu = rs[0][0]
-        pc = rs[0][1]
+        r = self.mtraceDB.exec_single(q)
+        cpu = r[0]
+        pc = r[1]
         
         self.frames = []
         self.frames.append(MtraceCallInterval(pc))
@@ -70,16 +61,9 @@ class MtraceBacktracer:
                  cpu,
                  self.accessId,
                  self.accessId)
-        c.execute(q)
-        rs = c.fetchall()
-        if len(rs) != 1:
-            raise Exception('unexpected result')
-        
-        topId = rs[0][0]
 
-        self.__walk_call_stack(c, topId)
-
-        c.close()
+        topId = self.mtraceDB.exec_single(q)[0]
+        self.__walk_call_stack(topId)
 
     def get_depth(self):
         if self.frames == None:
