@@ -257,7 +257,7 @@ static void build_labelx_db(void *arg, const char *name,
 			  ol.label_->guest_addr, 
 			  ol.label_->guest_addr + ol.label_->bytes, 
 			  ol.label_->bytes, 
-			  ol.label_->access_count, 
+			  ol.label_->h.access_count, 
 			  ol.access_count_end_);
 
 		p.tick();
@@ -321,9 +321,9 @@ static void build_call_trace_db(void *arg, const char *name)
 		if (fname == NULL)
 			fname = "(unknown)";
 
-		exec_stmt(db, NULL, NULL, insert_call, name, cf.start_->tag, cf.start_->cpu,
+		exec_stmt(db, NULL, NULL, insert_call, name, cf.start_->tag, cf.start_->h.cpu,
 			  cf.start_->tid, cf.start_->pc, fname, cf.start_->depth,
-			  cf.start_->access_count, cf.stop_->access_count);
+			  cf.start_->h.access_count, cf.stop_->h.access_count);
 
 		p.tick();
 	}
@@ -484,20 +484,20 @@ static void build_access_db(void *arg, const char *name)
 		int label_type = 0;
 		uint64_t call_tag = 0;
 
-		get_object(db, name, a->access_count, a->guest_addr,
+		get_object(db, name, a->h.access_count, a->guest_addr,
 			   &label_id, &label_type);
 
 		exec_stmt(db, get_call, (void*)&call_tag, select_call, 
 			  name,
-			  a->cpu, 
-			  a->access_count,
-			  a->access_count);
+			  a->h.cpu, 
+			  a->h.access_count,
+			  a->h.access_count);
 
 		exec_stmt(db, NULL, NULL, insert_access,
 			  name,
-			  a->access_count, 
+			  a->h.access_count, 
 			  a->access_type, 
-			  a->cpu,
+			  a->h.cpu,
 			  a->pc,
 			  a->host_addr,
 			  a->guest_addr,
@@ -559,10 +559,10 @@ static void handle_label(struct mtrace_label_entry *l)
 				    l->label_type);
 		} else {
 			if (mtrace_enable.enable || 
-			    (it->second->access_count <= 
-			     mtrace_enable.access_count))
+			    (it->second->h.access_count <= 
+			     mtrace_enable.h.access_count))
 			{
-				ObjectLabel ol(it->second, l->access_count);
+				ObjectLabel ol(it->second, l->h.access_count);
 				insert_complete_label(ol);
 			}
 			o->erase(it);
@@ -572,7 +572,7 @@ static void handle_label(struct mtrace_label_entry *l)
 
 static void handle_fcall(struct mtrace_fcall_entry *f)
 {
-	int cpu = f->cpu;
+	int cpu = f->h.cpu;
 
 	if (cpu >= MAX_CPU)
 		die("handle_fcall: cpu is too large: %u", cpu);
@@ -622,12 +622,12 @@ static void handle_fcall(struct mtrace_fcall_entry *f)
 			die("handle_stack_state: NULL -> pause %lu", f->tag);
 
 		cs = current_stack[cpu];
-		cs->end_current(f->access_count);
+		cs->end_current(f->h.access_count);
 
 		current_stack[cpu] = NULL;
 
 		if (mtrace_enable.enable ||
-		    cs->start_->access_count <= mtrace_enable.access_count)
+		    cs->start_->h.access_count <= mtrace_enable.h.access_count)
 		{
 			complete_fcalls.push_back(CompleteFcall(cs->start_, f));
 		}
@@ -641,14 +641,14 @@ static void handle_fcall(struct mtrace_fcall_entry *f)
 			die("handle_stack_state: NULL -> start");
 
 		cs = current_stack[cpu];
-		cs->end_current(f->access_count);
+		cs->end_current(f->h.access_count);
 
 		call_stack.erase(cs->start_->tag);
 
 		current_stack[cpu] = NULL;
 
 		if (mtrace_enable.enable ||
-		    cs->start_->access_count <= mtrace_enable.access_count)
+		    cs->start_->h.access_count <= mtrace_enable.h.access_count)
 		{
 			complete_fcalls.push_back(CompleteFcall(cs->start_, f));
 			complete_intervals.push_back(cs->timeline_);
@@ -667,7 +667,7 @@ static void handle_call(struct mtrace_call_entry *f)
 	CallTrace *cs;
 	int cpu;
 
-	cpu = f->cpu;
+	cpu = f->h.cpu;
 	if (cpu >= MAX_CPU)
 		die("handle_call: cpu is too large: %u", cpu);
 
@@ -758,51 +758,39 @@ static void handle_segment(struct mtrace_segment_entry *seg)
 	// we handle the final segment.
 }
 
-static void process_log(void *arg, union mtrace_entry *entry, unsigned long size)
+static void process_log(void *arg, gzFile log)
 {
-	char *end;
-
-	end = ((char *)entry) + size;
+	union mtrace_entry entry;
+	int r;
 
 	printf("Scanning log file ...\n");
 	fflush(0);
-	while ((char *)entry != end) {
-		switch(entry->type) {
+        while ((r = read_entry(log, &entry)) > 0) {
+		switch(entry.h.type) {
 		case mtrace_entry_label:
-			handle_label(&entry->label);
-			entry = (union mtrace_entry *)
-				(((char *)entry) + sizeof(entry->label));
+			handle_label(&entry.label);
 			break;
 		case mtrace_entry_access:
-			handle_access(&entry->access);
-			entry = (union mtrace_entry *)
-				(((char *)entry) + sizeof(entry->access));
+			handle_access(&entry.access);
 			break;
 		case mtrace_entry_enable:
-			handle_enable(arg, &entry->enable);
-			entry = (union mtrace_entry *)
-				(((char *)entry) + sizeof(entry->enable));
+			handle_enable(arg, &entry.enable);
 			break;
 		case mtrace_entry_fcall:
-			handle_fcall(&entry->fcall);
-			entry = (union mtrace_entry *)
-				(((char *)entry) + sizeof(entry->fcall));
+			handle_fcall(&entry.fcall);
 			break;
 		case mtrace_entry_segment:
-			handle_segment(&entry->seg);
-			entry = (union mtrace_entry *)
-				(((char *)entry) + sizeof(entry->seg));
+			handle_segment(&entry.seg);
 			break;
 		case mtrace_entry_call:
-			handle_call(&entry->call);
-			entry = (union mtrace_entry *)
-				(((char *)entry) + sizeof(entry->call));
+			handle_call(&entry.call);
 			break;
 		default:
-			die("bad type %u", entry->type);
+			die("bad type %u", entry.h.type);
 		}
 	}
-
+	if (r < 0)
+		die("failed to read log file");
 	printf("all done!\n");
 }
 
@@ -839,8 +827,8 @@ static void process_symbols(void *arg, const char *nm_file)
 			struct mtrace_label_entry *l = 
 				(struct mtrace_label_entry *) malloc(sizeof(*l));
 
-			l->type = mtrace_entry_label;
-			l->access_count = 0;
+			l->h.type = mtrace_entry_label;
+			l->h.access_count = 0;
 			l->label_type = mtrace_label_static;
 			strncpy(l->str, str, sizeof(l->str) - 1);
 			l->str[sizeof(l->str) - 1] = 0;
@@ -895,28 +883,18 @@ static void process_symbols(void *arg, const char *nm_file)
 
 int main(int ac, char **av)
 {
-	union mtrace_entry *entry;
-	struct stat buf;
 	void *arg;
-	int fd;
-	
+        gzFile log;
+
 	if (ac != 4)
 		die("usage: %s mtrace-log-file symbol-file database", av[0]);
 
-	fd = open(av[1], O_RDONLY);
-	if (fd < 0)
-		edie("open %s", av[1]);
-
-	if (fstat(fd, &buf))
-		edie("fstat %s", av[1]);
-
-	entry = (union mtrace_entry *)mmap(NULL, buf.st_size, 
-					   PROT_READ, MAP_PRIVATE, fd, 0);
-	if (entry == MAP_FAILED)
-		edie("mmap failed");
+        log = gzopen(av[1], "rb");
+        if (!log)
+		edie("gzopen %s", av[1]);
 
 	arg = open_db(av[3]);
 	process_symbols(arg, av[2]);
-	process_log(arg, entry, buf.st_size);
+	process_log(arg, log);
 	return 0;
 }

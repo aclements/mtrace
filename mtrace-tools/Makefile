@@ -11,7 +11,7 @@ CWARNS	= -Wformat=2 -Wextra -Wmissing-noreturn -Wwrite-strings -Wshadow \
 	   -Wno-deprecated -Wno-format-security
 
 CFLAGS  = -Wall -Werror $(CWARNS) -I$(QEMUDIR) -g -O2
-LDFLAGS = -lsqlite3
+LDFLAGS = -lsqlite3 -lz
 
 HDRS	= $(QEMUDIR)/mtrace-magic.h syms.hh callstack.hh util.h
 
