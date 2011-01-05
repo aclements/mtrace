@@ -23,4 +23,4 @@ $QEMU                                                                   \
      -append "root=/dev/hda console=ttyS0 $cmds"                        \
      -nographic                                                         \
      -mtrace-enable                                                     \
-     -mtrace-file $OUT -mtrace-format binary
+     -mtrace-file $OUT

@@ -1,6 +1,6 @@
 * usage: mt2db mtrace-log-file symbol-file database
   
-  The mtrace-log-file is from QEMU mtace and in binary format.
+  The mtrace-log-file is from QEMU mtace.
 
   The symbol file is for the binaries run while generating the QEMU
   mtrace file.  For Linux you probably want:
