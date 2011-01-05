@@ -4,6 +4,7 @@ QEMUDIR = ..
 INSTDIR = /usr/local/bin
 
 CXX  = g++
+CC   = gcc
 
 CWARNS	= -Wformat=2 -Wextra -Wmissing-noreturn -Wwrite-strings -Wshadow \
 	   -Wno-unused-parameter -Wmissing-format-attribute -fno-builtin \
@@ -15,16 +16,21 @@ LDFLAGS = -lsqlite3 -lz
 
 HDRS	= $(QEMUDIR)/mtrace-magic.h syms.hh callstack.hh util.h
 
-all: mt2db
+all: mt2db mt2text
 
 mt2db: mt2db.cc $(HDRS)
 	@echo "CXX	$@"
 	$(Q)$(CXX) -o $@ $< $(CFLAGS) $(LDFLAGS)
 
-install: mt2db
+mt2text: mt2text.c $(HDRS)
+	@echo "CC	$@"
+	$(Q)$(CC) -o $@ $< $(CFLAGS) $(LDFLAGS)
+
+install: mt2db mt2text
 	@echo "INSTALL  $(INSTDIR)"
 	$(Q)cp mt2db $(INSTDIR)/mt2db
+	$(Q)cp mt2text $(INSTDIR)/mt2text
 
 clean:
 	@echo "CLEAN"
-	$(Q)rm -f mt2db
+	$(Q)rm -f mt2db mt2text
