@@ -63,6 +63,14 @@ static void print_entry(union mtrace_entry *entry)
 		       entry->call.target_pc,
 		       entry->call.return_pc);
 		break;
+	case mtrace_entry_lock:
+		printf("%-3s [%-3u  pc %16lx  lock %16lx  %s]\n",
+		       entry->lock.release ? "r" : (entry->lock.read ? "ar" : "aw"),
+		       entry->h.cpu,
+		       entry->lock.pc,
+		       entry->lock.lock,
+		       entry->lock.str);
+		break;
 	default:
 		fprintf(stderr, "print_entry: bad type %u\n", entry->h.type);
 	}
