@@ -3,9 +3,7 @@
 
 enum {
     MTRACE_ENABLE_SET = 1,
-    MTRACE_LABEL_REGISTER,
-    MTRACE_FCALL_REGISTER,
-    MTRACE_SEGMENT_REGISTER,
+    MTRACE_ENTRY_REGISTER,
 };
 
 typedef enum {
@@ -29,16 +27,24 @@ typedef enum {
 #define __pack__ __attribute__((__packed__))
 
 /*
+ * The common mtrace entry header
+ */
+struct mtrace_entry_header {
+    mtrace_entry_t type;
+    uint16_t size;
+    uint16_t cpu;
+    uint64_t access_count;
+} __pack__;
+
+/*
  * The guest specified a segment for a label/object type
  */
 struct mtrace_segment_entry {
-    mtrace_entry_t type;    
-    uint64_t access_count;
+    struct mtrace_entry_header h;    
 
     uint64_t baseaddr;
     uint64_t endaddr;
     mtrace_label_t object_type;
-    uint16_t cpu;
 } __pack__;
 
 /*
@@ -52,10 +58,8 @@ typedef enum {
 } mtrace_call_state_t;
 
 struct mtrace_fcall_entry {
-    mtrace_entry_t type;    
-    uint64_t access_count;
+    struct mtrace_entry_header h;    
 
-    uint16_t cpu;
     uint64_t tid;
     uint64_t pc;
     uint64_t tag;
@@ -64,10 +68,8 @@ struct mtrace_fcall_entry {
 } __pack__;
 
 struct mtrace_call_entry {
-    mtrace_entry_t type;    
-    uint64_t access_count;
+    struct mtrace_entry_header h;    
 
-    uint16_t cpu;
     uint64_t target_pc;
     uint64_t return_pc;    
     int ret;
@@ -77,8 +79,7 @@ struct mtrace_call_entry {
  * The guest enabled/disabled mtrace and specified an optional string
  */
 struct mtrace_enable_entry {
-    mtrace_entry_t type;
-    uint64_t access_count;
+    struct mtrace_entry_header h;
 
     uint8_t enable;
     char str[32];
@@ -89,8 +90,7 @@ struct mtrace_enable_entry {
  *   [host_addr, host_addr + bytes)
  */
 struct mtrace_label_entry {
-    mtrace_entry_t type;
-    uint64_t access_count;
+    struct mtrace_entry_header h;
 
     uint64_t host_addr;
 
@@ -111,18 +111,16 @@ typedef enum {
 } mtrace_access_t;
 
 struct mtrace_access_entry {
-    mtrace_entry_t type;
-    uint64_t access_count;
+    struct mtrace_entry_header h;
 
     mtrace_access_t access_type;
-    uint16_t cpu;
     uint64_t pc;
     uint64_t host_addr;
     uint64_t guest_addr;
 }__pack__;
 
 union mtrace_entry {
-    mtrace_entry_t type;
+    struct mtrace_entry_header h;
 
     struct mtrace_access_entry access;
     struct mtrace_label_entry label;
@@ -173,7 +171,21 @@ static inline void mtrace_label_register(mtrace_label_t type,
     label.bytes = bytes;
     label.pc = call_site;
 
-    mtrace_magic(MTRACE_LABEL_REGISTER, (unsigned long)&label, 0, 0, 0, 0);
+    mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&label,
+		 mtrace_entry_label, sizeof label, 0, 0);
+}
+
+static inline void mtrace_segment_register(unsigned long baseaddr,
+					   unsigned long endaddr,
+					   mtrace_label_t type,
+					   unsigned long cpu)
+{
+    volatile struct mtrace_segment_entry entry;
+    entry.baseaddr = baseaddr;
+    entry.endaddr = endaddr;
+    entry.object_type = type;
+    mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&entry,
+		 mtrace_entry_segment, sizeof entry, cpu, 0);
 }
 
 static inline void mtrace_fcall_register(unsigned long tid,
@@ -182,15 +194,14 @@ static inline void mtrace_fcall_register(unsigned long tid,
 					 unsigned int depth,
 					 mtrace_call_state_t state)
 {
-    mtrace_magic(MTRACE_FCALL_REGISTER, tid, pc, tag, depth, state);
-}
-
-static inline void mtrace_segment_register(unsigned long baseaddr,
-					   unsigned long endaddr,
-					   mtrace_label_t type,
-					   unsigned long cpu)
-{
-    mtrace_magic(MTRACE_SEGMENT_REGISTER, baseaddr, endaddr, type, cpu, 0);    
+    volatile struct mtrace_fcall_entry entry;
+    entry.tid = tid;
+    entry.pc = pc;
+    entry.tag = tag;
+    entry.depth = depth;
+    entry.state = state;
+    mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&entry,
+		 mtrace_entry_fcall, sizeof entry, ~0, 0);
 }
 
 #endif /* QEMU_MTRACE */

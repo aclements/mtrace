@@ -23,20 +23,20 @@ struct CallTrace {
 	}
 
 	void push(struct mtrace_call_entry *f) {
-		end_current(f->access_count);
+		end_current(f->h.access_count);
 		
 		current_ = new CallInterval();
-		current_->access_start_ = f->access_count;
+		current_->access_start_ = f->h.access_count;
 		current_->id_ = ++call_interval_count;
-		current_->cpu_ = f->cpu;
+		current_->cpu_ = f->h.cpu;
 		current_->start_pc_ = f->target_pc;
 	}
 
 	void pop(struct mtrace_call_entry *f) {
-		end_current(f->access_count);
+		end_current(f->h.access_count);
 
 		current_ = new CallInterval();
-		current_->access_start_ = f->access_count;
+		current_->access_start_ = f->h.access_count;
 		current_->id_ = ++call_interval_count;
 		current_->start_pc_ = f->target_pc;
 	}

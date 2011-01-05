@@ -75,7 +75,7 @@ static void mtrace_log_entry_text(union mtrace_entry *entry)
 	[mtrace_access_iw] = "iw",
     };
 
-    switch(entry->type) {
+    switch(entry->h.type) {
     case mtrace_entry_label:
 	fprintf(mtrace_file, "%-3s [%-3u  %16s  %016lx  %016lx  %016lx  %016lx]\n",
 		"T",
@@ -84,13 +84,13 @@ static void mtrace_log_entry_text(union mtrace_entry *entry)
 		entry->label.host_addr,
 		entry->label.guest_addr,
 		entry->label.bytes,
-		entry->label.access_count);
+		entry->h.access_count);
 	break;
     case mtrace_entry_access:
 	fprintf(mtrace_file, "%-3s [%-3u %16lu  %016lx  %016lx  %016lx]\n", 
 		access_type_to_str[entry->access.access_type],
-		entry->access.cpu,
-		entry->access.access_count,
+		entry->h.cpu,
+		entry->h.access_count,
 		entry->access.pc,
 		entry->access.host_addr,
 		entry->access.guest_addr);
@@ -103,8 +103,8 @@ static void mtrace_log_entry_text(union mtrace_entry *entry)
 	fprintf(mtrace_file, "%-3s [%-3u  %16lu  %16lu  %016lx"
 		"  %016lx  %4u  %1u]\n",
 		"C",
-		entry->fcall.cpu,
-		entry->fcall.access_count,
+		entry->h.cpu,
+		entry->h.access_count,
 		entry->fcall.tid,
 		entry->fcall.pc,
 		entry->fcall.tag,
@@ -114,55 +114,30 @@ static void mtrace_log_entry_text(union mtrace_entry *entry)
     case mtrace_entry_segment:
 	fprintf(mtrace_file, "%-3s [%-3u  %3u  %16lx %16lx]\n",
 		"S",
-		entry->seg.cpu,
-		entry->seg.type,
+		entry->h.cpu,
+		entry->h.type,
 		entry->seg.baseaddr,
 		entry->seg.endaddr);
 	break;
     case mtrace_entry_call:
 	fprintf(mtrace_file, "%-3s [%-3u  %4s  %16lu  %16lx %16lx]\n",
 		"L",
-		entry->call.cpu,
+		entry->h.cpu,
 		entry->call.ret ? "ret" : "call",
-		entry->call.access_count,
+		entry->h.access_count,
 		entry->call.target_pc,
 		entry->call.return_pc);
 	break;
     default:
-	fprintf(stderr, "mtrace_log_entry: bad type %u\n", entry->type);
+	fprintf(stderr, "mtrace_log_entry: bad type %u\n", entry->h.type);
 	abort();
     }
 }
 
 static void mtrace_log_entry_binary(union mtrace_entry *entry)
 {
-    size_t r, n;
-
-    switch(entry->type) {
-    case mtrace_entry_label:
-	n = sizeof(struct mtrace_label_entry);
-	break;
-    case mtrace_entry_access:
-	n = sizeof(struct mtrace_access_entry);
-	break;
-    case mtrace_entry_enable:
-	n = sizeof(struct mtrace_enable_entry);
-	break;
-    case mtrace_entry_fcall:
-	n = sizeof(struct mtrace_fcall_entry);
-	break;
-    case mtrace_entry_segment:
-	n = sizeof(struct mtrace_segment_entry);
-	break;
-    case mtrace_entry_call:
-	n = sizeof(struct mtrace_call_entry);
-	break;
-    default:
-	fprintf(stderr, "mtrace_log_entry: bad type %u\n", entry->type);
-	abort();
-    }
-
-    r = fwrite(entry, n, 1, mtrace_file);
+    size_t r;
+    r = fwrite(entry, entry->h.size, 1, mtrace_file);
     if (r != 1) {
 	perror("mtrace_log_entry_binary: fwrite");
 	abort();
@@ -250,13 +225,14 @@ static void mtrace_access_dump(mtrace_access_t type, target_ulong host_addr,
     if (!mtrace_enable)
 	return;
     
-    entry.type = mtrace_entry_access;
+    entry.h.type = mtrace_entry_access;
+    entry.h.size = sizeof entry;
+    entry.h.cpu = cpu_single_env->cpu_index;
+    entry.h.access_count = access_count;
     entry.access_type = type;
-    entry.cpu = cpu_single_env->cpu_index;
     entry.pc = mtrace_get_pc((unsigned long)retaddr);
     entry.host_addr = host_addr;
     entry.guest_addr = guest_addr;
-    entry.access_count = access_count;
 
     mtrace_log_entry((union mtrace_entry *)&entry);
 }
@@ -391,8 +367,10 @@ static void mtrace_enable_set(target_ulong b, target_ulong str_addr,
     int r;
 
     mtrace_enable = !!b;
-    enable.type = mtrace_entry_enable;
-    enable.access_count = mtrace_access_count;
+    enable.h.type = mtrace_entry_enable;
+    enable.h.size = sizeof enable;
+    enable.h.cpu = 0;
+    enable.h.access_count = mtrace_access_count;
     enable.enable = mtrace_enable;
 
 
@@ -441,86 +419,64 @@ static int mtrace_host_addr(target_ulong guest_addr, target_ulong *host_addr)
     return 0;
 }
 
-static void mtrace_label_register(target_ulong label_addr, target_ulong n2, 
-				  target_ulong n3, target_ulong n4, 
-				  target_ulong n5)
+static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
+                                  target_ulong len, target_ulong cpu,
+                                  target_ulong n5)
 {
-    struct mtrace_label_entry label;
+    union mtrace_entry entry;
     int r;
 
-    r = cpu_memory_rw_debug(cpu_single_env, label_addr, (uint8_t *)&label, sizeof(label), 0);
-    if (r) {
-	fprintf(stderr, "mtrace_label_register: cpu_memory_rw_debug failed\n");
+    if (len > sizeof entry) {
+	fprintf(stderr, "mtrace_entry_register: entry too big: %lu > %u\n",
+		(unsigned long)len, (unsigned)sizeof entry);
 	return;
     }
 
-    label.access_count = mtrace_access_count;
-    label.str[sizeof(label.str) - 1] = 0;
-    label.type = mtrace_entry_label;
-
-    /*
-     * XXX bug -- guest_addr might cross multiple host memory allocations,
-     * which means the [host_addr, host_addr + bytes] is not contiguous.
-     *
-     * A simple solution is probably to log multiple mtrace_label_entrys.
-     */
-    r = mtrace_host_addr(label.guest_addr, &label.host_addr);
+    // (Could skip copying the header)
+    r = cpu_memory_rw_debug(cpu_single_env, entry_addr, (uint8_t *)&entry, len, 0);
     if (r) {
-	fprintf(stderr, "mtrace_label_register: mtrace_host_addr failed (%lx)\n", 
-		label.guest_addr);
+	fprintf(stderr, "mtrace_entry_register: cpu_memory_rw_debug failed\n");
 	return;
     }
 
-    mtrace_log_entry((union mtrace_entry *)&label);
-}
+    entry.h.type = type;
+    entry.h.size = len;
+    if (cpu == ~0)
+        entry.h.cpu = cpu_single_env->cpu_index;
+    else
+        entry.h.cpu = cpu;
+    entry.h.access_count = mtrace_access_count;
 
-static void mtrace_fcall_register(target_ulong tid, target_ulong pc, 
-				  target_ulong tag, target_ulong depth, 
-				  target_ulong state)
-{
-    struct mtrace_fcall_entry fcall;
-    int cpu;
+    // Special handling
+    if (type == mtrace_entry_label) {
+	/*
+	 * XXX bug -- guest_addr might cross multiple host memory allocations,
+	 * which means the [host_addr, host_addr + bytes] is not contiguous.
+	 *
+	 * A simple solution is probably to log multiple mtrace_label_entrys.
+	 */
+	r = mtrace_host_addr(entry.label.guest_addr, &entry.label.host_addr);
+	if (r) {
+	    fprintf(stderr, "mtrace_entry_register: mtrace_host_addr failed (%lx)\n", 
+		    entry.label.guest_addr);
+	    return;
+	}
+    }
 
-    cpu = cpu_single_env->cpu_index;
+    mtrace_log_entry(&entry);
 
-    fcall.type = mtrace_entry_fcall;
-    fcall.tid = tid;
-    fcall.pc = pc;
-    fcall.tag = tag;
-    fcall.depth = depth;
-    fcall.state = state;
-    fcall.cpu = cpu;
-    fcall.access_count = mtrace_access_count;
-
-    mtrace_log_entry((union mtrace_entry *)&fcall);
-    mtrace_call_stack_active[cpu] = 
-	(state == mtrace_start || state == mtrace_resume);
-}
-
-static void mtrace_segment_register(target_ulong baseaddr, target_ulong endaddr,
-				    target_ulong type, target_ulong cpu, 
-				    target_ulong a4)
-{
-    struct mtrace_segment_entry seg;
-
-    seg.type = mtrace_entry_segment;
-    seg.access_count = mtrace_access_count;
-
-    seg.object_type = type;
-    seg.baseaddr = baseaddr;
-    seg.endaddr = endaddr;
-    seg.cpu = cpu;
-
-    mtrace_log_entry((union mtrace_entry *)&seg);
+    // Special handling
+    if (type == mtrace_entry_fcall)
+        mtrace_call_stack_active[entry.h.cpu] =
+            (entry.fcall.state == mtrace_start ||
+             entry.fcall.state == mtrace_resume);
 }
 
 static void (*mtrace_call[])(target_ulong, target_ulong, target_ulong,
 			     target_ulong, target_ulong) = 
 {
     [MTRACE_ENABLE_SET]		= mtrace_enable_set,
-    [MTRACE_LABEL_REGISTER] 	= mtrace_label_register,
-    [MTRACE_FCALL_REGISTER]	= mtrace_fcall_register,
-    [MTRACE_SEGMENT_REGISTER]	= mtrace_segment_register,
+    [MTRACE_ENTRY_REGISTER]	= mtrace_entry_register,
 };
 
 void mtrace_inst_exec(target_ulong a0, target_ulong a1, 
@@ -553,11 +509,12 @@ void mtrace_inst_call(target_ulong target_pc, target_ulong return_pc,
 
     if (!mtrace_call_stack_active[cpu])
 	return;
+
+    call.h.type = mtrace_entry_call;
+    call.h.size = sizeof call;
+    call.h.cpu = cpu;
+    call.h.access_count = mtrace_access_count;
     
-    call.type = mtrace_entry_call;
-    call.access_count = mtrace_access_count;
-    
-    call.cpu = cpu;
     call.target_pc = target_pc;
     call.return_pc = return_pc;
     call.ret = ret;
