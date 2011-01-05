@@ -38,7 +38,6 @@
 static int mtrace_system_enable;
 static int mtrace_enable;
 static gzFile mtrace_file;
-static void (*mtrace_log_entry)(union mtrace_entry *);
 static int mtrace_cline_track = 1;
 static uint64_t mtrace_access_count;
 static int mtrace_call_stack_active[255];
@@ -68,104 +67,14 @@ void mtrace_call_trace_set(int b)
     mtrace_call_trace = b;
 }
 
-static void mtrace_log_entry_text(union mtrace_entry *entry)
-{
-    static const char *access_type_to_str[] = {
-	[mtrace_access_ld] = "ld",
-	[mtrace_access_st] = "st",
-	[mtrace_access_iw] = "iw",
-    };
-
-    switch(entry->h.type) {
-    case mtrace_entry_label:
-	gzprintf(mtrace_file, "%-3s [%-3u  %16s  %016lx  %016lx  %016lx  %016lx]\n",
-		"T",
-		entry->label.label_type,
-		entry->label.str,
-		entry->label.host_addr,
-		entry->label.guest_addr,
-		entry->label.bytes,
-		entry->h.access_count);
-	break;
-    case mtrace_entry_access:
-	gzprintf(mtrace_file, "%-3s [%-3u %16lu  %016lx  %016lx  %016lx]\n", 
-		access_type_to_str[entry->access.access_type],
-		entry->h.cpu,
-		entry->h.access_count,
-		entry->access.pc,
-		entry->access.host_addr,
-		entry->access.guest_addr);
-	break;
-    case mtrace_entry_enable:
-	gzprintf(mtrace_file, "%-3s [%u]\n", 
-		"E", entry->enable.enable);
-	break;
-    case mtrace_entry_fcall:
-	gzprintf(mtrace_file, "%-3s [%-3u  %16lu  %16lu  %016lx"
-		"  %016lx  %4u  %1u]\n",
-		"C",
-		entry->h.cpu,
-		entry->h.access_count,
-		entry->fcall.tid,
-		entry->fcall.pc,
-		entry->fcall.tag,
-		entry->fcall.depth,
-		entry->fcall.state);
-	break;
-    case mtrace_entry_segment:
-	gzprintf(mtrace_file, "%-3s [%-3u  %3u  %16lx %16lx]\n",
-		"S",
-		entry->h.cpu,
-		entry->h.type,
-		entry->seg.baseaddr,
-		entry->seg.endaddr);
-	break;
-    case mtrace_entry_call:
-	gzprintf(mtrace_file, "%-3s [%-3u  %4s  %16lu  %16lx %16lx]\n",
-		"L",
-		entry->h.cpu,
-		entry->call.ret ? "ret" : "call",
-		entry->h.access_count,
-		entry->call.target_pc,
-		entry->call.return_pc);
-	break;
-    default:
-	fprintf(stderr, "mtrace_log_entry: bad type %u\n", entry->h.type);
-	abort();
-    }
-}
-
-static void mtrace_log_entry_binary(union mtrace_entry *entry)
+static void mtrace_log_entry(union mtrace_entry *entry)
 {
     size_t r;
     r = gzwrite(mtrace_file, entry, entry->h.size);
     if (r != entry->h.size) {
-	perror("mtrace_log_entry_binary: gzwrite");
+	perror("mtrace_log_entry: gzwrite");
 	abort();
     }
-}
-
-void mtrace_format_set(const char *id)
-{
-    static struct {
-	const char *id;
-	void (*fn)(union mtrace_entry *);
-    } format[] = {
-	{ "text", mtrace_log_entry_text },
-	{ "binary", mtrace_log_entry_binary },
-    };
-
-    unsigned int i;
-
-    for (i = 0; i < ARRAY_SIZE(format); i++) {
-	if (!strcmp(id, format[i].id)) {
-	    mtrace_log_entry = format[i].fn;
-	    return;
-	}
-    }
-
-    fprintf(stderr, "mtrace_format_set: bad format %s\n", id);
-    abort();
 }
 
 #if 0
@@ -563,8 +472,6 @@ void mtrace_init(void)
 	return;
 
     if (mtrace_file == NULL)
-	mtrace_file = stderr;
-    if (mtrace_log_entry == NULL)
-	mtrace_log_entry = mtrace_log_entry_text;
+	mtrace_log_file_set("mtrace.out");
     atexit(mtrace_cleanup);
 }
