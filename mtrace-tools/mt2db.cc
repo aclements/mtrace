@@ -338,14 +338,15 @@ static void build_call_interval_db(void *arg, const char *name)
 		"CREATE TABLE %s_call_intervals ("
 		"id integer PRIMARY KEY, "
 		"call_trace_tag INTEGER, "
+		"cpu INTEGER, "
 		"start_pc "ADDR_TYPE", "
 		"access_start INTEGER, "
 		"access_end INTEGER)";
 
 	const char *insert_interval = 
-		"INSERT INTO %s_call_intervals (call_trace_tag, start_pc, "
+		"INSERT INTO %s_call_intervals (call_trace_tag, cpu, start_pc, "
 		"access_start, access_end)"
-		"VALUES (%lu, "ADDR_FMT", %lu, %lu)";
+		"VALUES (%lu, %lu, "ADDR_FMT", %lu, %lu)";
 
 	sqlite3 *db = (sqlite3 *) arg;
 	Progress p(complete_intervals.size(), 0);
@@ -362,6 +363,7 @@ static void build_call_interval_db(void *arg, const char *name)
 			
 			exec_stmt(db, NULL, NULL, insert_interval, name, 
 				  ci->call_trace_tag_, 
+				  ci->cpu_,
 				  ci->start_pc_,
 				  ci->access_start_,
 				  ci->access_end_);

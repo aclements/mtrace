@@ -3,6 +3,7 @@ using namespace::std;
 struct CallInterval {
 	uint64_t id_;
 	uint64_t call_trace_tag_;
+	int	 cpu_;
 	
 	uint64_t start_pc_;
 	uint64_t end_pc_;
@@ -27,6 +28,7 @@ struct CallTrace {
 		current_ = new CallInterval();
 		current_->access_start_ = f->access_count;
 		current_->id_ = ++call_interval_count;
+		current_->cpu_ = f->cpu;
 		current_->start_pc_ = f->target_pc;
 	}
 
