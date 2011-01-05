@@ -27,11 +27,7 @@ struct CallTrace {
 	void push(struct mtrace_call_entry *f) {
 		end_current(f->h.access_count, f->return_pc);
 		
-		current_ = new CallInterval();
-		current_->access_start_ = f->h.access_count;
-		current_->id_ = ++call_interval_count;
-		current_->cpu_ = f->h.cpu;
-		current_->start_pc_ = f->target_pc;
+		current_ = new_call_interval(f);
 
 		if (!stack_.empty())
 			current_->ret_ = stack_.top()->id_;
@@ -46,11 +42,7 @@ struct CallTrace {
 		if (!stack_.empty())
 			stack_.pop();
 
-		current_ = new CallInterval();
-		current_->access_start_ = f->h.access_count;
-		current_->id_ = ++call_interval_count;
-		current_->cpu_ = f->h.cpu;
-		current_->start_pc_ = f->target_pc;
+		current_ = new_call_interval(f);
 
 		/* Replace top frame with current */
 		if (!stack_.empty())
@@ -59,6 +51,18 @@ struct CallTrace {
 			current_->ret_ = stack_.top()->id_;
 		}
 		stack_.push(current_);
+	}
+
+	CallInterval *new_call_interval(struct mtrace_call_entry *ce) {
+		CallInterval *ci;
+
+		ci = new CallInterval();
+		ci->access_start_ = ce->h.access_count;
+		ci->id_ = ++call_interval_count;
+		ci->cpu_ = ce->h.cpu;
+		ci->start_pc_ = ce->target_pc;
+
+		return ci;
 	}
 
 	void end_current(uint64_t end_count, uint64_t end_pc) {

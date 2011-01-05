@@ -47,7 +47,7 @@ extern "C" {
 #include "util.h"
 }
 
-#include "callstack.hh"
+#include "calltrace.hh"
 #include "syms.hh"
 
 uint64_t CallTrace::call_interval_count;
@@ -428,9 +428,8 @@ static void get_object(sqlite3 *db, const char *name,
 
 static int get_call(void *arg, int ac, char **av, char **colname)
 {
-	// Call tags are not unique:  
-	//   * One function call might generate multiple fcalls that 
-	//     have the same tag.
+	// Call tags are not unique:  One function call might generate 
+	// multiple fcalls that have the same tag.
 	uint64_t *call_tag = (uint64_t *)arg;
 	uint64_t local_call_tag;
 
@@ -593,13 +592,6 @@ static void handle_fcall(struct mtrace_fcall_entry *f)
 			die("handle_stack_state: unable to find %lu", f->tag);
 
 		cs = it->second;
-
-		/* XXX */
-		//call_stack.erase(f->tag);
-		//delete cs;
-
-		//cs = new CallTrace(f);
-		//call_stack[cs->start_->tag] = cs;
 
 		cs->start_ = f;
 
