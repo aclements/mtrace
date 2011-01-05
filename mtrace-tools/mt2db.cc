@@ -50,7 +50,7 @@ extern "C" {
 #include "callstack.hh"
 #include "syms.hh"
 
-uint64_t CallStack::call_interval_count;
+uint64_t CallTrace::call_interval_count;
 
 using namespace::std;
 using namespace::__gnu_cxx;
@@ -112,7 +112,7 @@ typedef hash_map<uint64_t, struct mtrace_label_entry *> LabelHash;
 typedef list<ObjectLabel> 	  		     	ObjectList;
 typedef list<struct mtrace_access_entry *> 		AccessList;
 typedef list<CompleteFcall> 				FcallList;
-typedef hash_map<uint64_t, CallStack *>  		CallStackHash;
+typedef hash_map<uint64_t, CallTrace *>  		CallTraceHash;
 
 typedef list<struct mtrace_label_entry *>	     	LabelList;
 
@@ -127,8 +127,8 @@ static LabelList    percpu_labels;
 
 static Syms 	    addr_to_fname;
 
-static CallStack    *current_stack[MAX_CPU];
-static CallStackHash call_stack;
+static CallTrace    *current_stack[MAX_CPU];
+static CallTraceHash call_stack;
 
 static CallIntervalListList complete_intervals;
 
@@ -336,13 +336,16 @@ static void build_call_interval_db(void *arg, const char *name)
 {
 	const char *create_intervals_table = 
 		"CREATE TABLE %s_call_intervals ("
-		"id integer primary key, "
-		"call_trace_tag integer, "
-		"start_pc "ADDR_TYPE")";
+		"id integer PRIMARY KEY, "
+		"call_trace_tag INTEGER, "
+		"start_pc "ADDR_TYPE", "
+		"access_start INTEGER, "
+		"access_end INTEGER)";
 
 	const char *insert_interval = 
-		"INSERT INTO %s_call_intervals (call_trace_tag, start_pc)"
-		"VALUES (%lu, "ADDR_FMT")";
+		"INSERT INTO %s_call_intervals (call_trace_tag, start_pc, "
+		"access_start, access_end)"
+		"VALUES (%lu, "ADDR_FMT", %lu, %lu)";
 
 	sqlite3 *db = (sqlite3 *) arg;
 	Progress p(complete_intervals.size(), 0);
@@ -359,7 +362,9 @@ static void build_call_interval_db(void *arg, const char *name)
 			
 			exec_stmt(db, NULL, NULL, insert_interval, name, 
 				  ci->call_trace_tag_, 
-				  ci->start_pc_);
+				  ci->start_pc_,
+				  ci->access_start_,
+				  ci->access_end_);
 
 			ci_list.pop_front();
 			delete ci;
@@ -413,8 +418,6 @@ static int get_call(void *arg, int ac, char **av, char **colname)
 {
 	// Call tags are not unique:  
 	//   * One function call might generate multiple fcalls that 
-	//     have the same tag.
-	//   * Call tags are per CPU, so fcalls from different CPUs might
 	//     have the same tag.
 	uint64_t *call_tag = (uint64_t *)arg;
 	uint64_t local_call_tag;
@@ -567,8 +570,8 @@ static void handle_fcall(struct mtrace_fcall_entry *f)
 
 	switch (f->state) {
 	case mtrace_resume: {
-		CallStackHash::const_iterator it;
-		CallStack *cs;
+		CallTraceHash::const_iterator it;
+		CallTrace *cs;
 
 		if (current_stack[cpu] != NULL)
 			die("handle_stack_state: start -> resume");
@@ -583,7 +586,7 @@ static void handle_fcall(struct mtrace_fcall_entry *f)
 		//call_stack.erase(f->tag);
 		//delete cs;
 
-		//cs = new CallStack(f);
+		//cs = new CallTrace(f);
 		//call_stack[cs->start_->tag] = cs;
 
 		cs->start_ = f;
@@ -592,19 +595,19 @@ static void handle_fcall(struct mtrace_fcall_entry *f)
 		break;
 	}
 	case mtrace_start: {
-		CallStack *cs;
+		CallTrace *cs;
 
 		if (current_stack[cpu] != NULL)
 			die("handle_stack_state: start -> start");
 
-		cs = new CallStack(f);
+		cs = new CallTrace(f);
 		call_stack[cs->start_->tag] = cs;
 		current_stack[cpu] = cs;
 
 		break;
 	}
 	case mtrace_pause: {
-		CallStack *cs;
+		CallTrace *cs;
 
 		if (current_stack[cpu] == NULL)
 			die("handle_stack_state: NULL -> pause %lu", f->tag);
@@ -623,7 +626,7 @@ static void handle_fcall(struct mtrace_fcall_entry *f)
 		break;
 	}
 	case mtrace_done: {
-		CallStack *cs;
+		CallTrace *cs;
 
 		if (current_stack[cpu] == NULL)
 			die("handle_stack_state: NULL -> start");
@@ -652,7 +655,7 @@ static void handle_fcall(struct mtrace_fcall_entry *f)
 
 static void handle_call(struct mtrace_call_entry *f)
 {
-	CallStack *cs;
+	CallTrace *cs;
 	int cpu;
 
 	cpu = f->cpu;

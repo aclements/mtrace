@@ -7,16 +7,16 @@ struct CallInterval {
 	uint64_t start_pc_;
 	uint64_t end_pc_;
 
-	uint64_t start_count_;
-	uint64_t end_count_;
+	uint64_t access_start_;
+	uint64_t access_end_;
 
 	uint64_t prev_;
 	uint64_t next_;
 	uint64_t ret_;
 };
 
-struct CallStack {
-	CallStack(struct mtrace_fcall_entry *f) {
+struct CallTrace {
+	CallTrace(struct mtrace_fcall_entry *f) {
 		start_ = f;
 		current_ = NULL;
 	}
@@ -25,7 +25,7 @@ struct CallStack {
 		end_current(f->access_count);
 		
 		current_ = new CallInterval();
-		current_->start_count_ = f->access_count;
+		current_->access_start_ = f->access_count;
 		current_->id_ = ++call_interval_count;
 		current_->start_pc_ = f->target_pc;
 	}
@@ -34,14 +34,22 @@ struct CallStack {
 		end_current(f->access_count);
 
 		current_ = new CallInterval();
-		current_->start_count_ = f->access_count;
+		current_->access_start_ = f->access_count;
 		current_->id_ = ++call_interval_count;
 		current_->start_pc_ = f->target_pc;
 	}
 
 	void end_current(uint64_t end_count) {
 		if (current_ != NULL) {
-			current_->end_count_ = end_count;
+			if (!timeline_.empty()) {
+				CallInterval *prev;
+				prev = timeline_.back();
+
+				prev->next_ =  current_->id_;
+				current_->prev_ = prev->id_;
+			}
+
+			current_->access_end_ = end_count;
 			timeline_.push_back(current_);
 			current_ = NULL;
 		}
