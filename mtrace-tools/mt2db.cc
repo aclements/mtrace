@@ -340,6 +340,7 @@ static void build_call_interval_db(void *arg, const char *name)
 		"call_trace_tag INTEGER, "
 		"cpu 		INTEGER, "
 		"start_pc 	"ADDR_TYPE", "
+		"end_pc 	"ADDR_TYPE", "
 		"access_start 	INTEGER, "
 		"access_end 	INTEGER, "
 		"prev_id	INTEGER, "
@@ -348,9 +349,9 @@ static void build_call_interval_db(void *arg, const char *name)
 		")";
 
 	const char *insert_interval = 
-		"INSERT INTO %s_call_intervals (call_trace_tag, cpu, start_pc, "
+		"INSERT INTO %s_call_intervals (id, call_trace_tag, cpu, start_pc, end_pc, "
 		"access_start, access_end, prev_id, next_id, ret_id)"
-		"VALUES (%lu, %lu, "ADDR_FMT", %lu, %lu, %lu, %lu, %lu)";
+		"VALUES (%lu, %lu, %lu, "ADDR_FMT", "ADDR_FMT", %lu, %lu, %lu, %lu, %lu)";
 
 	sqlite3 *db = (sqlite3 *) arg;
 	Progress p(complete_intervals.size(), 0);
@@ -364,11 +365,13 @@ static void build_call_interval_db(void *arg, const char *name)
 
 		while (!ci_list.empty()) {
 			CallInterval *ci = ci_list.front();
-			
+
 			exec_stmt(db, NULL, NULL, insert_interval, name, 
+				  ci->id_,
 				  ci->call_trace_tag_, 
 				  ci->cpu_,
 				  ci->start_pc_,
+				  ci->end_pc_,
 				  ci->access_start_,
 				  ci->access_end_,
 				  ci->prev_,
@@ -622,7 +625,7 @@ static void handle_fcall(struct mtrace_fcall_entry *f)
 			die("handle_stack_state: NULL -> pause %lu", f->tag);
 
 		cs = current_stack[cpu];
-		cs->end_current(f->h.access_count);
+		cs->end_current(f->h.access_count, 0);
 
 		current_stack[cpu] = NULL;
 
@@ -641,7 +644,7 @@ static void handle_fcall(struct mtrace_fcall_entry *f)
 			die("handle_stack_state: NULL -> start");
 
 		cs = current_stack[cpu];
-		cs->end_current(f->h.access_count);
+		cs->end_current(f->h.access_count, 0);
 
 		call_stack.erase(cs->start_->tag);
 
