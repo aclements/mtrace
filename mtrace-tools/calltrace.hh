@@ -53,7 +53,7 @@ struct CallTrace {
 		stack_.push(current_);
 	}
 
-	CallInterval *new_call_interval(struct mtrace_call_entry *ce) {
+	static CallInterval *new_call_interval(struct mtrace_call_entry *ce) {
 		CallInterval *ci;
 
 		ci = new CallInterval();
@@ -63,6 +63,18 @@ struct CallTrace {
 		ci->start_pc_ = ce->target_pc;
 
 		return ci;
+	}
+
+	static void free_call_interval(CallInterval *ci) {
+		delete ci;
+	}
+
+	void free_timeline(void) {
+		while (!timeline_.empty()) {
+			CallInterval *ci = timeline_.front();
+			timeline_.pop_front();
+			free_call_interval(ci);
+		}
 	}
 
 	void end_current(uint64_t end_count, uint64_t end_pc) {

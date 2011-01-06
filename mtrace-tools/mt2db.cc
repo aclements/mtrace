@@ -55,7 +55,8 @@ uint64_t CallTrace::call_interval_count;
 using namespace::std;
 using namespace::__gnu_cxx;
 
-#define MAX_CPU 4
+#define MAX_CPU		4
+#define ONE_SHOT 	1
 
 struct ObjectLabel {
 
@@ -70,14 +71,16 @@ struct ObjectLabel {
 	uint64_t access_count_end_;
 };
 
-struct CompleteFcall {
-	CompleteFcall(struct mtrace_fcall_entry *a, struct mtrace_fcall_entry *b) {
-		start_ = a;
-		stop_ = b;
+struct CallTraceRange {
+	CallTraceRange(struct mtrace_fcall_entry *start, 
+			  uint64_t access_stop) 
+	{
+		start_ = start;
+		access_stop_ = access_stop;
 	}
 
 	struct mtrace_fcall_entry *start_;
-	struct mtrace_fcall_entry *stop_;
+	uint64_t access_stop_;
 };
 
 struct Progress {
@@ -111,26 +114,26 @@ struct Progress {
 typedef hash_map<uint64_t, struct mtrace_label_entry *> LabelHash;
 typedef list<ObjectLabel> 	  		     	ObjectList;
 typedef list<struct mtrace_access_entry *> 		AccessList;
-typedef list<CompleteFcall> 				FcallList;
+typedef list<CallTraceRange> 				CallRangeList;
 typedef hash_map<uint64_t, CallTrace *>  		CallTraceHash;
 
 typedef list<struct mtrace_label_entry *>	     	LabelList;
 
-typedef list< list<CallInterval *> >   			CallIntervalListList;
+typedef list< list<CallInterval *> >   			CallIntervalList;
 
-static LabelHash    outstanding_labels[mtrace_label_end];
-static ObjectList   complete_labels[mtrace_label_end];;
-static AccessList   accesses;
-static FcallList    complete_fcalls;
+static LabelHash    	outstanding_labels[mtrace_label_end];
+static ObjectList	complete_labels[mtrace_label_end];;
+static AccessList	accesses;
+static CallRangeList    complete_fcalls;
 
-static LabelList    percpu_labels;
+static LabelList    	percpu_labels;
 
-static Syms 	    addr_to_fname;
+static Syms 	    	addr_to_fname;
 
-static CallTrace    *current_stack[MAX_CPU];
-static CallTraceHash call_stack;
+static CallTrace    	*current_stack[MAX_CPU];
+static CallTraceHash 	call_stack;
 
-static CallIntervalListList complete_intervals;
+static CallIntervalList complete_intervals;
 
 static struct mtrace_enable_entry mtrace_enable;
 
@@ -191,6 +194,14 @@ exec_stmt_noerr(sqlite3 *db, int (*cb)(void*, int, char**, char**),
 	va_end(ap);
 	
 	sqlite3_exec(db, buf, cb, arg, NULL);
+}
+
+static void close_db(void *arg)
+{
+	sqlite3 *db;
+
+	db = (sqlite3 *)arg;
+	sqlite3_close(db);
 }
 
 static void *open_db(const char *database)
@@ -313,9 +324,9 @@ static void build_call_trace_db(void *arg, const char *name)
 	exec_stmt_noerr(db, NULL, NULL, "DROP TABLE %s_call_traces", name);
 	exec_stmt(db, NULL, NULL, create_calls_table, name);
 
-	FcallList::iterator it = complete_fcalls.begin();
+	CallRangeList::iterator it = complete_fcalls.begin();
 	for (; it != complete_fcalls.end(); ++it) {
-		CompleteFcall cf = (*it);
+		CallTraceRange cf = (*it);
 		const char *fname = addr_to_fname.lookup_name(cf.start_->pc);
 		
 		if (fname == NULL)
@@ -323,7 +334,7 @@ static void build_call_trace_db(void *arg, const char *name)
 
 		exec_stmt(db, NULL, NULL, insert_call, name, cf.start_->tag, cf.start_->h.cpu,
 			  cf.start_->tid, cf.start_->pc, fname, cf.start_->depth,
-			  cf.start_->h.access_count, cf.stop_->h.access_count);
+			  cf.start_->h.access_count, cf.access_stop_);
 
 		p.tick();
 	}
@@ -359,9 +370,9 @@ static void build_call_interval_db(void *arg, const char *name)
 	exec_stmt_noerr(db, NULL, NULL, "DROP TABLE %s_call_intervals", name);
 	exec_stmt(db, NULL, NULL, create_intervals_table, name);
 
-	CallIntervalListList::iterator it = complete_intervals.begin();
-	for (; it != complete_intervals.end(); ++it) {
-		list<CallInterval *> ci_list = (*it);
+	CallIntervalList::iterator it = complete_intervals.begin();
+	while (!complete_intervals.empty()) {
+		list<CallInterval *> ci_list = complete_intervals.front();
 
 		while (!ci_list.empty()) {
 			CallInterval *ci = ci_list.front();
@@ -379,8 +390,10 @@ static void build_call_interval_db(void *arg, const char *name)
 				  ci->ret_);
 
 			ci_list.pop_front();
-			delete ci;
+			CallTrace::free_call_interval(ci);
 		}
+
+		complete_intervals.pop_front();
 
 		p.tick();
 	}
@@ -572,6 +585,33 @@ static void handle_label(struct mtrace_label_entry *l)
 	}
 }
 
+static void complete_outstanding_call_traces(void)
+{
+#if ONE_SHOT
+	CallTraceHash::iterator it = call_stack.begin();
+	
+	while (it != call_stack.end()) {
+		CallTrace *ct = it->second;
+
+		ct->end_current(~0UL, 0);
+		
+		// We already accounted for the CallTraceRange when we 
+		// processed the mtrace_pause.  The call intervals are 
+		// what's left.
+		complete_intervals.push_back(ct->timeline_);
+		
+		delete ct;
+
+		call_stack.erase(it);
+		it = call_stack.begin();		
+	}
+#else
+	// XXX if we aren't in ONE_SHOT mode complete_outstanding_call_traces
+	// ends up destroying outstanding call traces (and timelines).
+#error complete_outstanding_call_traces is broken
+#endif
+}
+
 static void handle_fcall(struct mtrace_fcall_entry *f)
 {
 	int cpu = f->h.cpu;
@@ -624,7 +664,7 @@ static void handle_fcall(struct mtrace_fcall_entry *f)
 		if (mtrace_enable.enable ||
 		    cs->start_->h.access_count <= mtrace_enable.h.access_count)
 		{
-			complete_fcalls.push_back(CompleteFcall(cs->start_, f));
+			complete_fcalls.push_back(CallTraceRange(cs->start_, f->h.access_count));
 		}
 
 		break;
@@ -645,8 +685,10 @@ static void handle_fcall(struct mtrace_fcall_entry *f)
 		if (mtrace_enable.enable ||
 		    cs->start_->h.access_count <= mtrace_enable.h.access_count)
 		{
-			complete_fcalls.push_back(CompleteFcall(cs->start_, f));
+			complete_fcalls.push_back(CallTraceRange(cs->start_, f->h.access_count));
 			complete_intervals.push_back(cs->timeline_);
+		} else {
+			cs->free_timeline();
 		}
 
 		delete cs;
@@ -705,6 +747,7 @@ static void handle_enable(void *arg, struct mtrace_enable_entry *e)
 			name = mtrace_enable.str;
 
 		complete_outstanding_labels();
+		complete_outstanding_call_traces();
 
 		build_label_db(arg, name);
 
@@ -717,13 +760,18 @@ static void handle_enable(void *arg, struct mtrace_enable_entry *e)
 		fflush(0);
 		build_call_interval_db(arg, name);
 		printf("done!\n");
-		
+
 		printf("Building access db '%s' ... ", name);
 		fflush(0);
 		build_access_db(arg, name);
 		printf("done!\n");
 
 		clear_all();
+
+		if (ONE_SHOT) {
+			close_db(arg);
+			exit(EXIT_SUCCESS);
+		}
 	}
 }
 
@@ -782,6 +830,7 @@ static void process_log(void *arg, gzFile log)
 			break;
 		case mtrace_entry_call:
 			handle_call(&entry->call);
+			free(entry);
 			break;
 		default:
 			die("bad type %u", entry->h.type);
