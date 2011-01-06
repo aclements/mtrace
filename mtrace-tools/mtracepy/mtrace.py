@@ -1,8 +1,6 @@
+from columns import ColumnValue, Address, Unsigned, AccessType, create_column_string, create_column_objects, get_column_object
+from util import uhex
 import sqlite3
-
-# XXX there must be a better way..
-def uhex(i):
-    return (i & 0xffffffffffffffff)
 
 class MtraceDB:
     def __init__(self, dbFile):
@@ -109,3 +107,92 @@ class MtraceBacktracer:
 
     def __iter__(self):
         return MtraceBacktracer.Iter(self)
+
+class MtraceAccess:
+    columns = [ 
+                ColumnValue(Unsigned.create, 'access_id'),
+                ColumnValue(AccessType.create, 'access_type'),
+                ColumnValue(Address.create, 'pc'),
+                ColumnValue(Address.create, 'guest_addr') 
+              ]
+
+    def __init__(self, dbFile, dataName, accessId):
+        self.dbFile = dbFile
+        self.dataName = dataName
+        self.accessId = accessId
+        self.values = None
+
+    def __build_values(self):
+        select = create_column_string(MtraceAccess.columns)
+        q = 'SELECT ' + select + ' FROM %s_accesses WHERE access_id = %lu;'
+        q = q % (self.dataName,
+                 self.accessId)
+        row = MtraceDB(self.dbFile).exec_single(q)
+        self.values = create_column_objects(MtraceAccess.columns, row)
+
+    def __str__(self):
+        if self.values == None:
+            self.__build_values()
+        s = '[ ' + str(self.values[0])
+        for val in self.values[1:]:
+            s += ', ' + str(val)
+        s += ' ]'
+        return s
+
+    def get_values(self):
+        if self.values == None:
+            self.__build_values()
+        return self.values
+
+    def get_value(self, column):
+        return get_column_object(self.get_values(), column)
+
+class MtraceInstanceDetail:
+    def __init__(self, dbFile, dataName, labelId):
+        self.dbFile = dbFile
+        self.dataName = dataName
+        self.labelId = labelId
+        self.accesses = None
+
+    def __build_accesses(self):
+        q = 'SELECT access_id FROM %s_accesses WHERE label_id = %lu;'
+        q = q % (self.dataName,
+                 self.labelId)
+
+        conn = sqlite3.connect(self.dbFile)
+        c = conn.cursor()
+        c.execute(q)
+
+        self.accesses = []
+        for row in c:
+            self.accesses.append(MtraceAccess(self.dbFile, self.dataName, row[0]))
+            
+        c.close()
+
+    def get_access_num(self):
+        if self.accesses == None:
+            self.__build_accesses()
+        return len(self.accesses)
+
+    def get_access(self, i):
+        if self.accesses == None:
+            self.__build_accesses()
+        return self.accesses[i]
+
+    class Iter:
+        def __init__(self, detail):
+            self.i = 0
+            self.detail = detail
+
+        def __iter__(self):
+            return self
+
+        def next(self):
+            if self.detail.get_access_num() == self.i:
+                raise StopIteration()
+            access = self.detail.get_access(self.i)
+            self.i += 1
+            return access
+
+    def __iter__(self):
+        return MtraceInstanceDetail.Iter(self)

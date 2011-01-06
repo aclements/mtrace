@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-import mtrace
+from mtracepy.mtrace import MtraceBacktracer
 import sys
 
 def usage():
@@ -18,7 +18,7 @@ def main(argv = None):
     dataName = argv[2]
     accessId = int(argv[3])
 
-    bt = mtrace.MtraceBacktracer(dbFile, dataName, accessId)
+    bt = MtraceBacktracer(dbFile, dataName, accessId)
 
     for interval in bt:
         print interval
