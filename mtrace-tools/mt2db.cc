@@ -221,6 +221,8 @@ static void *open_db(const char *database)
 static void build_labelx_db(void *arg, const char *name, 
 			    mtrace_label_t label_type)
 {
+	uint64_t label_count;
+
 	const char *create_label_table = 
 		"CREATE TABLE %s_labels%u ("
 		"label_id     	     INTEGER PRIMARY KEY, "
@@ -236,11 +238,11 @@ static void build_labelx_db(void *arg, const char *name,
 		")";
 
 	const char *insert_label = 
-		"INSERT INTO %s_labels%u (str, alloc_pc, "
+		"INSERT INTO %s_labels%u (label_id, str, alloc_pc, "
 		"host_addr, host_addr_end, "
 		"guest_addr, guest_addr_end, bytes, "
 		"access_start, access_end) "
-		"VALUES (\"%s\", "ADDR_FMT", "ADDR_FMT", "ADDR_FMT", "
+		"VALUES (%lu, \"%s\", "ADDR_FMT", "ADDR_FMT", "ADDR_FMT", "
 		ADDR_FMT", "ADDR_FMT", %lu, "
 		"%lu, %lu)";
 	
@@ -258,9 +260,11 @@ static void build_labelx_db(void *arg, const char *name,
 	ObjectList::iterator it = complete_labels[label_type].begin();
 	for (; it != complete_labels[label_type].end(); ++it) {
 		ObjectLabel ol = *it;
-		
+		uint64_t label_id = ++label_count;
+
 		exec_stmt(db, NULL, NULL, insert_label, name, 
 			  label_type, 
+			  label_id,
 			  ol.label_->str, 
 			  ol.label_->pc, 			  
 			  ol.label_->host_addr, 
