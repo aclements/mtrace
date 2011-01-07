@@ -96,10 +96,11 @@ class CallSummary:
                 lst2.append(e)
                 for f in self.filters:
                     if f.filter(e) == False:
-                        lst.pop()
+                        lst2.pop()
                         break
-            lst = lst2
-        return lst
+            return lst2
+        else:
+            return lst
 
     def get_conn(self):
         if self.conn == None:
