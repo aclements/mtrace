@@ -113,7 +113,8 @@ class MtraceAccess:
                 ColumnValue(Unsigned.create, 'access_id'),
                 ColumnValue(AccessType.create, 'access_type'),
                 ColumnValue(Address.create, 'pc'),
-                ColumnValue(Address.create, 'guest_addr') 
+                ColumnValue(Address.create, 'guest_addr'),
+                ColumnValue(Unsigned.create, 'cpu'),
               ]
 
     def __init__(self, dbFile, dataName, accessId):
