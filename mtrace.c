@@ -27,7 +27,6 @@
 #define QEMU_MTRACE
 #include "mtrace-magic.h"
 #include "mtrace.h"
-#include <zlib.h>
 
 /* 64-byte cache lines */
 #define MTRACE_CLINE_SHIFT	6
@@ -37,7 +36,7 @@
 
 static int mtrace_system_enable;
 static int mtrace_enable;
-static gzFile mtrace_file;
+static int mtrace_file;
 static int mtrace_cline_track = 1;
 static uint64_t mtrace_access_count;
 static int mtrace_call_stack_active[255];
@@ -45,11 +44,50 @@ static int mtrace_call_trace;
 
 void mtrace_log_file_set(const char *path)
 {
-    mtrace_file = gzopen(path, "wb");
-    if (mtrace_file == NULL) {
-	perror("mtrace: gzopen");
+    int outfd, p[2], check[2], child, r;
+
+    outfd = open(path, O_CREAT|O_WRONLY|O_TRUNC, 0666);
+    if (outfd < 0) {
+        perror("mtrace: open");
+        abort();
+    }
+    if (pipe(p) < 0 || pipe(check) < 0) {
+	perror("mtrace: pipe");
 	abort();
     }
+    if (fcntl(check[1], F_SETFD,
+	      fcntl(check[1], F_GETFD, 0) | FD_CLOEXEC) < 0) {
+	perror("mtrace: fcntl");
+	abort();
+    }
+
+    child = fork();
+    if (child < 0) {
+	perror("mtrace: fork");
+	abort();
+    } else if (child == 0) {
+	close(check[0]);
+	dup2(outfd, 1);
+	close(outfd);
+	dup2(p[0], 0);
+	close(p[0]);
+	close(p[1]);
+	r = execlp("gzip", "gzip", NULL);
+	r = write(check[1], &r, sizeof(r));
+	exit(0);
+    }
+    close(outfd);
+    close(p[0]);
+    close(check[1]);
+
+    if (read(check[0], &r, sizeof(r)) != 0) {
+	errno = r;
+	perror("mtrace: exec");
+	abort();
+    }
+    close(check[0]);
+
+    mtrace_file = p[1];
 }
 
 void mtrace_cline_trace_set(int b)
@@ -67,14 +105,24 @@ void mtrace_call_trace_set(int b)
     mtrace_call_trace = b;
 }
 
+static void write_all(int fd, const void *data, size_t len)
+{
+    while (len) {
+	ssize_t r = write(fd, data, len);
+	if (r < 0) {
+	    if (errno == EINTR)
+		continue;
+	    perror("write_all: write");
+	    abort();
+	}
+	len -= r;
+	data += r;
+    }
+}
+
 static void mtrace_log_entry(union mtrace_entry *entry)
 {
-    size_t r;
-    r = gzwrite(mtrace_file, entry, entry->h.size);
-    if (r != entry->h.size) {
-	perror("mtrace_log_entry: gzwrite");
-	abort();
-    }
+    write_all(mtrace_file, entry, entry->h.size);
 }
 
 #if 0
@@ -462,8 +510,8 @@ void mtrace_cline_track_free(uint8_t *cline_track)
 static void mtrace_cleanup(void)
 {
     if (mtrace_file)
-	gzclose(mtrace_file);
-    mtrace_file = NULL;
+	close(mtrace_file);
+    mtrace_file = 0;
 }
 
 void mtrace_init(void)
@@ -471,7 +519,7 @@ void mtrace_init(void)
     if (!mtrace_system_enable)
 	return;
 
-    if (mtrace_file == NULL)
+    if (mtrace_file == 0)
 	mtrace_log_file_set("mtrace.out");
     atexit(mtrace_cleanup);
 }
