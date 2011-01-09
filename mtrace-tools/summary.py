@@ -1,5 +1,6 @@
 #!/usr/bin/python
 
+from mtracepy import typedesc
 import sqlite3
 import sys
 import os.path
@@ -57,6 +58,14 @@ class FilterLabel:
 
     def filter(self, summaryObject):
         return self.labelName != summaryObject.name
+
+class FilterAllocPc:
+    def __init__(self, allocPc):
+        self.allocPc = allocPc
+
+    def filter(self, summaryObject):
+        s = '%lx' % uhex(summaryObject.allocPc)
+        return self.allocPc != s
 
 class CallSummary:
     def __init__(self, dbFile, name, pc):
@@ -471,6 +480,57 @@ class MtraceSummary:
                                                      higher.instanceNum)
                 print ''
 
+    def print_all_types(self):
+        tmpDict = {}
+        numCols = 1
+
+        for cs in self.call_summary:
+            for labelType in range(mtrace_label_heap, mtrace_label_percpu + 1):
+                if labelType == mtrace_label_block:
+                    continue
+                if cs.get_unique_type(labelType) == 0:
+                    continue
+                top = cs.get_top_types(labelType)
+                for higher in top:
+                    tmpDict[higher.name] = 1
+
+        typeNames = tmpDict.keys()
+
+        typeDesc = []
+        for typeName in typeNames:
+            typeDesc.append(typedesc.TypeDescription(typeName))
+
+        n = 0
+        for desc in typeDesc:
+            if n != 0 and n % numCols == 0:
+                print ''
+            s = "  %-32s %s" % (desc.typeName, desc.description())
+            print s,
+            n += 1
+
+def summarize_types(stats):
+    stats.print_all_types()
+    return
+
+def summarize_all(stats):
+    printCols = the_print_columns
+    if len(printCols) == 0:
+        printCols = default_print
+
+    stats.print_summary(printCols)
+
+    if default_inst_print != 0:
+        stats.print_top_objs(default_inst_print)
+    if default_type_print != 0:
+        stats.print_top_types(default_type_print)
+
+default_summarize = summarize_all
+
+summarize_types = {
+    'types' : summarize_types,
+    'all'   : summarize_all
+}
+
 def parse_args(argv):
     args = argv[3:]
 
@@ -497,12 +557,23 @@ def parse_args(argv):
         ig = FilterLabel(val)
         default_filters.append(ig)
 
+    def filterpc_handler(val):
+        global default_filters
+        ig = FilterAllocPc(val)
+        default_filters.append(ig)
+
+    def summarize_handler(val):
+        global default_summarize
+        default_summarize = summarize_types[val]
+
     handler = {
-        '-sort'       : sort_handler,
-        '-print'      : print_handler,
-        '-pickledir'  : pickledir_handler,
-        '-numprint'   : numprint_handler,
-        '-filterlabel' : filterlabel_handler,
+        '-sort'         : sort_handler,
+        '-print'        : print_handler,
+        '-pickledir'    : pickledir_handler,
+        '-numprint'     : numprint_handler,
+        '-filterlabel'  : filterlabel_handler,
+        '-filterpc'     : filterpc_handler,
+        '-summarize'    : summarize_handler
     }
 
     for i in range(0, len(args), 2):
@@ -510,7 +581,8 @@ def parse_args(argv):
 
 def usage():
     print """Usage: summary.py DB-file name [ -sort col -print col 
-               -pickledir pickledir -numprint numprint -filterlabel filterlabel ]
+    -pickledir pickledir -numprint numprint -filterlabel filterlabel 
+    -filterpc filterpc -summarize summarize]
 
     'col' is the name of a column.  Valid values are:
       'heap-inst'    -- heap allocated object instances
@@ -533,6 +605,12 @@ def usage():
       summaries (the default is 5)
 
     'filterlabel' is a label name to filter from the summary
+
+    'filterpc' is the alloc pc to filter fro the summary
+
+    'summarize' is the type of summary to print.  Valid value are:
+      'types'        -- print a type summary
+      'all'          -- the default
 """
     exit(1)
 
@@ -553,21 +631,12 @@ def main(argv = None):
 
     stats = MtraceSummary.open(dbFile, dataName, default_pickledir)
 
-    printCols = the_print_columns
-    if len(printCols) == 0:
-        printCols = default_print
-
     stats.set_filters(default_filters)    
     stats.sort(default_sort)
-    
-    stats.print_summary(printCols)
 
-    if default_inst_print != 0:
-        stats.print_top_objs(default_inst_print)
-    if default_type_print != 0:
-        stats.print_top_types(default_type_print)
-
+    default_summarize(stats)
     stats.close(default_pickledir)
+    return
 
 if __name__ == "__main__":
     sys.exit(main())
