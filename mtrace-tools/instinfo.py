@@ -13,14 +13,15 @@ def usage():
     exit(1)
 
 def print_all(detail):
-    print '  %-16s  %16s  %16s  %16s' % ('id', 'pc', 'addr', 'access type')
-    print '  %-16s  %16s  %16s  %16s' % ('--', '--', '----', '-----------')
+    print '  %-16s  %16s  %16s  %16s  %16s' % ('id', 'pc', 'addr', 'cpu', 'access type')
+    print '  %-16s  %16s  %16s  %16s  %16s' % ('--', '--', '----', '---', '-----------')
     for access in detail:
-        print '  %-16s  %16s  %16s  %16s' % (access.get_value('access_id'), 
-                                             access.get_value('pc'),
-                                             access.get_value('guest_addr'),
-                                             access.get_value('access_type'))
-        
+        print '  %-16s  %16s  %16s  %16s  %16s' % (access.get_value('access_id'), 
+                                                   access.get_value('pc'),
+                                                   access.get_value('guest_addr'),
+                                                   access.get_value('cpu'),
+                                                   access.get_value('access_type'))
+
 def print_unique_pc(detail):
     d = {}
     for access in detail:
