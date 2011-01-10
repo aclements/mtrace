@@ -4,7 +4,7 @@ from mtracepy.mtrace import MtraceInstanceDetail
 import sys
 
 def usage():
-    print """Usage: stack-trace.py DB-file name label-id [ -print printtype ]
+    print """Usage: instinfo.py DB-file name label-id [ -print printtype ]
 
     'printtype' is the method used to print results. Valid values are:
       'all'        -- all accesses

@@ -44,6 +44,18 @@ class AccessType:
     def create(value, column):
         return AccessType(value, column)
 
+class LabelString:
+    def __init__(self, value, column):
+        self.value = value
+        self.column = column
+
+    def __str__(self):
+        return self.value
+
+    @staticmethod
+    def create(value, column):
+        return LabelString(value, column)
+
 class ColumnValue:
     def __init__(self, create, column):
         self.column = column

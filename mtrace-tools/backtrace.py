@@ -7,7 +7,7 @@ import sys
 default_exefile = None
 
 def usage():
-    print """Usage: stack-trace.py DB-file name access-id [ -exefile exfile ]
+    print """Usage: backtrace.py DB-file name access-id [ -exefile exfile ]
 
     'exfile' is the executable for which addresses should be translated.
 
