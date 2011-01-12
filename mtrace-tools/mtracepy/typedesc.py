@@ -46,8 +46,9 @@ type_to_category = {
 }
 
 class TypeDescription:
-    def __init__(self, typeName):
+    def __init__(self, typeName, count = 0):
         self.typeName = typeName
+        self.count = count
 
     def category(self):
         if self.typeName in type_to_category:

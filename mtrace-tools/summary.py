@@ -14,6 +14,7 @@ default_pickledir       = '.'
 default_type_print      = 5
 default_inst_print      = 5
 default_filters         = [ ]
+default_divisor         = 1
 
 mtrace_label_heap       = 1
 mtrace_label_block      = 2
@@ -480,7 +481,7 @@ class MtraceSummary:
                                                      higher.instanceNum)
                 print ''
 
-    def print_all_types(self):
+    def print_all_types(self, divisor = 1):
         tmpDict = {}
         numCols = 1
 
@@ -488,28 +489,32 @@ class MtraceSummary:
             for labelType in range(mtrace_label_heap, mtrace_label_percpu + 1):
                 if labelType == mtrace_label_block:
                     continue
-                if cs.get_unique_type(labelType) == 0:
-                    continue
-                top = cs.get_top_types(labelType)
+                top = cs.get_top_objs(labelType)
                 for higher in top:
-                    tmpDict[higher.name] = 1
+                    count = higher.count
+                    if higher.name in tmpDict:
+                        count += tmpDict[higher.name]
+                    tmpDict[higher.name] = count
 
         typeNames = tmpDict.keys()
 
         typeDesc = []
         for typeName in typeNames:
-            typeDesc.append(typedesc.TypeDescription(typeName))
+            count = tmpDict[typeName]
+            typeDesc.append(typedesc.TypeDescription(typeName, count = count))
+
+        typeDesc = sorted(typeDesc, key=lambda k: k.count, reverse=True)
 
         n = 0
         for desc in typeDesc:
             if n != 0 and n % numCols == 0:
                 print ''
-            s = "  %-32s %s" % (desc.typeName, desc.description())
+            s = "  %-32s  %16lu  %s" % (desc.typeName, desc.count / divisor, desc.description())
             print s,
             n += 1
 
 def summarize_types(stats):
-    stats.print_all_types()
+    stats.print_all_types(divisor = default_divisor)
     return
 
 def summarize_all(stats):
@@ -566,6 +571,10 @@ def parse_args(argv):
         global default_summarize
         default_summarize = summarize_types[val]
 
+    def divisor_handler(val):
+        global default_divisor
+        default_divisor = int(val)
+
     handler = {
         '-sort'         : sort_handler,
         '-print'        : print_handler,
@@ -573,7 +582,8 @@ def parse_args(argv):
         '-numprint'     : numprint_handler,
         '-filterlabel'  : filterlabel_handler,
         '-filterpc'     : filterpc_handler,
-        '-summarize'    : summarize_handler
+        '-summarize'    : summarize_handler,
+        '-divisor'      : divisor_handler
     }
 
     for i in range(0, len(args), 2):
@@ -582,7 +592,7 @@ def parse_args(argv):
 def usage():
     print """Usage: summary.py DB-file name [ -sort col -print col 
     -pickledir pickledir -numprint numprint -filterlabel filterlabel 
-    -filterpc filterpc -summarize summarize]
+    -filterpc filterpc -summarize summarize -divisor divisor]
 
     'col' is the name of a column.  Valid values are:
       'heap-inst'    -- heap allocated object instances
@@ -611,6 +621,8 @@ def usage():
     'summarize' is the type of summary to print.  Valid value are:
       'types'        -- print a type summary
       'all'          -- the default
+
+    'divisor' is an integer to divide sums by
 """
     exit(1)
 
