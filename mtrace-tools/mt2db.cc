@@ -215,6 +215,7 @@ static void *open_db(const char *database)
 
 	exec_stmt(db, NULL, NULL, "PRAGMA synchronous = OFF;");
 	exec_stmt(db, NULL, NULL, "PRAGMA count_changes = FALSE;");
+	exec_stmt(db, NULL, NULL, "PRAGMA journal_mode = OFF;");
 	return db;
 }
 
@@ -374,6 +375,8 @@ static void build_call_interval_db(void *arg, const char *name)
 	exec_stmt_noerr(db, NULL, NULL, "DROP TABLE %s_call_intervals", name);
 	exec_stmt(db, NULL, NULL, create_intervals_table, name);
 
+	exec_stmt(db, NULL, NULL, "BEGIN TRANSACTION;");
+
 	CallIntervalList::iterator it = complete_intervals.begin();
 	while (!complete_intervals.empty()) {
 		list<CallInterval *> ci_list = complete_intervals.front();
@@ -401,6 +404,8 @@ static void build_call_interval_db(void *arg, const char *name)
 
 		p.tick();
 	}
+
+	exec_stmt(db, NULL, NULL, "END TRANSACTION;");
 }
 
 static int get_access_var(void *arg, int ac, char **av, char **colname)
@@ -421,7 +426,7 @@ static void get_object(sqlite3 *db, const char *name,
 	const char *select_object = 
 		"SELECT label_id FROM %s_labels%u WHERE "
 		"guest_addr <= "ADDR_FMT" and guest_addr_end > "ADDR_FMT" and "
-		"access_start <= %lu and access_end > %lu";
+		"access_start <= %lu and access_end > %lu LIMIT 1";
 
 	int type;
 
