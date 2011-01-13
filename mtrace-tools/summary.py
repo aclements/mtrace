@@ -41,11 +41,12 @@ def checksum(fileName):
     return m.digest()
 
 class InstanceSummary:
-    def __init__(self, name, allocPc, count, labelId):
+    def __init__(self, name, allocPc, count, labelId, entryName):
         self.name = name
         self.allocPc = allocPc
         self.count = count
         self.labelId = labelId
+        self.entryName = entryName
 
 class TypeSummary:
     def __init__(self, name, count, instanceNum):
@@ -67,6 +68,13 @@ class FilterAllocPc:
     def filter(self, summaryObject):
         s = '%lx' % uhex(summaryObject.allocPc)
         return self.allocPc != s
+
+class FilterEntry:
+    def __init__(self, entryName):
+        self.entryName = entryName
+
+    def filter(self, summaryObject):
+        return self.entryName != summaryObject.entryName
 
 class CallSummary:
     def __init__(self, dbFile, name, pc):
@@ -280,7 +288,8 @@ class CallSummary:
                 tmpDict[labelId] = InstanceSummary(self.get_label_str(labelId, labelType), 
                                                    self.get_label_alloc_pc(labelId, labelType), 
                                                    count,
-                                                   labelId)
+                                                   labelId,
+                                                   self.get_str_name())
 
             s = sorted(tmpDict.values(), key=lambda k: k.count, reverse=True)
             self.topObjs[labelType] = s
@@ -567,6 +576,11 @@ def parse_args(argv):
         ig = FilterAllocPc(val)
         default_filters.append(ig)
 
+    def fliterentry_handler(val):
+        global default_filters
+        ig = FilterEntry(val)
+        default_filters.append(ig)
+
     def summarize_handler(val):
         global default_summarize
         default_summarize = summarize_types[val]
@@ -582,6 +596,7 @@ def parse_args(argv):
         '-numprint'     : numprint_handler,
         '-filterlabel'  : filterlabel_handler,
         '-filterpc'     : filterpc_handler,
+        '-filterentry'  : fliterentry_handler,
         '-summarize'    : summarize_handler,
         '-divisor'      : divisor_handler
     }
