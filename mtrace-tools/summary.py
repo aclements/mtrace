@@ -607,7 +607,8 @@ def parse_args(argv):
 def usage():
     print """Usage: summary.py DB-file name [ -sort col -print col 
     -pickledir pickledir -numprint numprint -filterlabel filterlabel 
-    -filterpc filterpc -summarize summarize -divisor divisor]
+    -filterpc filterpc -filterentry filterentry -summarize summarize 
+    -divisor divisor]
 
     'col' is the name of a column.  Valid values are:
       'heap-inst'    -- heap allocated object instances
@@ -632,6 +633,8 @@ def usage():
     'filterlabel' is a label name to filter from the summary
 
     'filterpc' is the alloc pc to filter fro the summary
+
+    'filterentry' is the name of a kernel entry point to filter
 
     'summarize' is the type of summary to print.  Valid value are:
       'types'        -- print a type summary
