@@ -35,7 +35,7 @@
 #define MTRACE_GETPC() ((void *)((unsigned long)__builtin_return_address(0) - 1))
 
 /* Bytes of log data to buffer before shipping it to gzip */
-#define FLUSH_BUFFER_BYTES 4096
+#define FLUSH_BUFFER_BYTES 8192
 
 static int mtrace_system_enable;
 static int mtrace_enable;
