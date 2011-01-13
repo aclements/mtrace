@@ -34,6 +34,9 @@
 /* From dyngen-exec.h */
 #define MTRACE_GETPC() ((void *)((unsigned long)__builtin_return_address(0) - 1))
 
+/* Bytes of log data to buffer before shipping it to gzip */
+#define FLUSH_BUFFER_BYTES 4096
+
 static int mtrace_system_enable;
 static int mtrace_enable;
 static int mtrace_file;
@@ -122,7 +125,26 @@ static void write_all(int fd, const void *data, size_t len)
 
 static void mtrace_log_entry(union mtrace_entry *entry)
 {
-    write_all(mtrace_file, entry, entry->h.size);
+    static uint8_t flush_buffer[FLUSH_BUFFER_BYTES];
+    static int n;
+
+    if (entry == NULL) {
+	write_all(mtrace_file, flush_buffer, n);
+	n = 0;
+	return;
+    }
+
+    if (n + entry->h.size > FLUSH_BUFFER_BYTES) {
+	write_all(mtrace_file, flush_buffer, n);
+	n = 0;
+    }
+    
+    if (entry->h.size > FLUSH_BUFFER_BYTES)
+	write_all(mtrace_file, entry, entry->h.size);
+    else {
+	memcpy(&flush_buffer[n], entry, entry->h.size);
+	n += entry->h.size;
+    }
 }
 
 #if 0
@@ -509,8 +531,10 @@ void mtrace_cline_track_free(uint8_t *cline_track)
 
 static void mtrace_cleanup(void)
 {
-    if (mtrace_file)
+    if (mtrace_file) {
+	mtrace_log_entry(NULL);
 	close(mtrace_file);
+    }
     mtrace_file = 0;
 }
 
