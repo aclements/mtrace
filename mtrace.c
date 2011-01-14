@@ -45,12 +45,22 @@ static int mtrace_call_trace;
 void mtrace_log_file_set(const char *path)
 {
     int outfd, p[2], check[2], child, r;
+    struct stat st;
 
     outfd = open(path, O_CREAT|O_WRONLY|O_TRUNC, 0666);
     if (outfd < 0) {
         perror("mtrace: open");
         abort();
     }
+    if (fstat(outfd, &st) < 0) {
+	perror("mtrace: fstat");
+	abort();
+    }
+    if (S_ISFIFO(st.st_mode)) {
+	mtrace_file = outfd;
+	return;
+    }
+
     if (pipe(p) < 0 || pipe(check) < 0) {
 	perror("mtrace: pipe");
 	abort();
