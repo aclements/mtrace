@@ -41,7 +41,6 @@ static int mtrace_cline_track = 1;
 static uint64_t mtrace_access_count;
 static int mtrace_call_stack_active[255];
 static int mtrace_call_trace;
-static int mtrace_lock_count[255];
 
 void mtrace_log_file_set(const char *path)
 {
@@ -183,9 +182,6 @@ static void mtrace_access_dump(mtrace_access_t type, target_ulong host_addr,
     
     if (!mtrace_enable)
 	return;
-
-    if (!mtrace_lock_count[cpu_single_env->cpu_index])
-        return;
     
     entry.h.type = mtrace_entry_access;
     entry.h.size = sizeof(entry);
@@ -433,10 +429,7 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
             (entry.fcall.state == mtrace_start ||
              entry.fcall.state == mtrace_resume);
     else if (type == mtrace_entry_lock && strcmp(entry.lock.str, "&mm->mmap_sem") == 0) {
-        if (entry.lock.release)
-            --mtrace_lock_count[entry.h.cpu];
-        else
-            ++mtrace_lock_count[entry.h.cpu];
+        mtrace_enable = 1;
     }
 }
 
