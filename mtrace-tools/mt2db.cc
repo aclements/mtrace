@@ -58,6 +58,16 @@ using namespace::__gnu_cxx;
 #define MAX_CPU		4
 #define ONE_SHOT 	1
 
+struct Access {
+	Access(struct mtrace_access_entry *access, uint64_t call_trace_tag) {
+		this->access_ = access;
+		this->call_trace_tag_ = call_trace_tag;
+	}
+
+	struct mtrace_access_entry *access_;
+	uint64_t call_trace_tag_;
+};
+
 struct ObjectLabel {
 
 	ObjectLabel(struct mtrace_label_entry *label, 
@@ -113,7 +123,7 @@ struct Progress {
 
 typedef hash_map<uint64_t, struct mtrace_label_entry *> LabelHash;
 typedef list<ObjectLabel> 	  		     	ObjectList;
-typedef list<struct mtrace_access_entry *> 		AccessList;
+typedef list<Access> 					AccessList;
 typedef list<CallTraceRange> 				CallRangeList;
 typedef hash_map<uint64_t, CallTrace *>  		CallTraceHash;
 
@@ -408,14 +418,28 @@ static void build_call_interval_db(void *arg, const char *name)
 	exec_stmt(db, NULL, NULL, "END TRANSACTION;");
 }
 
+struct cached_object {
+	uint64_t guest_addr;
+	uint64_t guest_addr_end;
+	uint64_t access_start;
+	uint64_t access_end;
+
+	uint64_t label_id;
+	uint64_t label_type;
+};
+
 static int get_access_var(void *arg, int ac, char **av, char **colname)
 {
-	uint64_t *label_id = (uint64_t *)arg;
+	struct cached_object *co = (struct cached_object *)arg;
 
-	if (*label_id != 0)
+	if (co->label_id != 0)
 		die("get_access_var: multiple matching vars?");
 
-	*label_id = strtoll(av[0], NULL, 10);
+	co->label_id = strtoll(av[0], NULL, 10);
+	co->guest_addr = strtoll(av[1], NULL, 10);
+	co->guest_addr_end = strtoll(av[2], NULL, 10);
+	co->access_start = strtoll(av[3], NULL, 10);
+	co->access_end = strtoll(av[4], NULL, 10);
 	return 0;
 }
 
@@ -423,17 +447,38 @@ static void get_object(sqlite3 *db, const char *name,
 		       uint64_t access_count, uint64_t guest_addr, 
 		       uint64_t* label_id, int* label_type)
 {
+	static list<struct cached_object> *cache;
+
 	const char *select_object = 
-		"SELECT label_id FROM %s_labels%u WHERE "
+		"SELECT label_id, guest_addr, guest_addr_end, "
+		"access_start, access_end FROM %s_labels%u WHERE "
 		"guest_addr <= "ADDR_FMT" and guest_addr_end > "ADDR_FMT" and "
 		"access_start <= %lu and access_end > %lu LIMIT 1";
 
+	struct cached_object co;
 	int type;
 
-	*label_id = 0;
+	if (cache == NULL)
+		cache = new list<struct cached_object>(16);
+
+	list<struct cached_object>::iterator it;
+	for (it = cache->begin(); it != cache->end(); ++it) {
+		if (it->guest_addr <= guest_addr && it->guest_addr_end > guest_addr &&
+		    it->access_start <= access_count && it->access_end > access_count) 
+		{
+			co = *it;
+			cache->erase(it);
+			cache->push_front(co);
+
+			*label_id = co.label_id;
+			*label_type = co.label_type;
+			return;
+		}
+	}
+
+	co.label_id = 0;
 	for (type = mtrace_label_heap; type < mtrace_label_end; type++) {
-		
-		exec_stmt(db, get_access_var, (void*)label_id, select_object, 
+		exec_stmt(db, get_access_var, (void*)&co, select_object, 
 			  name,
 			  type,
 			  guest_addr, 
@@ -441,28 +486,16 @@ static void get_object(sqlite3 *db, const char *name,
 			  access_count,
 			  access_count);
 
-		if (*label_id) {
+		if (co.label_id) {
+			co.label_type = type;
+			cache->pop_back();
+			cache->push_front(co);
+
+			*label_id = co.label_id;
 			*label_type = type;
 			return ;
 		}
 	}
-}
-
-static int get_call(void *arg, int ac, char **av, char **colname)
-{
-	// Call tags are not unique:  One function call might generate 
-	// multiple fcalls that have the same tag.
-	uint64_t *call_tag = (uint64_t *)arg;
-	uint64_t local_call_tag;
-
-	// Multiple matching call tags are ok
-	local_call_tag = strtoll(av[0], NULL, 10);
-	if (*call_tag && *call_tag != local_call_tag) {
-		die("get_call: call_tag mismatch");
-	}
-
-	*call_tag = local_call_tag;
-	return 0;
 }
 
 static void build_access_db(void *arg, const char *name)
@@ -479,11 +512,6 @@ static void build_access_db(void *arg, const char *name)
 		"label_type 		  INTEGER, "
 		"call_trace_tag 	  INTEGER"
 		")";
-
-	const char *select_call = 
-		"SELECT call_trace_tag FROM %s_call_traces WHERE "
-		"cpu = %u and "
-		"access_start <= %lu and access_end > %lu";
 
 	const char *insert_access = 
 		"INSERT INTO %s_accesses ("
@@ -503,31 +531,25 @@ static void build_access_db(void *arg, const char *name)
 	exec_stmt(db, NULL, NULL, create_access_table, name);
 
 	while (!accesses.empty()) {
-		struct mtrace_access_entry *a = accesses.front();
+		Access a = accesses.front();
 		uint64_t label_id = 0;
 		int label_type = 0;
-		uint64_t call_tag = 0;
 
-		get_object(db, name, a->h.access_count, a->guest_addr,
+		get_object(db, name, a.access_->h.access_count, 
+			   a.access_->guest_addr,
 			   &label_id, &label_type);
-
-		exec_stmt(db, get_call, (void*)&call_tag, select_call, 
-			  name,
-			  a->h.cpu, 
-			  a->h.access_count,
-			  a->h.access_count);
 
 		exec_stmt(db, NULL, NULL, insert_access,
 			  name,
-			  a->h.access_count, 
-			  a->access_type, 
-			  a->h.cpu,
-			  a->pc,
-			  a->host_addr,
-			  a->guest_addr,
+			  a.access_->h.access_count, 
+			  a.access_->access_type, 
+			  a.access_->h.cpu,
+			  a.access_->pc,
+			  a.access_->host_addr,
+			  a.access_->guest_addr,
 			  label_id,
 			  label_type,
-			  call_tag);
+			  a.call_trace_tag_);
 
 		accesses.pop_front();
 		p.tick();
@@ -730,7 +752,13 @@ static void handle_call(struct mtrace_call_entry *f)
 
 static void handle_access(struct mtrace_access_entry *a)
 {
-	accesses.push_back(a);
+	uint64_t call_trace_tag = 0;
+	
+	if (current_stack[a->h.cpu]) {
+		CallTrace *cs = current_stack[a->h.cpu];
+		call_trace_tag = cs->start_->tag;
+	}
+	accesses.push_back(Access(a, call_trace_tag));
 }
 
 static void clear_all(void)
