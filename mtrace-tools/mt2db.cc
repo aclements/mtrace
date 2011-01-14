@@ -530,6 +530,8 @@ static void build_access_db(void *arg, const char *name)
 	exec_stmt_noerr(db, NULL, NULL, "DROP TABLE %s_accesses", name);
 	exec_stmt(db, NULL, NULL, create_access_table, name);
 
+	exec_stmt(db, NULL, NULL, "BEGIN TRANSACTION;");
+
 	while (!accesses.empty()) {
 		Access a = accesses.front();
 		uint64_t label_id = 0;
@@ -556,6 +558,8 @@ static void build_access_db(void *arg, const char *name)
 	}
 
 	exec_stmt(db, NULL, NULL, create_index, name, name);
+
+	exec_stmt(db, NULL, NULL, "END TRANSACTION;");
 }
 
 static void complete_outstanding_labels(void)
