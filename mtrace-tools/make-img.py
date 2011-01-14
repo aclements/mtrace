@@ -143,7 +143,7 @@ class DiskImage:
               '--variant=minbase',
               'squeeze',
               self.tmp,
-              'http://ftp.debian.org/debian/']).run()
+              'http://mirrors.xmission.com/debian/']).run()
         self.umount()
 
     def cleanup(self):
