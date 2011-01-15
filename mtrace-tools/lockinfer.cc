@@ -30,13 +30,32 @@ public:
 	}
 };
 
+class LabelName
+{
+public:
+	int idtype;
+	string name;
+
+	LabelName(int _idtype) : idtype(_idtype) {}
+	LabelName(string _name) : idtype(-1), name(_name) {}
+
+	bool operator==(LabelName o) const {
+		return o.idtype == idtype && o.name == name;
+	}
+	bool operator<(LabelName o) const {
+		if (o.idtype != idtype)
+			return o.idtype < idtype;
+		return o.name < name;
+	}
+};
+
+
 typedef map<uint64_t, struct mtrace_label_entry> LabelMap;
 
 static LabelMap labels[mtrace_label_end];
 // XXX Assuming a single CPU
 static int lockSet;		// Just 0 or 1 depending on mmap_sem
 
-typedef string LabelName;
 typedef int Offset;
 typedef map<pair<LabelName, Offset>, OffsetInfo> OffsetCountMap;
 typedef vector<pair<pair<LabelName, Offset>, OffsetInfo> > OffsetCountVector;
@@ -51,16 +70,17 @@ process_static(struct obj_info *o)
 	struct obj_info_var var;
 
 	l.h.type = mtrace_entry_label;
+	l.h.cpu = 0xffff;
 	l.h.access_count = 0;
 	l.str[sizeof(l.str) - 1] = 0;
 	l.label_type = mtrace_label_static;
-	l.host_addr = 0;
 
 	obj_info_vars_reset(o);
 	while (obj_info_vars_next(o, &var)) {
 		strncpy(l.str, var.name, sizeof(l.str) - 1);
 		l.guest_addr = var.location;
 		l.bytes = obj_info_type_size(o, var.idtype);
+		l.host_addr = var.id; // Kludge!
 		labels[l.label_type][l.guest_addr] = l;
 	}
 }
@@ -105,11 +125,13 @@ handle_access(struct mtrace_access_entry *a)
 		// Found it
 		int offset = a->guest_addr - l->guest_addr;
 //		printf("A %s+0x%x %d\n", l->str, offset, lockSet);
-		offsetCounts[make_pair(l->str, offset)].counts[lockSet]++;
+		offsetCounts[make_pair(l->h.cpu == 0xffff ?
+				       LabelName(l->host_addr) :
+				       LabelName(l->str), offset)].counts[lockSet]++;
 		return;
 	}
 	// Didn't find it
-	// XXX Static symbols
+	// XXX Many of these appear to be code, I think
 //	printf("A ??? %d\n", lockSet);
 	unknownAccess++;
 }
@@ -176,19 +198,23 @@ print_inference(struct obj_info *vmlinux)
 	for (it = counts.begin(); it < counts.end(); ++it) {
 		float freq = it->second.freq(1);
 		int total = it->second.total();
-		const char *tname = it->first.first.c_str();
-		if ((freq < 0.8 || total < 10) && strcmp(tname, "vm_area_struct") != 0)
+		LabelName *lname = &it->first.first;
+		if ((freq < 0.8 || total < 10) && lname->name != "vm_area_struct")
 			continue;
 
 		int off = it->first.second;
 		char str[128];
 
-		int type = obj_info_type_by_name(vmlinux, tname);
+		int type = lname->idtype;
 		if (type == -1)
-			snprintf(str, sizeof(str), "%s+%#x", tname, off);
+			type = obj_info_type_by_name(vmlinux, lname->name.c_str());
+		if (type == -1)
+			snprintf(str, sizeof(str), "%s+%#x", lname->name.c_str(), off);
 		else
 			obj_info_offset_name(vmlinux, type, off, str, sizeof(str));
 
+		// XXX Hmm.  If they're all reads, then perhaps it
+		// isn't protected.
 		printf("%-50s %3d%% %d\n", str, (int)(freq*100),
 		       it->second.total());
 	}
