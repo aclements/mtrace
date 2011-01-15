@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,7 +16,7 @@
 struct obj_info
 {
 	Dwarf_Debug dbg;
-	struct oi_struct **types;
+	union oi_type **types;
 	int ntypes;
 
 	Dwarf_Unsigned cu_offset;
@@ -108,13 +109,24 @@ die_data_member_location(struct obj_info *o, Dwarf_Die die)
 	return out;
 }
 
-// Struct processing
+// Type processing
+
+enum oi_type_type {
+	TYPE_STRUCT = 1,
+};
+
+struct oi_type_common
+{
+	enum oi_type_type type;
+	char *name;
+	bool complete;
+};
 
 // XXX Per CU.  Perhaps embed these in struct oi_cu's?  Hmm, but the
 // type array.  Also, I often don't care (or know) which CU.
 struct oi_struct
 {
-	char *name;
+	struct oi_type_common c;
 	struct oi_field *fields;
 };
 
@@ -126,8 +138,15 @@ struct oi_field
 	struct oi_field *next;
 };
 
+union oi_type
+{
+	struct oi_type_common c;
+
+	struct oi_struct tstruct;
+};
+
 static void
-register_type(struct obj_info *o, int id, struct oi_struct *type)
+register_type(struct obj_info *o, int id, union oi_type *type)
 {
 	while (id > o->ntypes) {
 		int n = o->ntypes ? o->ntypes * 2 : 16;
@@ -148,8 +167,9 @@ process_struct(struct obj_info *o, Dwarf_Die root)
 	struct oi_field *f, **tail;
 
 	memset(s, 0, sizeof(*s));
-	s->name = die_name(o, root);
-	register_type(o, die_offset(root), s);
+	s->c.type = TYPE_STRUCT;
+	s->c.name = die_name(o, root);
+	register_type(o, die_offset(root), (union oi_type*)s);
 
 	tail = &s->fields;
 	for (die = die_first(o, root); die; die = die_next(o, die)) {
@@ -162,6 +182,7 @@ process_struct(struct obj_info *o, Dwarf_Die root)
 		f->name = die_name(o, die);
 		f->start = die_data_member_location(o, die);
 		f->type = o->cu_offset + die_type(o, die);
+		s->c.complete = true;
 	}
 }
 
@@ -251,14 +272,15 @@ obj_info_process(struct obj_info *o)
 	}
 }
 
-static struct oi_struct *
+static union oi_type *
 type_by_name(struct obj_info *o, const char *name)
 {
 	// XXX This is stupid slow
 	int i;
 	for (i = 0; i < o->ntypes; ++i)
-		if (o->types[i] && o->types[i]->fields &&
-		    o->types[i]->name && strcmp(o->types[i]->name, name) == 0)
+		if (o->types[i] && o->types[i]->c.complete &&
+		    o->types[i]->c.name &&
+		    strcmp(o->types[i]->c.name, name) == 0)
 			return o->types[i];
 	return NULL;
 }
@@ -269,12 +291,15 @@ obj_info_lookup_struct_offset(struct obj_info *o, const char *tname, int off,
 			      char *out, int len)
 {
 	int n;
-	struct oi_struct *s = type_by_name(o, tname);
-	if (!s)
+	union oi_type *t = type_by_name(o, tname);
+	if (!t || t->c.type != TYPE_STRUCT)
 		return -1;
 
-	n = snprintf(out, len, "struct %s", s->name);
-	while (s) {
+	n = snprintf(out, len, "struct %s", t->c.name);
+	while (t) {
+		if (t->c.type != TYPE_STRUCT)
+			break;
+		struct oi_struct *s = &t->tstruct;
 		struct oi_field *f, *l;
 		for (f = l = s->fields; l; l = f, f = f->next) {
 			// XXX Assumes ordering
@@ -286,7 +311,7 @@ obj_info_lookup_struct_offset(struct obj_info *o, const char *tname, int off,
 		}
 		assert(l);
 		off -= l->start;
-		s = o->types[l->type];
+		t = o->types[l->type];
 	}
 	if (off)
 		snprintf(out + n, len - n, "+%#x", off);
