@@ -87,6 +87,20 @@ die_type(struct obj_info *o, Dwarf_Die die)
 	return off;
 }
 
+static int
+die_byte_size(struct obj_info *o, Dwarf_Die die)
+{
+	Dwarf_Attribute at;
+	Dwarf_Unsigned val;
+	int r;
+
+	if (dwarf_attr(die, DW_AT_byte_size, &at, NULL))
+		return -1;
+	r = dwarf_formudata(at, &val, NULL);
+	assert(r == DW_DLV_OK);
+	return val;
+}
+
 static unsigned long
 die_data_member_location(struct obj_info *o, Dwarf_Die die)
 {
@@ -113,13 +127,14 @@ die_data_member_location(struct obj_info *o, Dwarf_Die die)
 
 enum oi_type_type {
 	TYPE_STRUCT = 1,
+	TYPE_OTHER,
 };
 
 struct oi_type_common
 {
 	enum oi_type_type type;
 	char *name;
-	bool complete;
+	int size;		/* -1 if incomplete */
 };
 
 // XXX Per CU.  Perhaps embed these in struct oi_cu's?  Hmm, but the
@@ -160,16 +175,24 @@ register_type(struct obj_info *o, int id, union oi_type *type)
 }
 
 static void
-process_struct(struct obj_info *o, Dwarf_Die root)
+process_type_generic(struct obj_info *o, Dwarf_Die die,
+		     enum oi_type_type type, struct oi_type_common *t)
+{
+	t->type = type;
+	t->name = die_name(o, die);
+	t->size = die_byte_size(o, die);
+	register_type(o, die_offset(die), (union oi_type*)t);
+}
+
+static void
+process_type_struct(struct obj_info *o, Dwarf_Die root)
 {
 	Dwarf_Die die;
 	struct oi_struct *s = malloc(sizeof(*s));
 	struct oi_field *f, **tail;
 
 	memset(s, 0, sizeof(*s));
-	s->c.type = TYPE_STRUCT;
-	s->c.name = die_name(o, root);
-	register_type(o, die_offset(root), (union oi_type*)s);
+	process_type_generic(o, root, TYPE_STRUCT, &s->c);
 
 	tail = &s->fields;
 	for (die = die_first(o, root); die; die = die_next(o, die)) {
@@ -182,18 +205,57 @@ process_struct(struct obj_info *o, Dwarf_Die root)
 		f->name = die_name(o, die);
 		f->start = die_data_member_location(o, die);
 		f->type = die_type(o, die);
-		s->c.complete = true;
 	}
 }
 
+static void
+process_type_other(struct obj_info *o, Dwarf_Die root)
+{
+	struct oi_type_common *t = malloc(sizeof(*t));
+
+	memset(t, 0, sizeof(*t));
+	process_type_generic(o, root, TYPE_OTHER, t);
+}
+
 // CU processing
+
+static void
+process_variable(struct obj_info *o, Dwarf_Die die)
+{
+	
+}
 
 static void
 process_global(struct obj_info *o, Dwarf_Die gl, int level)
 {
 	switch (die_tag(gl)) {
 	case DW_TAG_structure_type:
-		process_struct(o, gl);
+		process_type_struct(o, gl);
+		break;
+	case DW_TAG_array_type:
+	case DW_TAG_class_type:
+	case DW_TAG_enumeration_type:
+	case DW_TAG_pointer_type:
+	case DW_TAG_reference_type:
+	case DW_TAG_string_type:
+	case DW_TAG_subroutine_type:
+	case DW_TAG_typedef:
+	case DW_TAG_union_type:
+	case DW_TAG_ptr_to_member_type:
+	case DW_TAG_set_type:
+	case DW_TAG_subrange_type:
+	case DW_TAG_base_type:
+	case DW_TAG_const_type:
+	case DW_TAG_file_type:
+	case DW_TAG_packed_type:
+	case DW_TAG_thrown_type:
+	case DW_TAG_volatile_type:
+	case DW_TAG_template_type_parameter:
+	case DW_TAG_template_value_parameter:
+		process_type_other(o, gl);
+		break;
+	case DW_TAG_variable:
+		process_variable(o, gl);
 		break;
 	default:
 		break;
@@ -278,7 +340,7 @@ type_by_name(struct obj_info *o, const char *name)
 	// XXX This is stupid slow
 	int i;
 	for (i = 0; i < o->ntypes; ++i)
-		if (o->types[i] && o->types[i]->c.complete &&
+		if (o->types[i] && o->types[i]->c.size >= 0 &&
 		    o->types[i]->c.name &&
 		    strcmp(o->types[i]->c.name, name) == 0)
 			return o->types[i];
