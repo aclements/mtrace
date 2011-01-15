@@ -26,6 +26,18 @@ mt2text: mt2text.c $(HDRS)
 	@echo "CC	$@"
 	$(Q)$(CC) -o $@ $< $(CFLAGS) $(LDFLAGS)
 
+objinfo: objinfo.c
+	@echo "CC	$@"
+	$(Q)$(CC) -DTEST -o $@ $< $(CFLAGS) $(LDFLAGS) -ldwarf -lelf
+
+objinfo.o: objinfo.c
+	@echo "CC	$@"
+	$(Q)$(CC) -c -o $@ $< $(CFLAGS) $(LDFLAGS)
+
+lockinfer: lockinfer.cc objinfo.o $(HDRS)
+	@echo "CXX	$@"
+	$(Q)$(CXX) -o $@ lockinfer.cc objinfo.o $(CFLAGS) $(LDFLAGS) -ldwarf -lelf
+
 install: mt2db mt2text
 	@echo "INSTALL  $(INSTDIR)"
 	$(Q)cp mt2db $(INSTDIR)/mt2db

@@ -4,6 +4,7 @@
 #include <vector>
 
 #include <assert.h>
+#include <fcntl.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -11,6 +12,7 @@ extern "C"
 {
 #include <mtrace-magic.h>
 #include "util.h"
+#include "objinfo.h"
 }
 
 using namespace std;
@@ -39,6 +41,8 @@ typedef int Offset;
 typedef map<pair<LabelName, Offset>, OffsetInfo> OffsetCountMap;
 typedef vector<pair<pair<LabelName, Offset>, OffsetInfo> > OffsetCountVector;
 static OffsetCountMap offsetCounts;
+
+static int unknownAccess;
 
 static void
 handle_label(struct mtrace_label_entry *l)
@@ -86,6 +90,7 @@ handle_access(struct mtrace_access_entry *a)
 	// Didn't find it
 	// XXX Static symbols
 //	printf("A ??? %d\n", lockSet);
+	unknownAccess++;
 }
 
 static void
@@ -140,17 +145,29 @@ compare_offset_freq(const pair<pair<LabelName, Offset>, OffsetInfo> &a,
 }
 
 static void
-print_inference()
+print_inference(struct obj_info *vmlinux)
 {
-	// Sort offset counts map by frequency
 	OffsetCountVector counts(offsetCounts.begin(), offsetCounts.end());
+
 	sort(counts.begin(), counts.end(), compare_offset_freq);
 
 	OffsetCountVector::iterator it;
 	for (it = counts.begin(); it < counts.end(); ++it) {
-		printf("%s+%#x \t%d%% \t%d\n",
-		       it->first.first.c_str(), it->first.second,
-		       (int)(it->second.freq(1)*100), it->second.total());
+		float freq = it->second.freq(1);
+		int total = it->second.total();
+		const char *tname = it->first.first.c_str();
+		if ((freq < 0.8 || total < 10) && strcmp(tname, "vm_area_struct") != 0)
+			continue;
+
+		int off = it->first.second;
+		char str[128];
+
+		if (obj_info_lookup_struct_offset(vmlinux, tname, off,
+						  str, sizeof(str)) < 0)
+			snprintf(str, sizeof(str), "%s+%#x", tname, off);
+
+		printf("%-50s %3d%% %d\n", str, (int)(freq*100),
+		       it->second.total());
 	}
 }
 
@@ -158,23 +175,35 @@ int
 main(int argc, char **argv)
 {
 	gzFile log;
+	int vmlinuxfd;
+	struct obj_info *vmlinux;
 	union mtrace_entry entry;
 	int r;
 
-	if (argc != 2)
-		die("usage: %s mtrace-log-file", argv[0]);
+	if (argc != 3)
+		die("usage: %s mtrace-log-file vmlinux", argv[0]);
 
 	log = gzopen(argv[1], "rb");
 	if (!log)
 		edie("gzopen %s", argv[1]);
+	if ((vmlinuxfd = open(argv[2], O_RDONLY)) < 0)
+		edie("open %s", argv[2]);
 
+	printf("Processing log...\n");
 	while ((r = read_entry(log, &entry)) > 0)
 		process_entry(&entry);
 	if (r < 0)
 		die("failed to read entry");
 	gzclose(log);
+	printf("%d unknown accesses\n", unknownAccess);
 
-	print_inference();
+	printf("Resolving structs...\n");
+	vmlinux = obj_info_create_from_fd(vmlinuxfd);
+
+	print_inference(vmlinux);
+
+	obj_info_destroy(vmlinux);
+	close(vmlinuxfd);
 
 	return 0;
 }
