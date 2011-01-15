@@ -31,13 +31,6 @@ extern "C" {
     int
     obj_info_vars_next(struct obj_info *o, struct obj_info_var *var);
 
-/* 
- * int
- * obj_info_next_variable(struct obj_info *o, int *pos,
- * 		       const char **nameOut, unsigned long long *startOut,
- * 		       unsigned int *sizeOut);
- */
-
 #ifdef __cplusplus
 }
 #endif
