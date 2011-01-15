@@ -183,9 +183,11 @@ print_inference(struct obj_info *vmlinux)
 		int off = it->first.second;
 		char str[128];
 
-		if (obj_info_lookup_struct_offset(vmlinux, tname, off,
-						  str, sizeof(str)) < 0)
+		int type = obj_info_type_by_name(vmlinux, tname);
+		if (type == -1)
 			snprintf(str, sizeof(str), "%s+%#x", tname, off);
+		else
+			obj_info_offset_name(vmlinux, type, off, str, sizeof(str));
 
 		printf("%-50s %3d%% %d\n", str, (int)(freq*100),
 		       it->second.total());

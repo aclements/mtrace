@@ -12,10 +12,12 @@ extern "C" {
     void
     obj_info_destroy(struct obj_info *o);
 
-    int
-    obj_info_lookup_struct_offset(struct obj_info *o, const char *tname, int off,
-                                  char *out, int len);
+    void
+    obj_info_offset_name(struct obj_info *o, int id, int off,
+                         char *out, int len);
 
+    int
+    obj_info_type_by_name(struct obj_info *o, const char *name);
     unsigned int
     obj_info_type_size(struct obj_info *o, int idtype);
 
