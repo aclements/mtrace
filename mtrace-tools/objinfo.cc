@@ -2,6 +2,9 @@
 
 #include "objinfo.h"
 
+#include <map>
+#include <string>
+
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -13,13 +16,21 @@
 #include <dwarf.h>
 #include <libdwarf.h>
 
+using namespace std;
+
+typedef int DID;
+typedef map<DID, struct oi_die*> DieMap;
+typedef map<string, DID> NameMap;
+
 struct obj_info
 {
 	Dwarf_Debug dbg;
-	struct oi_die **dies;
-	int ndies;
+	DieMap dies;
+	NameMap types;
 
 	Dwarf_Unsigned cu_offset;
+
+	DieMap::iterator varIt;
 };
 
 // DWARF DIE iteration
@@ -73,7 +84,7 @@ die_name(struct obj_info *o, Dwarf_Die die)
 	return copy;
 }
 
-static int
+static DID
 die_type(struct obj_info *o, Dwarf_Die die)
 {
 	Dwarf_Attribute at;
@@ -155,7 +166,7 @@ struct oi_die
 	int count;
 
 	// DIE_TYPE_REF, DIE_TYPE_ARRAY, DIE_VARIABLE
-	int idtype;
+	DID idtype;
 
 	// DIE_VARIABLE
 	unsigned long long location;
@@ -165,21 +176,14 @@ struct oi_field
 {
 	char *name;
 	int start;
-	int type;
+	DID type;
 	struct oi_field *next;
 };
 
 static void
-register_die(struct obj_info *o, int id, struct oi_die *die)
+register_die(struct obj_info *o, DID id, struct oi_die *die)
 {
-	while (id > o->ndies) {
-		int n = o->ndies ? o->ndies * 2 : 16;
-		o->dies = (struct oi_die**)realloc(o->dies, n * sizeof(*o->dies));
-		memset(o->dies + o->ndies, 0,
-		       (n - o->ndies) * sizeof(*o->dies));
-		o->ndies  = n;
-	}
-	assert(!o->dies[id]);
+	assert(o->dies.find(id) == o->dies.end());
 	o->dies[id] = die;
 }
 
@@ -376,23 +380,35 @@ obj_info_process(struct obj_info *o)
 		dwarf_dealloc(o->dbg, root, DW_DLA_DIE);
 		o->cu_offset = next_cu_offset;
 	}
+
+	// Construct indexes
+	for (DieMap::iterator it = o->dies.begin(); it != o->dies.end(); it++) {
+		struct oi_die *d = it->second;
+		switch (d->type) {
+		case DIE_TYPE_STRUCT:
+		case DIE_TYPE_REF:
+		case DIE_TYPE_OTHER:
+			if (d->size >= 0 && d->name)
+				o->types[d->name] = it->first;
+			break;
+
+		default:
+			break;
+		}
+	}
 }
 
 static struct oi_die *
 type_by_name(struct obj_info *o, const char *name)
 {
-	// XXX This is stupid slow
-	int i;
-	for (i = 0; i < o->ndies; ++i)
-		if (o->dies[i] && o->dies[i]->size >= 0 &&
-		    o->dies[i]->name &&
-		    strcmp(o->dies[i]->name, name) == 0)
-			return o->dies[i];
-	return NULL;
+	NameMap::iterator it = o->types.find(name);
+	if (it == o->types.end())
+		return NULL;
+	return o->dies[it->second];
 }
 
-static unsigned int
-type_size(struct obj_info *o, int idtype)
+unsigned int
+obj_info_type_size(struct obj_info *o, int idtype)
 {
 	int mul = 1;
 	while (idtype != -1 && o->dies[idtype]) {
@@ -446,32 +462,37 @@ obj_info_lookup_struct_offset(struct obj_info *o, const char *tname, int off,
 	return 0;
 }
 
-int
-obj_info_next_variable(struct obj_info *o, int *pos,
-		       const char **nameOut, unsigned long long *startOut,
-		       unsigned int *sizeOut)
+void
+obj_info_vars_reset(struct obj_info *o)
 {
-	for (; *pos < o->ndies; (*pos)++) {
-		struct oi_die *d = o->dies[*pos];
-		if (d && d->type == DIE_VARIABLE && d->location != ~0ull) {
-			*nameOut = d->name;
-			*startOut = d->location;
-			*sizeOut = type_size(o, d->idtype);
-			(*pos)++;
-			return 1;
-		}
-	}
-	return 0;
+	o->varIt = o->dies.begin();
+}
+
+int
+obj_info_vars_next(struct obj_info *o, struct obj_info_var *var)
+{
+	while (o->varIt != o->dies.end() &&
+	       !(o->varIt->second->type == DIE_VARIABLE &&
+		 o->varIt->second->location != ~0ull))
+		o->varIt++;
+	if (o->varIt == o->dies.end())
+		return 0;
+
+	struct oi_die *d = o->varIt->second;
+	var->name = d->name;
+	var->location = d->location;
+	var->idtype = d->idtype;
+
+	o->varIt++;
+	return 1;
 }
 
 struct obj_info*
 obj_info_create_from_fd(int fd)
 {
-	struct obj_info *out = (struct obj_info*)malloc(sizeof(*out));
+	struct obj_info *out = new struct obj_info;
 	Dwarf_Error err;
 	int r;
-
-	memset(out, 0, sizeof(*out));
 
 	r = dwarf_init(fd, DW_DLC_READ, 0, 0, &out->dbg, &err);
 	if (r != DW_DLV_OK) {
@@ -488,7 +509,7 @@ obj_info_destroy(struct obj_info *o)
 	if (!o)
 		return;
 	dwarf_finish(o->dbg, NULL);
-	free(o);
+	delete o;
 }
 
 #if TEST
@@ -510,12 +531,10 @@ main(int argc, char **argv)
 	obj_info_lookup_struct_offset(o, "dentry", 104, str, sizeof str);
 	printf("%s\n", str);
 
-	int pos = 0;
-	const char *name;
-	unsigned long long start;
-	unsigned int size;
-	while (obj_info_next_variable(o, &pos, &name, &start, &size))
-		printf("%s %llx %d\n", name, start, size);
+	struct obj_info_var var;
+	obj_info_vars_reset(o);
+	while (obj_info_vars_next(o, &var))
+		printf("%s %llx %d\n", var.name, var.location, obj_info_type_size(o, var.idtype));
 
 	obj_info_destroy(o);
 	return 0;

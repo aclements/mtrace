@@ -48,10 +48,7 @@ static void
 process_static(struct obj_info *o)
 {
 	struct mtrace_label_entry l;
-	int pos = 0;
-	const char *name;
-	unsigned long long start;
-	unsigned int bytes;
+	struct obj_info_var var;
 
 	l.h.type = mtrace_entry_label;
 	l.h.access_count = 0;
@@ -59,10 +56,11 @@ process_static(struct obj_info *o)
 	l.label_type = mtrace_label_static;
 	l.host_addr = 0;
 
-	while (obj_info_next_variable(o, &pos, &name, &start, &bytes)) {
-		strncpy(l.str, name, sizeof(l.str) - 1);
-		l.guest_addr = start;
-		l.bytes = bytes;
+	obj_info_vars_reset(o);
+	while (obj_info_vars_next(o, &var)) {
+		strncpy(l.str, var.name, sizeof(l.str) - 1);
+		l.guest_addr = var.location;
+		l.bytes = obj_info_type_size(o, var.idtype);
 		labels[l.label_type][l.guest_addr] = l;
 	}
 }
