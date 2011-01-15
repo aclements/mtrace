@@ -11,10 +11,10 @@ CWARNS	= -Wformat=2 -Wextra -Wmissing-noreturn -Wwrite-strings -Wshadow \
 	   -Wswitch-default -Wmissing-declarations -Wno-format-nonliteral \
 	   -Wno-deprecated -Wno-format-security
 
-CFLAGS  = -Wall -Werror $(CWARNS) -I$(QEMUDIR) -g -O2
+CFLAGS  = -Wall -Werror $(CWARNS) -I$(QEMUDIR) -g #-O2
 LDFLAGS = -lsqlite3 -lz
 
-HDRS	= $(QEMUDIR)/mtrace-magic.h syms.hh calltrace.hh util.h
+HDRS	= $(QEMUDIR)/mtrace-magic.h syms.hh calltrace.hh util.h objinfo.h
 
 all: mt2db mt2text
 
@@ -26,17 +26,13 @@ mt2text: mt2text.c $(HDRS)
 	@echo "CC	$@"
 	$(Q)$(CC) -o $@ $< $(CFLAGS) $(LDFLAGS)
 
-objinfo: objinfo.c
-	@echo "CC	$@"
-	$(Q)$(CC) -DTEST -o $@ $< $(CFLAGS) $(LDFLAGS) -ldwarf -lelf
-
-objinfo.o: objinfo.c
-	@echo "CC	$@"
-	$(Q)$(CC) -c -o $@ $< $(CFLAGS) $(LDFLAGS)
-
-lockinfer: lockinfer.cc objinfo.o $(HDRS)
+objinfo: objinfo.cc $(HDRS)
 	@echo "CXX	$@"
-	$(Q)$(CXX) -o $@ lockinfer.cc objinfo.o $(CFLAGS) $(LDFLAGS) -ldwarf -lelf
+	$(Q)$(CXX) -DTEST -o $@ $< $(CFLAGS) $(LDFLAGS) -ldwarf -lelf
+
+lockinfer: lockinfer.cc objinfo.cc $(HDRS)
+	@echo "CXX	$@"
+	$(Q)$(CXX) -o $@ lockinfer.cc objinfo.cc $(CFLAGS) $(LDFLAGS) -ldwarf -lelf
 
 install: mt2db mt2text
 	@echo "INSTALL  $(INSTDIR)"

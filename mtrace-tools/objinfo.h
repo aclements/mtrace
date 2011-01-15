@@ -1,6 +1,10 @@
 #ifndef _OBJINFO_H
 #define _OBJINFO_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct obj_info;
 
 struct obj_info*
@@ -15,5 +19,9 @@ int
 obj_info_next_variable(struct obj_info *o, int *pos,
 		       const char **nameOut, unsigned long long *startOut,
 		       unsigned int *sizeOut);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // _OBJINFO_H
