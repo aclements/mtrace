@@ -489,7 +489,7 @@ obj_info_offset_name(struct obj_info *o, int id, int off,
 		{
 			unsigned int esize = obj_info_type_size(o, t->idtype);
 			n += snprintf(out + n, len - n, "[%d]", off/esize);
-			off -= off/esize;
+			off -= (off/esize)*esize;
 			id = t->idtype;
 			break;
 		}
@@ -529,6 +529,7 @@ obj_info_vars_next(struct obj_info *o, struct obj_info_var *var)
 		return 0;
 
 	struct oi_die *d = o->varIt->second;
+	var->id = o->varIt->first;
 	var->name = d->name;
 	var->location = d->location;
 	var->idtype = d->idtype;

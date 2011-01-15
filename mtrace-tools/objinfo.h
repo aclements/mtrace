@@ -23,6 +23,7 @@ extern "C" {
 
     struct obj_info_var 
     {
+        int id;
         const char *name;
         unsigned long long location;
         int idtype;
