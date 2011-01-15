@@ -82,7 +82,7 @@ die_type(struct obj_info *o, Dwarf_Die die)
 
 	if (dwarf_attr(die, DW_AT_type, &at, NULL))
 		return -1;
-	r = dwarf_formref(at, &off, NULL);
+	r = dwarf_global_formref(at, &off, NULL);
 	assert(r == DW_DLV_OK);
 	return off;
 }
@@ -181,7 +181,7 @@ process_struct(struct obj_info *o, Dwarf_Die root)
 
 		f->name = die_name(o, die);
 		f->start = die_data_member_location(o, die);
-		f->type = o->cu_offset + die_type(o, die);
+		f->type = die_type(o, die);
 		s->c.complete = true;
 	}
 }
@@ -222,7 +222,7 @@ print_die(struct obj_info *o, Dwarf_Die die, int indent)
 		dwarf_dealloc(o->dbg, name, DW_DLA_STRING);
 	}
 	if (tag == DW_TAG_member)
-		printf(" <%x> %lu", o->cu_offset + die_type(o, die),
+		printf(" <%x> %lu", die_type(o, die),
 		       die_data_member_location(o, die));
 	printf("\n");
 }
