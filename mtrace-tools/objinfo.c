@@ -16,8 +16,8 @@
 struct obj_info
 {
 	Dwarf_Debug dbg;
-	union oi_type **types;
-	int ntypes;
+	struct oi_die **dies;
+	int ndies;
 
 	Dwarf_Unsigned cu_offset;
 };
@@ -123,25 +123,24 @@ die_data_member_location(struct obj_info *o, Dwarf_Die die)
 	return out;
 }
 
-// Type processing
+// Processed DIE's
 
-enum oi_type_type {
-	TYPE_STRUCT = 1,
-	TYPE_OTHER,
-};
-
-struct oi_type_common
-{
-	enum oi_type_type type;
-	char *name;
-	int size;		/* -1 if incomplete */
+enum oi_die_type {
+	DIE_TYPE_STRUCT = 1,
+	DIE_TYPE_OTHER,
 };
 
 // XXX Per CU.  Perhaps embed these in struct oi_cu's?  Hmm, but the
-// type array.  Also, I often don't care (or know) which CU.
-struct oi_struct
+// DIE array.  Also, I often don't care (or know) which CU.
+struct oi_die
 {
-	struct oi_type_common c;
+	enum oi_die_type type;
+	char *name;
+
+	// DIE_TYPE_*
+	int size;		/* -1 if incomplete */
+
+	// DIE_TYPE_STRUCT
 	struct oi_field *fields;
 };
 
@@ -153,46 +152,40 @@ struct oi_field
 	struct oi_field *next;
 };
 
-union oi_type
-{
-	struct oi_type_common c;
-
-	struct oi_struct tstruct;
-};
-
 static void
-register_type(struct obj_info *o, int id, union oi_type *type)
+register_die(struct obj_info *o, int id, struct oi_die *die)
 {
-	while (id > o->ntypes) {
-		int n = o->ntypes ? o->ntypes * 2 : 16;
-		o->types = realloc(o->types, n * sizeof(*o->types));
-		memset(o->types + o->ntypes, 0,
-		       (n - o->ntypes) * sizeof(*o->types));
-		o->ntypes  = n;
+	while (id > o->ndies) {
+		int n = o->ndies ? o->ndies * 2 : 16;
+		o->dies = realloc(o->dies, n * sizeof(*o->dies));
+		memset(o->dies + o->ndies, 0,
+		       (n - o->ndies) * sizeof(*o->dies));
+		o->ndies  = n;
 	}
-	assert(!o->types[id]);
-	o->types[id] = type;
+	assert(!o->dies[id]);
+	o->dies[id] = die;
 }
 
-static void
-process_type_generic(struct obj_info *o, Dwarf_Die die,
-		     enum oi_type_type type, struct oi_type_common *t)
+// Type processing
+
+static struct oi_die *
+new_type(struct obj_info *o, Dwarf_Die die, enum oi_die_type type)
 {
+	struct oi_die *t = malloc(sizeof(*t));
+	memset(t, 0, sizeof(*t));
 	t->type = type;
 	t->name = die_name(o, die);
 	t->size = die_byte_size(o, die);
-	register_type(o, die_offset(die), (union oi_type*)t);
+	register_die(o, die_offset(die), t);
+	return t;
 }
 
 static void
 process_type_struct(struct obj_info *o, Dwarf_Die root)
 {
 	Dwarf_Die die;
-	struct oi_struct *s = malloc(sizeof(*s));
+	struct oi_die *s = new_type(o, root, DIE_TYPE_STRUCT);
 	struct oi_field *f, **tail;
-
-	memset(s, 0, sizeof(*s));
-	process_type_generic(o, root, TYPE_STRUCT, &s->c);
 
 	tail = &s->fields;
 	for (die = die_first(o, root); die; die = die_next(o, die)) {
@@ -211,10 +204,7 @@ process_type_struct(struct obj_info *o, Dwarf_Die root)
 static void
 process_type_other(struct obj_info *o, Dwarf_Die root)
 {
-	struct oi_type_common *t = malloc(sizeof(*t));
-
-	memset(t, 0, sizeof(*t));
-	process_type_generic(o, root, TYPE_OTHER, t);
+	new_type(o, root, DIE_TYPE_OTHER);
 }
 
 // CU processing
@@ -334,16 +324,16 @@ obj_info_process(struct obj_info *o)
 	}
 }
 
-static union oi_type *
+static struct oi_die *
 type_by_name(struct obj_info *o, const char *name)
 {
 	// XXX This is stupid slow
 	int i;
-	for (i = 0; i < o->ntypes; ++i)
-		if (o->types[i] && o->types[i]->c.size >= 0 &&
-		    o->types[i]->c.name &&
-		    strcmp(o->types[i]->c.name, name) == 0)
-			return o->types[i];
+	for (i = 0; i < o->ndies; ++i)
+		if (o->dies[i] && o->dies[i]->size >= 0 &&
+		    o->dies[i]->name &&
+		    strcmp(o->dies[i]->name, name) == 0)
+			return o->dies[i];
 	return NULL;
 }
 
@@ -353,17 +343,16 @@ obj_info_lookup_struct_offset(struct obj_info *o, const char *tname, int off,
 			      char *out, int len)
 {
 	int n;
-	union oi_type *t = type_by_name(o, tname);
-	if (!t || t->c.type != TYPE_STRUCT)
+	struct oi_die *t = type_by_name(o, tname);
+	if (!t || t->type != DIE_TYPE_STRUCT)
 		return -1;
 
-	n = snprintf(out, len, "struct %s", t->c.name);
+	n = snprintf(out, len, "struct %s", t->name);
 	while (t) {
-		if (t->c.type != TYPE_STRUCT)
+		if (t->type != DIE_TYPE_STRUCT)
 			break;
-		struct oi_struct *s = &t->tstruct;
 		struct oi_field *f, *l;
-		for (f = l = s->fields; l; l = f, f = f->next) {
+		for (f = l = t->fields; l; l = f, f = f->next) {
 			// XXX Assumes ordering
 			if (!f || off < f->start) {
 				assert(l);
@@ -373,7 +362,7 @@ obj_info_lookup_struct_offset(struct obj_info *o, const char *tname, int off,
 		}
 		assert(l);
 		off -= l->start;
-		t = o->types[l->type];
+		t = o->dies[l->type];
 	}
 	if (off)
 		snprintf(out + n, len - n, "+%#x", off);
