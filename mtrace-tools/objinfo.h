@@ -11,5 +11,9 @@ obj_info_destroy(struct obj_info *o);
 int
 obj_info_lookup_struct_offset(struct obj_info *o, const char *tname, int off,
 			      char *out, int len);
+int
+obj_info_next_variable(struct obj_info *o, int *pos,
+		       const char **nameOut, unsigned long long *startOut,
+		       unsigned int *sizeOut);
 
 #endif // _OBJINFO_H

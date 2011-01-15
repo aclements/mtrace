@@ -45,6 +45,29 @@ static OffsetCountMap offsetCounts;
 static int unknownAccess;
 
 static void
+process_static(struct obj_info *o)
+{
+	struct mtrace_label_entry l;
+	int pos = 0;
+	const char *name;
+	unsigned long long start;
+	unsigned int bytes;
+
+	l.h.type = mtrace_entry_label;
+	l.h.access_count = 0;
+	l.str[sizeof(l.str) - 1] = 0;
+	l.label_type = mtrace_label_static;
+	l.host_addr = 0;
+
+	while (obj_info_next_variable(o, &pos, &name, &start, &bytes)) {
+		strncpy(l.str, name, sizeof(l.str) - 1);
+		l.guest_addr = start;
+		l.bytes = bytes;
+		labels[l.label_type][l.guest_addr] = l;
+	}
+}
+
+static void
 handle_label(struct mtrace_label_entry *l)
 {
 	LabelMap *m = &labels[l->label_type];
@@ -189,6 +212,10 @@ main(int argc, char **argv)
 	if ((vmlinuxfd = open(argv[2], O_RDONLY)) < 0)
 		edie("open %s", argv[2]);
 
+	printf("Loading symbols and types...\n");
+	vmlinux = obj_info_create_from_fd(vmlinuxfd);
+	process_static(vmlinux);
+
 	printf("Processing log...\n");
 	while ((r = read_entry(log, &entry)) > 0)
 		process_entry(&entry);
@@ -196,9 +223,6 @@ main(int argc, char **argv)
 		die("failed to read entry");
 	gzclose(log);
 	printf("%d unknown accesses\n", unknownAccess);
-
-	printf("Resolving structs...\n");
-	vmlinux = obj_info_create_from_fd(vmlinuxfd);
 
 	print_inference(vmlinux);
 

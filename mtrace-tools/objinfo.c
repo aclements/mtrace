@@ -87,35 +87,35 @@ die_type(struct obj_info *o, Dwarf_Die die)
 	return off;
 }
 
-static int
-die_byte_size(struct obj_info *o, Dwarf_Die die)
+static Dwarf_Unsigned
+die_udata(struct obj_info *o, Dwarf_Die die, Dwarf_Half attr)
 {
 	Dwarf_Attribute at;
 	Dwarf_Unsigned val;
 	int r;
 
-	if (dwarf_attr(die, DW_AT_byte_size, &at, NULL))
-		return -1;
+	if (dwarf_attr(die, attr, &at, NULL))
+		return ~0;
 	r = dwarf_formudata(at, &val, NULL);
 	assert(r == DW_DLV_OK);
 	return val;
 }
 
-static unsigned long
-die_data_member_location(struct obj_info *o, Dwarf_Die die)
+static Dwarf_Unsigned
+die_loc1(struct obj_info *o, Dwarf_Die die, Dwarf_Half attr, Dwarf_Small atom)
 {
 	Dwarf_Attribute loc;
 	Dwarf_Locdesc *llbuf;
 	Dwarf_Signed len;
 	int r;
-	unsigned long out;
+	Dwarf_Unsigned out;
 
-	if (dwarf_attr(die, DW_AT_data_member_location, &loc, NULL))
+	if (dwarf_attr(die, attr, &loc, NULL))
 		return ~0;
 
 	r = dwarf_loclist(loc, &llbuf, &len, NULL);
 	assert(r == DW_DLV_OK);
-	assert(llbuf->ld_s[0].lr_atom == DW_OP_plus_uconst);
+	assert(llbuf->ld_s[0].lr_atom == atom);
 	out = llbuf->ld_s[0].lr_number;
 	dwarf_dealloc(o->dbg, llbuf->ld_s, DW_DLA_LOC_BLOCK);
 	dwarf_dealloc(o->dbg, llbuf, DW_DLA_LOCDESC);
@@ -123,11 +123,19 @@ die_data_member_location(struct obj_info *o, Dwarf_Die die)
 	return out;
 }
 
+static unsigned long
+die_data_member_location(struct obj_info *o, Dwarf_Die die)
+{
+	return die_loc1(o, die, DW_AT_data_member_location, DW_OP_plus_uconst);
+}
+
 // Processed DIE's
 
 enum oi_die_type {
 	DIE_TYPE_STRUCT = 1,
+	DIE_TYPE_REF,
 	DIE_TYPE_OTHER,
+	DIE_VARIABLE,
 };
 
 // XXX Per CU.  Perhaps embed these in struct oi_cu's?  Hmm, but the
@@ -142,6 +150,15 @@ struct oi_die
 
 	// DIE_TYPE_STRUCT
 	struct oi_field *fields;
+
+	// DIE_TYPE_REF
+	int count;
+
+	// DIE_TYPE_REF, DIE_TYPE_ARRAY, DIE_VARIABLE
+	int typeid;
+
+	// DIE_VARIABLE
+	unsigned long long location;
 };
 
 struct oi_field
@@ -166,17 +183,24 @@ register_die(struct obj_info *o, int id, struct oi_die *die)
 	o->dies[id] = die;
 }
 
+static struct oi_die *
+new_die(struct obj_info *o, Dwarf_Die die, enum oi_die_type type)
+{
+	struct oi_die *d = malloc(sizeof(*d));
+	memset(d, 0, sizeof(*d));
+	d->type = type;
+	d->name = die_name(o, die);
+	register_die(o, die_offset(die), d);
+	return d;
+}
+
 // Type processing
 
 static struct oi_die *
 new_type(struct obj_info *o, Dwarf_Die die, enum oi_die_type type)
 {
-	struct oi_die *t = malloc(sizeof(*t));
-	memset(t, 0, sizeof(*t));
-	t->type = type;
-	t->name = die_name(o, die);
-	t->size = die_byte_size(o, die);
-	register_die(o, die_offset(die), t);
+	struct oi_die *t = new_die(o, die, type);
+	t->size = die_udata(o, die, DW_AT_byte_size);
 	return t;
 }
 
@@ -202,6 +226,25 @@ process_type_struct(struct obj_info *o, Dwarf_Die root)
 }
 
 static void
+process_type_array(struct obj_info *o, Dwarf_Die root)
+{
+	struct oi_die *t = new_type(o, root, DIE_TYPE_REF);
+	t->typeid = die_type(o, root);
+
+	Dwarf_Die sub = die_first(o, root);
+	if (die_tag(sub) == DW_TAG_subrange_type)
+		t->count = die_udata(o, sub, DW_AT_upper_bound) + 1;
+}
+
+static void
+process_type_ref(struct obj_info *o, Dwarf_Die root)
+{
+	struct oi_die *t = new_type(o, root, DIE_TYPE_REF);
+	t->typeid = die_type(o, root);
+	t->count = 1;
+}
+
+static void
 process_type_other(struct obj_info *o, Dwarf_Die root)
 {
 	new_type(o, root, DIE_TYPE_OTHER);
@@ -212,7 +255,9 @@ process_type_other(struct obj_info *o, Dwarf_Die root)
 static void
 process_variable(struct obj_info *o, Dwarf_Die die)
 {
-	
+	struct oi_die *v = new_die(o, die, DIE_VARIABLE);
+	v->typeid = die_type(o, die);
+	v->location = die_loc1(o, die, DW_AT_location, DW_OP_addr);
 }
 
 static void
@@ -222,31 +267,40 @@ process_global(struct obj_info *o, Dwarf_Die gl, int level)
 	case DW_TAG_structure_type:
 		process_type_struct(o, gl);
 		break;
+
 	case DW_TAG_array_type:
+		process_type_array(o, gl);
+		break;
+
+	case DW_TAG_typedef:
+	case DW_TAG_const_type:
+	case DW_TAG_volatile_type:
+		process_type_ref(o, gl);
+		break;
+
+	case DW_TAG_base_type:
 	case DW_TAG_class_type:
 	case DW_TAG_enumeration_type:
 	case DW_TAG_pointer_type:
 	case DW_TAG_reference_type:
-	case DW_TAG_string_type:
-	case DW_TAG_subroutine_type:
-	case DW_TAG_typedef:
-	case DW_TAG_union_type:
-	case DW_TAG_ptr_to_member_type:
-	case DW_TAG_set_type:
-	case DW_TAG_subrange_type:
-	case DW_TAG_base_type:
-	case DW_TAG_const_type:
-	case DW_TAG_file_type:
-	case DW_TAG_packed_type:
-	case DW_TAG_thrown_type:
-	case DW_TAG_volatile_type:
-	case DW_TAG_template_type_parameter:
-	case DW_TAG_template_value_parameter:
+//	case DW_TAG_string_type:
+//	case DW_TAG_subroutine_type:
+	case DW_TAG_union_type:	/* XXX */
+//	case DW_TAG_ptr_to_member_type:
+//	case DW_TAG_set_type:
+//	case DW_TAG_subrange_type:
+//	case DW_TAG_file_type:
+//	case DW_TAG_packed_type:
+//	case DW_TAG_thrown_type:
+//	case DW_TAG_template_type_parameter:
+//	case DW_TAG_template_value_parameter:
 		process_type_other(o, gl);
 		break;
+
 	case DW_TAG_variable:
 		process_variable(o, gl);
 		break;
+
 	default:
 		break;
 	}
@@ -337,6 +391,29 @@ type_by_name(struct obj_info *o, const char *name)
 	return NULL;
 }
 
+static unsigned int
+type_size(struct obj_info *o, int typeid)
+{
+	int mul = 1;
+	while (typeid != -1 && o->dies[typeid]) {
+		switch (o->dies[typeid]->type) {
+		case DIE_TYPE_REF:
+			mul *= o->dies[typeid]->count;
+			typeid = o->dies[typeid]->typeid;
+			break;
+		case DIE_TYPE_STRUCT:
+		case DIE_TYPE_OTHER:
+			return mul * o->dies[typeid]->size;
+		default:
+			fprintf(stderr, "type_size: non-type DIE %#x\n",
+				typeid);
+			abort();
+		}
+	}
+	fprintf(stderr, "type_size: bad DIE %#x\n", typeid);
+	abort();
+}
+
 // XXX Unions
 int
 obj_info_lookup_struct_offset(struct obj_info *o, const char *tname, int off,
@@ -366,6 +443,24 @@ obj_info_lookup_struct_offset(struct obj_info *o, const char *tname, int off,
 	}
 	if (off)
 		snprintf(out + n, len - n, "+%#x", off);
+	return 0;
+}
+
+int
+obj_info_next_variable(struct obj_info *o, int *pos,
+		       const char **nameOut, unsigned long long *startOut,
+		       unsigned int *sizeOut)
+{
+	for (; *pos < o->ndies; (*pos)++) {
+		struct oi_die *d = o->dies[*pos];
+		if (d && d->type == DIE_VARIABLE && d->location != ~0ull) {
+			*nameOut = d->name;
+			*startOut = d->location;
+			*sizeOut = type_size(o, d->typeid);
+			(*pos)++;
+			return 1;
+		}
+	}
 	return 0;
 }
 
@@ -414,6 +509,14 @@ main(int argc, char **argv)
 	//obj_info_print_struct_offset(o, "vm_area_struct", 56, str, sizeof str);
 	obj_info_lookup_struct_offset(o, "dentry", 104, str, sizeof str);
 	printf("%s\n", str);
+
+	int pos = 0;
+	const char *name;
+	unsigned long long start;
+	unsigned int size;
+	while (obj_info_next_variable(o, &pos, &name, &start, &size))
+		printf("%s %llx %d\n", name, start, size);
+
 	obj_info_destroy(o);
 	return 0;
 }
