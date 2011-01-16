@@ -34,6 +34,10 @@ extern "C" {
     int
     obj_info_vars_next(struct obj_info *o, struct obj_info_var *var);
 
+    int
+    obj_info_pc_info(struct obj_info *o, unsigned long long pc,
+                     char **name, char **fname, int *fline);
+
 #ifdef __cplusplus
 }
 #endif

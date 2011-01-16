@@ -21,12 +21,14 @@ using namespace std;
 typedef int DID;
 typedef map<DID, struct oi_die*> DieMap;
 typedef map<string, DID> NameMap;
+typedef map<unsigned long long, DID> AddrMap;
 
 struct obj_info
 {
 	Dwarf_Debug dbg;
 	DieMap dies;
 	NameMap types;
+	AddrMap funcs;
 
 	Dwarf_Unsigned cu_offset;
 
@@ -85,13 +87,13 @@ die_name(struct obj_info *o, Dwarf_Die die)
 }
 
 static DID
-die_type(struct obj_info *o, Dwarf_Die die)
+die_ref(struct obj_info *o, Dwarf_Die die, Dwarf_Half attr)
 {
 	Dwarf_Attribute at;
 	Dwarf_Off off;
 	int r;
 
-	if (dwarf_attr(die, DW_AT_type, &at, NULL))
+	if (dwarf_attr(die, attr, &at, NULL))
 		return -1;
 	r = dwarf_global_formref(at, &off, NULL);
 	assert(r == DW_DLV_OK);
@@ -108,6 +110,20 @@ die_udata(struct obj_info *o, Dwarf_Die die, Dwarf_Half attr)
 	if (dwarf_attr(die, attr, &at, NULL))
 		return ~0;
 	r = dwarf_formudata(at, &val, NULL);
+	assert(r == DW_DLV_OK);
+	return val;
+}
+
+static Dwarf_Addr
+die_addr(struct obj_info *o, Dwarf_Die die, Dwarf_Half attr)
+{
+	Dwarf_Attribute at;
+	Dwarf_Addr val;
+	int r;
+
+	if (dwarf_attr(die, attr, &at, NULL))
+		return ~0;
+	r = dwarf_formaddr(at, &val, NULL);
 	assert(r == DW_DLV_OK);
 	return val;
 }
@@ -148,6 +164,7 @@ enum oi_die_type {
 	DIE_TYPE_REF,
 	DIE_TYPE_BASE,
 	DIE_VARIABLE,
+	DIE_SUBPROGRAM,
 };
 
 // XXX Per CU.  Perhaps embed these in struct oi_cu's?  Hmm, but the
@@ -169,8 +186,13 @@ struct oi_die
 	// DIE_TYPE_REF, DIE_TYPE_ARRAY, DIE_VARIABLE
 	DID idtype;
 
-	// DIE_VARIABLE
-	unsigned long long location;
+	// DIE_VARIABLE, DIE_SUBPROGRAM
+	unsigned long long start;
+
+	// DIE_SUBPROGRAM
+	unsigned long long end;
+	DID cu;
+	DID parent;
 };
 
 struct oi_field
@@ -226,7 +248,7 @@ process_type_struct(struct obj_info *o, Dwarf_Die root)
 
 		f->name = die_name(o, die);
 		f->start = die_data_member_location(o, die);
-		f->type = die_type(o, die);
+		f->type = die_ref(o, die, DW_AT_type);
 	}
 }
 
@@ -234,7 +256,7 @@ static void
 process_type_array(struct obj_info *o, Dwarf_Die root)
 {
 	struct oi_die *t = new_type(o, root, DIE_TYPE_ARRAY);
-	t->idtype = die_type(o, root);
+	t->idtype = die_ref(o, root, DW_AT_type);
 
 	Dwarf_Die sub = die_first(o, root);
 	if (die_tag(sub) != DW_TAG_subrange_type) {
@@ -248,7 +270,7 @@ static void
 process_type_ref(struct obj_info *o, Dwarf_Die root)
 {
 	struct oi_die *t = new_type(o, root, DIE_TYPE_REF);
-	t->idtype = die_type(o, root);
+	t->idtype = die_ref(o, root, DW_AT_type);
 	t->count = 1;
 }
 
@@ -264,12 +286,34 @@ static void
 process_variable(struct obj_info *o, Dwarf_Die die)
 {
 	struct oi_die *v = new_die(o, die, DIE_VARIABLE);
-	v->idtype = die_type(o, die);
-	v->location = die_loc1(o, die, DW_AT_location, DW_OP_addr);
+	v->idtype = die_ref(o, die, DW_AT_type);
+	v->start = die_loc1(o, die, DW_AT_location, DW_OP_addr);
 }
 
 static void
-process_global(struct obj_info *o, Dwarf_Die gl, int level)
+process_subprogram(struct obj_info *o, Dwarf_Die die, DID cuid, DID parent)
+{
+	if (die_tag(die) == DW_TAG_subprogram ||
+	    die_tag(die) == DW_TAG_inlined_subroutine) {
+		struct oi_die *d = new_die(o, die, DIE_SUBPROGRAM);
+		DID origin = die_ref(o, die, DW_AT_abstract_origin);
+		if (origin != -1)
+			d->name = strdup(o->dies[origin]->name);
+		d->start = die_addr(o, die, DW_AT_low_pc);
+		d->end = die_addr(o, die, DW_AT_high_pc);
+		d->cu = cuid;
+		d->parent = parent;
+//		printf("%x %s %llx %llx\n", die_offset(die), d->name, d->start, d->end);
+
+		parent = die_offset(die);
+	}
+
+	for (die = die_first(o, die); die; die = die_next(o, die))
+		process_subprogram(o, die, cuid, parent);
+}
+
+static void
+process_global(struct obj_info *o, Dwarf_Die gl, DID cuid)
 {
 	switch (die_tag(gl)) {
 	case DW_TAG_structure_type:
@@ -309,6 +353,10 @@ process_global(struct obj_info *o, Dwarf_Die gl, int level)
 		process_variable(o, gl);
 		break;
 
+	case DW_TAG_subprogram:
+		process_subprogram(o, gl, cuid, 0);
+		break;
+
 	default:
 		break;
 	}
@@ -318,9 +366,10 @@ static void
 process_cu(struct obj_info *o, Dwarf_Die cu, int level)
 {
 	Dwarf_Die die;
+	DID cuid = die_offset(cu);
 	assert(die_tag(cu) == DW_TAG_compile_unit);
 	for (die = die_first(o, cu); die; die = die_next(o, die))
-		process_global(o, die, level+1);
+		process_global(o, die, cuid);
 }
 
 static void
@@ -336,7 +385,7 @@ print_die(struct obj_info *o, Dwarf_Die die, int indent)
 		dwarf_dealloc(o->dbg, name, DW_DLA_STRING);
 	}
 	if (tag == DW_TAG_member)
-		printf(" <%x> %lu", die_type(o, die),
+		printf(" <%x> %lu", die_ref(o, die, DW_AT_type),
 		       die_data_member_location(o, die));
 	printf("\n");
 }
@@ -396,6 +445,10 @@ obj_info_process(struct obj_info *o)
 			if (d->size >= 0 && d->name)
 				o->types[d->name] = it->first;
 			break;
+
+		case DIE_SUBPROGRAM:
+			if (d->start != ~0ull)
+				o->funcs[d->start] = it->first;
 
 		default:
 			break;
@@ -523,7 +576,7 @@ obj_info_vars_next(struct obj_info *o, struct obj_info_var *var)
 {
 	while (o->varIt != o->dies.end() &&
 	       !(o->varIt->second->type == DIE_VARIABLE &&
-		 o->varIt->second->location != ~0ull))
+		 o->varIt->second->start != ~0ull))
 		o->varIt++;
 	if (o->varIt == o->dies.end())
 		return 0;
@@ -531,11 +584,87 @@ obj_info_vars_next(struct obj_info *o, struct obj_info_var *var)
 	struct oi_die *d = o->varIt->second;
 	var->id = o->varIt->first;
 	var->name = d->name;
-	var->location = d->location;
+	var->location = d->start;
 	var->idtype = d->idtype;
 
 	o->varIt++;
 	return 1;
+}
+
+static struct oi_die *
+pc_to_func(struct obj_info *o, unsigned long long pc)
+{
+	AddrMap::iterator it = o->funcs.upper_bound(pc);
+	if (it == o->funcs.begin())
+		return NULL;
+	it--;
+
+	struct oi_die *d = o->dies[it->second];
+	assert(d->type == DIE_SUBPROGRAM);
+	while (1) {
+		// XXX Ugh, can also be DW_AT_ranges
+		if (d->start != ~0ull) {
+			assert(d->start <= pc);
+			if (pc < d->end)
+				return d;
+		}
+		if (!d->parent)
+			return NULL;
+		d = o->dies[d->parent];
+	}
+}
+
+int
+obj_info_pc_info(struct obj_info *o, unsigned long long pc,
+		 char **name, char **fname, int *fline)
+{
+	int r;
+
+	// Find the function containing pc
+	struct oi_die *d = pc_to_func(o, pc);
+	if (!d)
+		return -1;
+	*name = strdup(d->name);
+
+	// Get the CU containing this function
+	Dwarf_Die cu;
+	r = dwarf_offdie(o->dbg, d->cu, &cu, NULL);
+	assert(r == DW_DLV_OK);
+
+	// Get the line number information for this CU
+	Dwarf_Line *linebuf;
+	Dwarf_Signed nlines;
+	r = dwarf_srclines(cu, &linebuf, &nlines, NULL);
+	assert(r == DW_DLV_OK);
+
+	// Find the line number record for this PC
+	int i;
+	for (i = 0; i < nlines; ++i) {
+		Dwarf_Addr addr;
+		r = dwarf_lineaddr(linebuf[i], &addr, NULL);
+		assert(r == DW_DLV_OK);
+		if (addr > pc)
+			break;
+	}
+	assert(i);
+
+	// Get the source file name
+	char *linesrc;
+	r = dwarf_linesrc(linebuf[i-1], &linesrc, NULL);
+	assert(r == DW_DLV_OK);
+	*fname = strdup(linesrc);
+	dwarf_dealloc(o->dbg, linesrc, DW_DLA_STRING);
+
+	// Get the line number
+	Dwarf_Unsigned lineno;
+	r = dwarf_lineno(linebuf[i-1], &lineno, NULL);
+	assert(r == DW_DLV_OK);
+	*fline = lineno;
+
+	// XXX Cache linebuf?
+	dwarf_srclines_dealloc(o->dbg, linebuf, nlines);
+
+	return 0;
 }
 
 struct obj_info*
@@ -589,6 +718,14 @@ main(int argc, char **argv)
 	// obj_info_vars_reset(o);
 	// while (obj_info_vars_next(o, &var))
 	// 	printf("%s %llx %d\n", var.name, var.location, obj_info_type_size(o, var.idtype));
+
+	char *funcname, *filename;
+	int fileline;
+	obj_info_pc_info(o, 0xffffffff810343d5ull,
+			 &funcname, &filename, &fileline);
+	printf("%s %s:%d\n", funcname, filename, fileline);
+	free(funcname);
+	free(filename);
 
 	obj_info_destroy(o);
 	return 0;

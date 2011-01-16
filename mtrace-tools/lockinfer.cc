@@ -17,16 +17,45 @@ extern "C"
 
 using namespace std;
 
+class OffsetLockSetInfo
+{
+public:
+	int count;
+	map<uint64_t, int> pcs;
+
+	static bool
+	compare_pc_count(const pair<uint64_t, int> &a,
+			 const pair<uint64_t, int> &b) {
+		return a.second > b.second;
+	}
+
+	void print_pcs(struct obj_info *o, unsigned int num) {
+		if (num > pcs.size())
+			num = pcs.size();
+		vector<pair<uint64_t, int> > vec(pcs.begin(), pcs.end());
+		partial_sort(vec.begin(), vec.begin() + num, vec.end(),
+			     compare_pc_count);
+		for (unsigned int i = 0; i < num; ++i) {
+			printf("  %016llx %d %s %s:%d\n",
+			       vec[i].first, vec[i].second);
+		}
+	}
+};
+
 class OffsetInfo
 {
 public:
-	int counts[2];
+	OffsetLockSetInfo info[2]; // Indexed by lockSet
 
+	void access(struct mtrace_access_entry *a, int lockSet) {
+		++info[lockSet].count;
+		++info[lockSet].pcs[a->pc];
+	}
 	int total() const {
-		return counts[0] + counts[1];
+		return info[0].count + info[1].count;
 	}
 	float freq(int ls) const {
-		return (float)counts[ls] / total();
+		return (float)info[ls].count / total();
 	}
 };
 
@@ -131,7 +160,7 @@ handle_access(struct mtrace_access_entry *a)
 //		printf("A %s+0x%x %d\n", l->str, offset, lockSet);
 		offsetCounts[make_pair(l->h.cpu == 0xffff ?
 				       LabelClass(l->host_addr) :
-				       LabelClass(l->str), offset)].counts[lockSet]++;
+				       LabelClass(l->str), offset)].access(a, lockSet);
 		return;
 	}
 	// Didn't find it
@@ -221,6 +250,10 @@ print_inference(struct obj_info *vmlinux)
 		// isn't protected.
 		printf("%-50s %3d%% %d\n", str, (int)(freq*100),
 		       it->second.total());
+
+		it->second.info[1].print_pcs(vmlinux, 5);
+		printf("  --\n");
+		it->second.info[0].print_pcs(vmlinux, 5);
 	}
 }
 
@@ -231,6 +264,7 @@ main(int argc, char **argv)
 	int vmlinuxfd;
 	struct obj_info *vmlinux;
 	union mtrace_entry entry;
+	int count = 0, limit = 1000000;
 	int r;
 
 	if (argc != 3)
@@ -242,13 +276,16 @@ main(int argc, char **argv)
 	if ((vmlinuxfd = open(argv[2], O_RDONLY)) < 0)
 		edie("open %s", argv[2]);
 
-	printf("Loading symbols and types...\n");
+	printf("Loading object info...\n");
 	vmlinux = obj_info_create_from_fd(vmlinuxfd);
 	process_static(vmlinux);
 
 	printf("Processing log...\n");
-	while ((r = read_entry(log, &entry)) > 0)
+	while ((r = read_entry(log, &entry)) > 0) {
+		if (limit && count++ > limit)
+			break;
 		process_entry(&entry);
+	}
 	if (r < 0)
 		die("failed to read entry");
 	gzclose(log);
