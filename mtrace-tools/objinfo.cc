@@ -446,14 +446,14 @@ obj_info_offset_name(struct obj_info *o, int id, int off,
 	struct oi_die *t = o->dies[id];
 	switch (t->type) {
 	case DIE_TYPE_STRUCT:
-		n = snprintf(out, len, "struct %s", t->name);
+		n = snprintf(out, len, "{struct %s}", t->name);
 		break;
 	case DIE_TYPE_ARRAY:
-		n = snprintf(out, len, "%s[]", o->dies[t->idtype]->name);
+		n = snprintf(out, len, "{%s[]}", o->dies[t->idtype]->name);
 		break;
 	case DIE_TYPE_REF:
 	case DIE_TYPE_BASE:
-		n = snprintf(out, len, "%s", t->name);
+		n = snprintf(out, len, "{%s}", t->name);
 		break;
 	case DIE_VARIABLE:
 		n = snprintf(out, len, "%s", t->name);

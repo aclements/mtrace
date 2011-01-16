@@ -12,10 +12,11 @@ static void print_entry(union mtrace_entry *entry)
 	
 	switch(entry->h.type) {
 	case mtrace_entry_label:
-		printf("%-3s [%-3u  %16s  %016lx  %016lx  %016lx  %016lx]\n",
+		printf("%-3s [%-3u  %16s  %016lx  %016lx  %016lx  %016lx  %016lx]\n",
 		       "T",
 		       entry->label.label_type,
 		       entry->label.str,
+                       entry->label.pc,
 		       entry->label.host_addr,
 		       entry->label.guest_addr,
 		       entry->label.bytes,

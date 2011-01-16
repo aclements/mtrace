@@ -189,10 +189,14 @@ static void mtrace_access_dump(mtrace_access_t type, target_ulong host_addr,
 			       void *retaddr)
 {
     struct mtrace_access_entry entry;
+    static int sampler;
     
     if (!mtrace_enable)
 	return;
     
+    if (sampler++ % 100)
+	return;
+
     entry.h.type = mtrace_entry_access;
     entry.h.size = sizeof(entry);
     entry.h.cpu = cpu_single_env->cpu_index;

@@ -30,21 +30,23 @@ public:
 	}
 };
 
-class LabelName
+class LabelClass
 {
 public:
-	int idtype;
+	int varid;
 	string name;
 
-	LabelName(int _idtype) : idtype(_idtype) {}
-	LabelName(string _name) : idtype(-1), name(_name) {}
+	// Static variables
+	LabelClass(int _varid) : varid(_varid) {}
+	// Dynamic allocations
+	LabelClass(string _name) : varid(-1), name(_name) {}
 
-	bool operator==(LabelName o) const {
-		return o.idtype == idtype && o.name == name;
+	bool operator==(LabelClass o) const {
+		return o.varid == varid && o.name == name;
 	}
-	bool operator<(LabelName o) const {
-		if (o.idtype != idtype)
-			return o.idtype < idtype;
+	bool operator<(LabelClass o) const {
+		if (o.varid != varid)
+			return o.varid < varid;
 		return o.name < name;
 	}
 };
@@ -57,8 +59,10 @@ static LabelMap labels[mtrace_label_end];
 static int lockSet;		// Just 0 or 1 depending on mmap_sem
 
 typedef int Offset;
-typedef map<pair<LabelName, Offset>, OffsetInfo> OffsetCountMap;
-typedef vector<pair<pair<LabelName, Offset>, OffsetInfo> > OffsetCountVector;
+// XXX Might want to canonicalize the offsets by rounding them to the
+// beginning of arrays and maybe base types.
+typedef map<pair<LabelClass, Offset>, OffsetInfo> OffsetCountMap;
+typedef vector<pair<pair<LabelClass, Offset>, OffsetInfo> > OffsetCountVector;
 static OffsetCountMap offsetCounts;
 
 static int unknownAccess;
@@ -126,8 +130,8 @@ handle_access(struct mtrace_access_entry *a)
 		int offset = a->guest_addr - l->guest_addr;
 //		printf("A %s+0x%x %d\n", l->str, offset, lockSet);
 		offsetCounts[make_pair(l->h.cpu == 0xffff ?
-				       LabelName(l->host_addr) :
-				       LabelName(l->str), offset)].counts[lockSet]++;
+				       LabelClass(l->host_addr) :
+				       LabelClass(l->str), offset)].counts[lockSet]++;
 		return;
 	}
 	// Didn't find it
@@ -179,8 +183,8 @@ process_entry(union mtrace_entry *e)
 }
 
 static bool
-compare_offset_freq(const pair<pair<LabelName, Offset>, OffsetInfo> &a,
-		    const pair<pair<LabelName, Offset>, OffsetInfo> &b)
+compare_offset_freq(const pair<pair<LabelClass, Offset>, OffsetInfo> &a,
+		    const pair<pair<LabelClass, Offset>, OffsetInfo> &b)
 {
 	if (a.second.freq(1) != b.second.freq(1))
 		return a.second.freq(1) > b.second.freq(1);
@@ -198,20 +202,20 @@ print_inference(struct obj_info *vmlinux)
 	for (it = counts.begin(); it < counts.end(); ++it) {
 		float freq = it->second.freq(1);
 		int total = it->second.total();
-		LabelName *lname = &it->first.first;
+		LabelClass *lname = &it->first.first;
 		if ((freq < 0.8 || total < 10) && lname->name != "vm_area_struct")
 			continue;
 
 		int off = it->first.second;
 		char str[128];
 
-		int type = lname->idtype;
-		if (type == -1)
-			type = obj_info_type_by_name(vmlinux, lname->name.c_str());
-		if (type == -1)
-			snprintf(str, sizeof(str), "%s+%#x", lname->name.c_str(), off);
+		int id = lname->varid;
+		if (id == -1)
+			id = obj_info_type_by_name(vmlinux, lname->name.c_str());
+		if (id == -1)
+			snprintf(str, sizeof(str), "[%s+%#x]", lname->name.c_str(), off);
 		else
-			obj_info_offset_name(vmlinux, type, off, str, sizeof(str));
+			obj_info_offset_name(vmlinux, id, off, str, sizeof(str));
 
 		// XXX Hmm.  If they're all reads, then perhaps it
 		// isn't protected.
