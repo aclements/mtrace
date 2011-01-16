@@ -30,9 +30,9 @@ objinfo: objinfo.cc $(HDRS)
 	@echo "CXX	$@"
 	$(Q)$(CXX) -DTEST -o $@ $< $(CFLAGS) $(LDFLAGS) -ldwarf -lelf
 
-lockinfer: lockinfer.cc objinfo.cc $(HDRS)
+lockinfer: lockinfer.cc objinfo.cc addr2line.cc $(HDRS) addr2line.hh
 	@echo "CXX	$@"
-	$(Q)$(CXX) -o $@ lockinfer.cc objinfo.cc $(CFLAGS) $(LDFLAGS) -ldwarf -lelf
+	$(Q)$(CXX) -o $@ lockinfer.cc objinfo.cc addr2line.cc $(CFLAGS) $(LDFLAGS) -ldwarf -lelf
 
 install: mt2db mt2text
 	@echo "INSTALL  $(INSTDIR)"

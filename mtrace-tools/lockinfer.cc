@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "addr2line.hh"
 extern "C"
 {
 #include <mtrace-magic.h>
@@ -29,15 +30,24 @@ public:
 		return a.second > b.second;
 	}
 
-	void print_pcs(struct obj_info *o, unsigned int num) {
+	void print_pcs(Addr2line *a2l, unsigned int num) {
 		if (num > pcs.size())
 			num = pcs.size();
 		vector<pair<uint64_t, int> > vec(pcs.begin(), pcs.end());
 		partial_sort(vec.begin(), vec.begin() + num, vec.end(),
 			     compare_pc_count);
 		for (unsigned int i = 0; i < num; ++i) {
+			char *func, *file;
+			int lineno;
+			if (a2l->lookup(vec[i].first, &func, &file, &lineno) < 0) {
+				func = strdup("???");
+				file = strdup("???");
+				lineno = 0;
+			}
 			printf("  %016llx %d %s %s:%d\n",
-			       vec[i].first, vec[i].second);
+			       vec[i].first, vec[i].second, func, file, lineno);
+			free(func);
+			free(file);
 		}
 	}
 };
@@ -221,7 +231,7 @@ compare_offset_freq(const pair<pair<LabelClass, Offset>, OffsetInfo> &a,
 }
 
 static void
-print_inference(struct obj_info *vmlinux)
+print_inference(struct obj_info *vmlinux, Addr2line *a2l)
 {
 	OffsetCountVector counts(offsetCounts.begin(), offsetCounts.end());
 
@@ -232,7 +242,7 @@ print_inference(struct obj_info *vmlinux)
 		float freq = it->second.freq(1);
 		int total = it->second.total();
 		LabelClass *lname = &it->first.first;
-		if ((freq < 0.8 || total < 10) && lname->name != "vm_area_struct")
+		if ((freq < 0.95 || total < 10) && lname->name != "vm_area_struct")
 			continue;
 
 		int off = it->first.second;
@@ -248,12 +258,12 @@ print_inference(struct obj_info *vmlinux)
 
 		// XXX Hmm.  If they're all reads, then perhaps it
 		// isn't protected.
-		printf("%-50s %3d%% %d\n", str, (int)(freq*100),
+		printf("%-65s %3d%% %d\n", str, (int)(freq*100),
 		       it->second.total());
 
-		it->second.info[1].print_pcs(vmlinux, 5);
+		it->second.info[1].print_pcs(a2l, 5);
 		printf("  --\n");
-		it->second.info[0].print_pcs(vmlinux, 5);
+		it->second.info[0].print_pcs(a2l, 5);
 	}
 }
 
@@ -280,6 +290,8 @@ main(int argc, char **argv)
 	vmlinux = obj_info_create_from_fd(vmlinuxfd);
 	process_static(vmlinux);
 
+	Addr2line a2l(argv[2]);
+
 	printf("Processing log...\n");
 	while ((r = read_entry(log, &entry)) > 0) {
 		if (limit && count++ > limit)
@@ -291,7 +303,7 @@ main(int argc, char **argv)
 	gzclose(log);
 	printf("%d unknown accesses\n", unknownAccess);
 
-	print_inference(vmlinux);
+	print_inference(vmlinux, &a2l);
 
 	obj_info_destroy(vmlinux);
 	close(vmlinuxfd);

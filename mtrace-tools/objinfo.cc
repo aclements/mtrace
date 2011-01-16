@@ -354,6 +354,10 @@ process_global(struct obj_info *o, Dwarf_Die gl, DID cuid)
 		break;
 
 	case DW_TAG_subprogram:
+		// XXX We're using addr2line now, so don't waste time
+		// gathering subprogram information.
+		break;
+
 		process_subprogram(o, gl, cuid, 0);
 		break;
 
