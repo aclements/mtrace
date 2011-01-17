@@ -25,10 +25,9 @@ tmpl = """
         background-color: #ffffff;
       }
       tr.even > td {
-        background-color: #e9e9e9;
+          background-color: #e2ebf7;
       }
       tr.sum > td {
-        border-top: 1px solid #c5d7ef;
         cursor: pointer;
       }
       tr.detail {
