@@ -22,33 +22,43 @@ class OffsetLockSetInfo
 {
 public:
 	int count;
-	map<uint64_t, int> pcs;
+	typedef pair<uint64_t, mtrace_access_t> Access;
+	map<Access, int> pcs;
 
 	static bool
-	compare_pc_count(const pair<uint64_t, int> &a,
-			 const pair<uint64_t, int> &b) {
+	compare_pc_count(const pair<Access, int> &a,
+			 const pair<Access, int> &b) {
 		return a.second > b.second;
 	}
 
-	void print_pcs(Addr2line *a2l, unsigned int num) {
+	void
+	print_pcs(Addr2line *a2l, unsigned int num) {
+		static const char *access_type_to_str[] = {
+			NULL, "ld", "st", "iw",
+		};
+
 		if (num > pcs.size())
 			num = pcs.size();
-		vector<pair<uint64_t, int> > vec(pcs.begin(), pcs.end());
+		vector<pair<Access, int> > vec(pcs.begin(), pcs.end());
 		partial_sort(vec.begin(), vec.begin() + num, vec.end(),
 			     compare_pc_count);
 		for (unsigned int i = 0; i < num; ++i) {
 			char *func, *file;
 			int lineno;
-			if (a2l->lookup(vec[i].first, &func, &file, &lineno) < 0) {
+			if (a2l->lookup(vec[i].first.first, &func, &file, &lineno) < 0) {
 				func = strdup("???");
 				file = strdup("???");
 				lineno = 0;
 			}
-			printf("  %016llx %d %s %s:%d\n",
-			       vec[i].first, vec[i].second, func, file, lineno);
+			printf("  %s %016llx %d %s %s:%d\n",
+			       access_type_to_str[vec[i].first.second],
+			       vec[i].first.first, vec[i].second,
+			       func, file, lineno);
 			free(func);
 			free(file);
 		}
+		if (num < pcs.size())
+			printf("  (+ %d more)\n", pcs.size() - num);
 	}
 };
 
@@ -59,7 +69,7 @@ public:
 
 	void access(struct mtrace_access_entry *a, int lockSet) {
 		++info[lockSet].count;
-		++info[lockSet].pcs[a->pc];
+		++info[lockSet].pcs[make_pair(a->pc, a->access_type)];
 	}
 	int total() const {
 		return info[0].count + info[1].count;
@@ -274,7 +284,7 @@ main(int argc, char **argv)
 	int vmlinuxfd;
 	struct obj_info *vmlinux;
 	union mtrace_entry entry;
-	int count = 0, limit = 1000000;
+	int count = 0, limit = 0; //1000000;
 	int r;
 
 	if (argc != 3)
