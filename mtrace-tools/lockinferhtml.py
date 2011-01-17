@@ -116,6 +116,8 @@ for l in sys.stdin:
         detail = info[-1][2]
     elif l[0].isspace():
         parts = l.strip().split(None, 5)
+        if parts[0] == "st":
+            parts[0] = "<b>st</b>"
         if parts[4].startswith(BASEPATH):
             parts[4] = parts[4][len(BASEPATH):]
             if LXR:
