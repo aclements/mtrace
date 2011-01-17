@@ -9,6 +9,7 @@ tmpl = """
     <style type="text/css">
       body{
         font-size: 80%;
+        font-family: sans;
       }
       table {
         border: 1px solid #c5d7ef;
@@ -45,14 +46,31 @@ tmpl = """
     <script type="text/javascript">
       function shade(x) {
         for (x = x.nextSibling; x.nodeType != 1; x = x.nextSibling);
-        if (x.style.display === "none" || x.style.display === "")
+        if (x.style.display === "none" || x.style.display === "") {
           x.style.display = "table-row";
-        else
+          state += " " + x.id;
+        } else {
           x.style.display = "none";
+          state = state.replace(" " + x.id, "");
+        }
+        document.getElementById("state").value = state;
+      }
+      var state = "";
+      var stateSet = {};
+      function getState() {
+        state = document.getElementById("state").value;
+        var ids = state.split(" ");
+        for (var n in ids) if (ids[n]) stateSet[ids[n]] = 1;
+      }
+      function init(x) {
+        if (stateSet[x])
+          document.getElementById(x).style.display = "table-row";
       }
     </script>
   </head>
   <body>
+    <input type="text" id="state" style="display:none" />
+    <script type="text/javascript">getState()</script>
     HEADER
     <table style="width:75em">
       <col width="70%" />
@@ -69,8 +87,9 @@ tmpl = """
 rowtmpl = """\
 <tr class="%s sum" onclick="shade(this)"><td>+ %s</td><td>%s</td><td>%s</td><td>%s</td></tr>"""
 detailtmpl = """\
-<tr class="%s detail"><td colspan="4">
+<tr id="d%d" class="%s detail"><td colspan="4">
 HERE
+<script type="text/javascript">init("d%d")</script>
 </td></tr>"""
 lutabletmpl = """\
 <table width="100%">
@@ -122,7 +141,7 @@ for (n, (lock, locked, unlocked)) in enumerate(info):
         detail = lutabletmpl.replace("HERE", "\n".join(lutable))
     else:
         detail = ""
-    table.append((detailtmpl % cls).replace("HERE", detail))
+    table.append((detailtmpl % (n, cls, n)).replace("HERE", detail))
 
 out = tmpl
 out = out.replace("HEADER", "\n".join("<p>%s</p>" % h for h in header))
