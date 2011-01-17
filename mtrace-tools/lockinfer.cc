@@ -268,7 +268,9 @@ print_inference(struct obj_info *vmlinux, Addr2line *a2l)
 		float freq = it->second.freq(false, 1);
 		int total = it->second.total(false);
 		LabelClass *lname = &it->first.first;
-		if ((stfreq < 0.95 || total < 10) && lname->name != "vm_area_struct")
+		if ((stfreq < 0.95 || total < 10) &&
+		    !(lname->name == "vm_area_struct" ||
+		      lname->name == "mm_struct"))
 			continue;
 
 		int off = it->first.second;
