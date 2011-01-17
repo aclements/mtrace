@@ -24,7 +24,7 @@ using namespace std;
 class OffsetLockSetInfo
 {
 public:
-	int count;
+	int stcount, count;
 	typedef pair<uint64_t, mtrace_access_t> Access;
 	map<Access, int> pcs;
 
@@ -74,13 +74,22 @@ public:
 
 	void access(struct mtrace_access_entry *a, int lockSet) {
 		++info[lockSet].count;
+		if (a->access_type == mtrace_access_st)
+			++info[lockSet].stcount;
 		++info[lockSet].pcs[make_pair(a->pc, a->access_type)];
 	}
-	int total() const {
+	int total(bool st) const {
+		if (st)
+			return info[0].stcount + info[1].stcount;
 		return info[0].count + info[1].count;
 	}
-	float freq(int ls) const {
-		return (float)info[ls].count / total();
+	float freq(bool st, int ls) const {
+		int t = total(st);
+		if (t == 0)
+			return 0;
+		if (st)
+			return (float)info[ls].stcount / t;
+		return (float)info[ls].count / t;
 	}
 };
 
@@ -119,7 +128,7 @@ typedef map<pair<LabelClass, Offset>, OffsetInfo> OffsetCountMap;
 typedef vector<pair<pair<LabelClass, Offset>, OffsetInfo> > OffsetCountVector;
 static OffsetCountMap offsetCounts;
 
-static int unknownAccess;
+static int nAccess, unresolvedAccess;
 
 static void
 process_static(struct obj_info *o)
@@ -167,6 +176,7 @@ handle_label(struct mtrace_label_entry *l)
 static void
 handle_access(struct mtrace_access_entry *a)
 {
+	nAccess++;
 	// Map it to a label
 	LabelMap::iterator it;
 	for (int lt = mtrace_label_heap; lt < mtrace_label_end; lt++) {
@@ -191,7 +201,7 @@ handle_access(struct mtrace_access_entry *a)
 	// Didn't find it
 	// XXX Many of these appear to be code, I think
 //	printf("A ??? %d\n", lockSet);
-	unknownAccess++;
+	unresolvedAccess++;
 }
 
 static void
@@ -240,9 +250,9 @@ static bool
 compare_offset_freq(const pair<pair<LabelClass, Offset>, OffsetInfo> &a,
 		    const pair<pair<LabelClass, Offset>, OffsetInfo> &b)
 {
-	if (a.second.freq(1) != b.second.freq(1))
-		return a.second.freq(1) > b.second.freq(1);
-	return a.second.total() > b.second.total();
+	if (a.second.freq(true, 1) != b.second.freq(true, 1))
+		return a.second.freq(true, 1) > b.second.freq(true, 1);
+	return a.second.total(false) > b.second.total(false);
 }
 
 static void
@@ -254,10 +264,11 @@ print_inference(struct obj_info *vmlinux, Addr2line *a2l)
 
 	OffsetCountVector::iterator it;
 	for (it = counts.begin(); it < counts.end(); ++it) {
-		float freq = it->second.freq(1);
-		int total = it->second.total();
+		float stfreq = it->second.freq(true, 1);
+		float freq = it->second.freq(false, 1);
+		int total = it->second.total(false);
 		LabelClass *lname = &it->first.first;
-		if ((freq < 0.95 || total < 10) && lname->name != "vm_area_struct")
+		if ((stfreq < 0.95 || total < 10) && lname->name != "vm_area_struct")
 			continue;
 
 		int off = it->first.second;
@@ -273,8 +284,8 @@ print_inference(struct obj_info *vmlinux, Addr2line *a2l)
 
 		// XXX Hmm.  If they're all reads, then perhaps it
 		// isn't protected.
-		printf("%-65s %3d%% %d\n", str, (int)(freq*100),
-		       it->second.total());
+		printf("%-65s %3d%% %3d%% %d\n", str,
+		       (int)(stfreq*100), (int)(freq*100), total);
 
 		it->second.info[1].print_pcs(a2l, SOURCE_LIMIT);
 		printf("  --\n");
@@ -318,7 +329,7 @@ main(int argc, char **argv)
 		die("failed to read entry");
 	gzclose(log);
 	printf("# Lock frequencies for %s\n", lockname);
-	printf("# %d unresolved accesses\n", unknownAccess);
+	printf("# %d accesses, %d unresolved\n", nAccess, unresolvedAccess);
 
 	print_inference(vmlinux, &a2l);
 
