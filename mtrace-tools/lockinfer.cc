@@ -17,6 +17,7 @@ extern "C"
 }
 
 enum { SOURCE_LIMIT = 0 };
+const char *lockname;
 
 using namespace std;
 
@@ -109,7 +110,7 @@ typedef map<uint64_t, struct mtrace_label_entry> LabelMap;
 
 static LabelMap labels[mtrace_label_end];
 // XXX Assuming a single CPU
-static int lockSet;		// Just 0 or 1 depending on mmap_sem
+static int lockSet;		// Just 0 or 1 depending on lock
 
 typedef int Offset;
 // XXX Might want to canonicalize the offsets by rounding them to the
@@ -198,7 +199,7 @@ handle_lock(struct mtrace_lock_entry *l)
 {
 	static int held;
 
-	if (strcmp(l->str, "&mm->mmap_sem") != 0)
+	if (strcmp(l->str, lockname) != 0)
 		return;
 
 	if (l->release)
@@ -291,8 +292,9 @@ main(int argc, char **argv)
 	int count = 0, limit = 0; //1000000;
 	int r;
 
-	if (argc != 3)
-		die("usage: %s mtrace-log-file vmlinux", argv[0]);
+	if (argc != 4)
+		die("usage: %s mtrace-log-file vmlinux lockname", argv[0]);
+	lockname = argv[3];
 
 	log = gzopen(argv[1], "rb");
 	if (!log)
@@ -300,13 +302,13 @@ main(int argc, char **argv)
 	if ((vmlinuxfd = open(argv[2], O_RDONLY)) < 0)
 		edie("open %s", argv[2]);
 
-	printf("# Loading object info...\n");
+	fprintf(stderr, "Loading object info...\n");
 	vmlinux = obj_info_create_from_fd(vmlinuxfd);
 	process_static(vmlinux);
 
 	Addr2line a2l(argv[2]);
 
-	printf("# Processing log...\n");
+	fprintf(stderr, "Processing log...\n");
 	while ((r = read_entry(log, &entry)) > 0) {
 		if (limit && count++ > limit)
 			break;
@@ -315,7 +317,8 @@ main(int argc, char **argv)
 	if (r < 0)
 		die("failed to read entry");
 	gzclose(log);
-	printf("# %d unknown accesses\n", unknownAccess);
+	printf("# Lock frequencies for %s\n", lockname);
+	printf("# %d unresolved accesses\n", unknownAccess);
 
 	print_inference(vmlinux, &a2l);
 
