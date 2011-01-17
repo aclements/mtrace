@@ -16,6 +16,8 @@ extern "C"
 #include "objinfo.h"
 }
 
+enum { SOURCE_LIMIT = 0 };
+
 using namespace std;
 
 class OffsetLockSetInfo
@@ -37,6 +39,8 @@ public:
 			NULL, "ld", "st", "iw",
 		};
 
+		if (num == 0)
+			num = pcs.size();
 		if (num > pcs.size())
 			num = pcs.size();
 		vector<pair<Access, int> > vec(pcs.begin(), pcs.end());
@@ -50,9 +54,9 @@ public:
 				file = strdup("???");
 				lineno = 0;
 			}
-			printf("  %s %016llx %d %s %s:%d\n",
+			printf("  %s %6d %016llx %s %s:%d\n",
 			       access_type_to_str[vec[i].first.second],
-			       vec[i].first.first, vec[i].second,
+			       vec[i].second, vec[i].first.first,
 			       func, file, lineno);
 			free(func);
 			free(file);
@@ -271,9 +275,9 @@ print_inference(struct obj_info *vmlinux, Addr2line *a2l)
 		printf("%-65s %3d%% %d\n", str, (int)(freq*100),
 		       it->second.total());
 
-		it->second.info[1].print_pcs(a2l, 5);
+		it->second.info[1].print_pcs(a2l, SOURCE_LIMIT);
 		printf("  --\n");
-		it->second.info[0].print_pcs(a2l, 5);
+		it->second.info[0].print_pcs(a2l, SOURCE_LIMIT);
 	}
 }
 
@@ -296,13 +300,13 @@ main(int argc, char **argv)
 	if ((vmlinuxfd = open(argv[2], O_RDONLY)) < 0)
 		edie("open %s", argv[2]);
 
-	printf("Loading object info...\n");
+	printf("# Loading object info...\n");
 	vmlinux = obj_info_create_from_fd(vmlinuxfd);
 	process_static(vmlinux);
 
 	Addr2line a2l(argv[2]);
 
-	printf("Processing log...\n");
+	printf("# Processing log...\n");
 	while ((r = read_entry(log, &entry)) > 0) {
 		if (limit && count++ > limit)
 			break;
@@ -311,7 +315,7 @@ main(int argc, char **argv)
 	if (r < 0)
 		die("failed to read entry");
 	gzclose(log);
-	printf("%d unknown accesses\n", unknownAccess);
+	printf("# %d unknown accesses\n", unknownAccess);
 
 	print_inference(vmlinux, &a2l);
 
