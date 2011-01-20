@@ -506,9 +506,8 @@ static const int gpr_map[16] = {
     8, 9, 10, 11, 12, 13, 14, 15
 };
 #else
-#define gpr_map gpr_map32
+static const int gpr_map[8] = {0, 1, 2, 3, 4, 5, 6, 7};
 #endif
-static const int gpr_map32[8] = { 0, 1, 2, 3, 4, 5, 6, 7 };
 
 #define NUM_CORE_REGS (CPU_NB_REGS * 2 + 25)
 
@@ -522,11 +521,7 @@ static const int gpr_map32[8] = { 0, 1, 2, 3, 4, 5, 6, 7 };
 static int cpu_gdb_read_register(CPUState *env, uint8_t *mem_buf, int n)
 {
     if (n < CPU_NB_REGS) {
-        if (TARGET_LONG_BITS == 64 && env->hflags & HF_CS64_MASK) {
-            GET_REG64(env->regs[gpr_map[n]]);
-        } else if (n < CPU_NB_REGS32) {
-            GET_REG32(env->regs[gpr_map32[n]]);
-        }
+        GET_REGL(env->regs[gpr_map[n]]);
     } else if (n >= IDX_FP_REGS && n < IDX_FP_REGS + 8) {
 #ifdef USE_X86LDOUBLE
         /* FIXME: byteswap float values - after fixing fpregs layout. */
@@ -537,20 +532,12 @@ static int cpu_gdb_read_register(CPUState *env, uint8_t *mem_buf, int n)
         return 10;
     } else if (n >= IDX_XMM_REGS && n < IDX_XMM_REGS + CPU_NB_REGS) {
         n -= IDX_XMM_REGS;
-        if (n < CPU_NB_REGS32 ||
-            (TARGET_LONG_BITS == 64 && env->hflags & HF_CS64_MASK)) {
-            stq_p(mem_buf, env->xmm_regs[n].XMM_Q(0));
-            stq_p(mem_buf + 8, env->xmm_regs[n].XMM_Q(1));
-            return 16;
-        }
+        stq_p(mem_buf, env->xmm_regs[n].XMM_Q(0));
+        stq_p(mem_buf + 8, env->xmm_regs[n].XMM_Q(1));
+        return 16;
     } else {
         switch (n) {
-        case IDX_IP_REG:
-            if (TARGET_LONG_BITS == 64 && env->hflags & HF_CS64_MASK) {
-                GET_REG64(env->eip);
-            } else {
-                GET_REG32(env->eip);
-            }
+        case IDX_IP_REG:    GET_REGL(env->eip);
         case IDX_FLAGS_REG: GET_REG32(env->eflags);
 
         case IDX_SEG_REGS:     GET_REG32(env->segs[R_CS].selector);
@@ -606,15 +593,8 @@ static int cpu_gdb_write_register(CPUState *env, uint8_t *mem_buf, int n)
     uint32_t tmp;
 
     if (n < CPU_NB_REGS) {
-        if (TARGET_LONG_BITS == 64 && env->hflags & HF_CS64_MASK) {
-            env->regs[gpr_map[n]] = ldtul_p(mem_buf);
-            return sizeof(target_ulong);
-        } else if (n < CPU_NB_REGS32) {
-            n = gpr_map32[n];
-            env->regs[n] &= ~0xffffffffUL;
-            env->regs[n] |= (uint32_t)ldl_p(mem_buf);
-            return 4;
-        }
+        env->regs[gpr_map[n]] = ldtul_p(mem_buf);
+        return sizeof(target_ulong);
     } else if (n >= IDX_FP_REGS && n < IDX_FP_REGS + 8) {
 #ifdef USE_X86LDOUBLE
         /* FIXME: byteswap float values - after fixing fpregs layout. */
@@ -623,23 +603,14 @@ static int cpu_gdb_write_register(CPUState *env, uint8_t *mem_buf, int n)
         return 10;
     } else if (n >= IDX_XMM_REGS && n < IDX_XMM_REGS + CPU_NB_REGS) {
         n -= IDX_XMM_REGS;
-        if (n < CPU_NB_REGS32 ||
-            (TARGET_LONG_BITS == 64 && env->hflags & HF_CS64_MASK)) {
-            env->xmm_regs[n].XMM_Q(0) = ldq_p(mem_buf);
-            env->xmm_regs[n].XMM_Q(1) = ldq_p(mem_buf + 8);
-            return 16;
-        }
+        env->xmm_regs[n].XMM_Q(0) = ldq_p(mem_buf);
+        env->xmm_regs[n].XMM_Q(1) = ldq_p(mem_buf + 8);
+        return 16;
     } else {
         switch (n) {
         case IDX_IP_REG:
-            if (TARGET_LONG_BITS == 64 && env->hflags & HF_CS64_MASK) {
-                env->eip = ldq_p(mem_buf);
-                return 8;
-            } else {
-                env->eip &= ~0xffffffffUL;
-                env->eip |= (uint32_t)ldl_p(mem_buf);
-                return 4;
-            }
+            env->eip = ldtul_p(mem_buf);
+            return sizeof(target_ulong);
         case IDX_FLAGS_REG:
             env->eflags = ldl_p(mem_buf);
             return 4;

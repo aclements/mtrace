@@ -598,13 +598,10 @@ typedef struct {
     uint64_t mask;
 } MTRRVar;
 
-#define CPU_NB_REGS64 16
-#define CPU_NB_REGS32 8
-
 #ifdef TARGET_X86_64
-#define CPU_NB_REGS CPU_NB_REGS64
+#define CPU_NB_REGS 16
 #else
-#define CPU_NB_REGS CPU_NB_REGS32
+#define CPU_NB_REGS 8
 #endif
 
 #define NB_MMU_MODES 2
