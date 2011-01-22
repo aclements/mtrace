@@ -13,6 +13,8 @@ typedef enum {
     mtrace_entry_fcall,
     mtrace_entry_segment,
     mtrace_entry_call,
+    mtrace_entry_lock,
+    mtrace_entry_task,
 } mtrace_entry_t;
 
 typedef enum {
@@ -119,6 +121,37 @@ struct mtrace_access_entry {
     uint64_t guest_addr;
 }__pack__;
 
+/*
+ * A guest lock acquire/release
+ */
+struct mtrace_lock_entry {
+    struct mtrace_entry_header h;
+
+    uint64_t pc;
+    uint64_t lock;
+    char str[32];
+    uint8_t release;
+    uint8_t read;
+} __pack__;
+
+/*
+ * A guest task create
+ */
+typedef enum {
+    mtrace_task_init = 1,
+    mtrace_task_update,
+    mtrace_task_exit,	/* IO Write, which is actually to RAM */
+} mtrace_task_t;
+
+struct mtrace_task_entry {
+    struct mtrace_entry_header h;
+
+    uint64_t tid;	       /* Thread ID */
+    uint64_t tgid;	       /* Thread Group ID */
+    mtrace_task_t task_type;
+    char str[32];
+} __pack__;
+
 union mtrace_entry {
     struct mtrace_entry_header h;
 
@@ -128,6 +161,8 @@ union mtrace_entry {
     struct mtrace_fcall_entry fcall;
     struct mtrace_segment_entry seg;
     struct mtrace_call_entry call;
+    struct mtrace_lock_entry lock;
+    struct mtrace_task_entry task;
 }__pack__;
 
 #ifndef QEMU_MTRACE
@@ -202,6 +237,40 @@ static inline void mtrace_fcall_register(unsigned long tid,
     entry.state = state;
     mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&entry,
 		 mtrace_entry_fcall, sizeof(entry), ~0, 0);
+}
+
+static inline void mtrace_lock_register(unsigned long pc,
+                                        void *lock,
+					const char *str,
+					unsigned long release,
+					unsigned long is_read)
+{
+    volatile struct mtrace_lock_entry entry;
+    entry.pc = pc;
+    entry.lock = (unsigned long)lock;
+    strncpy((char*)entry.str, str, sizeof(entry.str));
+    entry.str[sizeof(entry.str)-1] = 0;
+    entry.release = release;
+    entry.read = is_read;
+
+    mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&entry,
+		 mtrace_entry_lock, sizeof(entry), ~0, 0);
+}
+
+static inline void mtrace_task_register(unsigned long tid,
+					unsigned long tgid,
+					mtrace_task_t type,
+					const char *str)
+{
+    volatile struct mtrace_task_entry entry;
+    entry.tid = tid;
+    entry.tgid = tgid;
+    entry.task_type = type;
+    strncpy((char*)entry.str, str, sizeof(entry.str));
+    entry.str[sizeof(entry.str) - 1] = 0;
+
+    mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&entry,
+		 mtrace_entry_task, sizeof(entry), ~0, 0);
 }
 
 #endif /* QEMU_MTRACE */

@@ -126,10 +126,9 @@ typedef list<ObjectLabel> 	  		     	ObjectList;
 typedef list<Access> 					AccessList;
 typedef list<CallTraceRange> 				CallRangeList;
 typedef hash_map<uint64_t, CallTrace *>  		CallTraceHash;
-
 typedef list<struct mtrace_label_entry *>	     	LabelList;
-
 typedef list< list<CallInterval *> >   			CallIntervalList;
+typedef hash_map<uint64_t, struct mtrace_task_entry *>	TaskList;
 
 static LabelHash    	outstanding_labels[mtrace_label_end];
 static ObjectList	complete_labels[mtrace_label_end];;
@@ -144,6 +143,8 @@ static CallTrace    	*current_stack[MAX_CPU];
 static CallTraceHash 	call_stack;
 
 static CallIntervalList complete_intervals;
+
+static TaskList		task_list;
 
 static struct mtrace_enable_entry mtrace_enable;
 
@@ -356,6 +357,38 @@ static void build_call_trace_db(void *arg, const char *name)
 
 	for (i = 0; i < sizeof(create_index) / sizeof(create_index[0]); i++)
 		exec_stmt(db, NULL, NULL, create_index[i], name, i, name);
+}
+
+static void build_task_db(void *arg, const char *name)
+{
+	const char *create_tasks_table = 
+		"CREATE TABLE %s_tasks ("
+		"tid 	      	   INTEGER primary key, "
+		"tgid    	   INTEGER, "
+		"str 		   CHAR(32)"
+		")";
+
+	const char *insert_task = 
+		"INSERT INTO %s_tasks (tid, tgid, str) "
+		"VALUES (%lu, %u, \"%s\")";
+
+	sqlite3 *db = (sqlite3 *) arg;
+	Progress p(task_list.size(), 0);
+
+	exec_stmt_noerr(db, NULL, NULL, "DROP TABLE %s_tasks", name);
+	exec_stmt(db, NULL, NULL, create_tasks_table, name);
+
+	TaskList::iterator it = task_list.begin();
+	for (; it != task_list.end(); ++it) {
+		struct mtrace_task_entry *task = it->second;
+
+		exec_stmt(db, NULL, NULL, insert_task, name, 
+			  task->tid, task->tgid, task->str);
+
+		free(task);
+		p.tick();
+	}
+	task_list.clear();
 }
 
 static void build_call_interval_db(void *arg, const char *name)
@@ -792,6 +825,11 @@ static void handle_enable(void *arg, struct mtrace_enable_entry *e)
 
 		build_label_db(arg, name);
 
+		printf("Building tasks db '%s' ... ", name);
+		fflush(0);
+		build_task_db(arg, name);
+		printf("done!\n");
+
 		printf("Building call_traces db '%s' ... ", name);
 		fflush(0);
 		build_call_trace_db(arg, name);
@@ -842,6 +880,35 @@ static void handle_segment(struct mtrace_segment_entry *seg)
 	// we handle the final segment.
 }
 
+static void handle_task(struct mtrace_task_entry *task)
+{
+	if (task->task_type == mtrace_task_init) {
+		TaskList::iterator it = task_list.find(task->tid);
+
+		if (it != task_list.end()) {
+			if (mtrace_enable.enable)
+				die("handle_task: Oops, reused TID");
+			free(it->second);
+		}
+		task_list[task->tid] = task;
+	} else if (task->task_type == mtrace_task_update) {
+		struct mtrace_task_entry *cur;
+
+		if (task_list.find(task->tid) == task_list.end())
+			die("handle_task: Oops, missing task");
+
+		cur = task_list[task->tid];
+		// str is the only thing that might change
+		strcpy(cur->str, task->str);
+		free(task);
+	} else if (task->task_type == mtrace_task_exit) {
+		if (task_list.find(task->tid) == task_list.end())
+			die("handle_task: Oops, missing task exited");
+		// XXX we could remove the task if its existence doesn't
+		// overlap with an mtrace_enable.
+	}
+}
+
 static void process_log(void *arg, gzFile log)
 {
 	union mtrace_entry *entry;
@@ -872,6 +939,12 @@ static void process_log(void *arg, gzFile log)
 		case mtrace_entry_call:
 			handle_call(&entry->call);
 			free(entry);
+			break;
+		case mtrace_entry_lock:
+			die("mtrace_entry_lock: XXX");
+			break;
+		case mtrace_entry_task:
+			handle_task(&entry->task);
 			break;
 		default:
 			die("bad type %u", entry->h.type);
