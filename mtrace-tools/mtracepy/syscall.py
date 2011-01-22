@@ -3,10 +3,11 @@ import sqlite3
 from util import *
 
 class InstanceSummary:
-    def __init__(self, name, allocPc, count, labelId, entryName):
+    def __init__(self, name, allocPc, count, tids, labelId, entryName):
         self.name = name
         self.allocPc = allocPc
         self.count = count
+        self.tids = tids
         self.labelId = labelId
         self.entryName = entryName
 
@@ -165,6 +166,9 @@ class CallSummary:
 
         return rs[0][0]
 
+    def get_tids(self, labelId, labelType):
+        return []
+
     def get_top_types(self, labelType):
         topObjs = self.get_top_objs(labelType)
         tmpDict = {}
@@ -228,6 +232,7 @@ class CallSummary:
                 tmpDict[labelId] = InstanceSummary(self.get_label_str(labelId, labelType), 
                                                    self.get_label_alloc_pc(labelId, labelType), 
                                                    count,
+                                                   len(self.get_tids(labelId, labelType)),
                                                    labelId,
                                                    self.get_str_name())
 

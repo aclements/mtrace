@@ -187,14 +187,15 @@ class MtraceSummary:
                 print '    type=%s' % ( mtrace_label_str[labelType] )
                 print '    ----'
 
-                print '      %-20s %16s %16s %16s' % ('name', 'alloc_pc', 'count', 'id')
-                print '      %-20s %16s %16s %16s' % ('----', '--------', '-----', '--')
+                print '      %-20s %16s %16s %16s %16s' % ('name', 'alloc_pc', 'count', 'tids', 'id')
+                print '      %-20s %16s %16s %16s %16s' % ('----', '--------', '-----', '----', '--')
 
                 top = cs.get_top_objs(labelType)
                 for higher in top[0:numPrint]:
-                    print '      %-20s %016lx %16u %16u' % (higher.name, 
+                    print '      %-20s %016lx %16u %16u %16u' % (higher.name, 
                                                             uhex(higher.allocPc), 
                                                             higher.count, 
+                                                            higher.tids,
                                                             higher.labelId)
                 print ''
 
