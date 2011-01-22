@@ -167,7 +167,14 @@ class CallSummary:
         return rs[0][0]
 
     def get_tids(self, labelId, labelType):
-        return []
+        q = 'SELECT DISTINCT tid FROM %s_accesses WHERE label_id = %lu'
+        q = q % (self.name, labelId)
+        c = self.get_conn().cursor()
+        c.execute(q)
+        ret = []
+        for r in c:
+            ret.append(r[0])
+        return ret
 
     def get_top_types(self, labelType):
         topObjs = self.get_top_objs(labelType)

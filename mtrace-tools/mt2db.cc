@@ -59,13 +59,17 @@ using namespace::__gnu_cxx;
 #define ONE_SHOT 	1
 
 struct Access {
-	Access(struct mtrace_access_entry *access, uint64_t call_trace_tag) {
+	Access(struct mtrace_access_entry *access, uint64_t call_trace_tag, 
+	       uint64_t tid) 
+	{
 		this->access_ = access;
 		this->call_trace_tag_ = call_trace_tag;
+		this->tid_ = tid;
 	}
 
 	struct mtrace_access_entry *access_;
 	uint64_t call_trace_tag_;
+	uint64_t tid_;
 };
 
 struct ObjectLabel {
@@ -543,22 +547,27 @@ static void build_access_db(void *arg, const char *name)
 		"guest_addr 		  "ADDR_TYPE", "
 		"label_id 		  INTEGER, "
 		"label_type 		  INTEGER, "
-		"call_trace_tag 	  INTEGER"
+		"call_trace_tag 	  INTEGER, "
+		"tid			  INTEGER"
 		")";
 
 	const char *insert_access = 
 		"INSERT INTO %s_accesses ("
 		"access_id, access_type, cpu, pc, "
-		"host_addr, guest_addr, label_id, label_type, call_trace_tag) "
+		"host_addr, guest_addr, label_id, label_type, call_trace_tag, tid) "
 		"VALUES (%lu, %u, %u, "ADDR_FMT", "ADDR_FMT", "ADDR_FMT", "
-		"%lu, %lu, %lu)";
+		"%lu, %lu, %lu, %lu)";
 
-	const char *create_index = 
-		"CREATE INDEX %s_idx_accesses ON %s_accesses"
-		"(guest_addr)";
+	const char *create_index[] = {
+		"CREATE INDEX %s_idx_accesses%u ON %s_accesses"
+		"(guest_addr)",
+		"CREATE INDEX %s_idx_accesses%u ON %s_accesses"
+		"(label_id, tid)",
+	};
 
 	sqlite3 *db = (sqlite3 *) arg;
 	Progress p(accesses.size(), 0);
+	unsigned int i;
 
 	exec_stmt_noerr(db, NULL, NULL, "DROP TABLE %s_accesses", name);
 	exec_stmt(db, NULL, NULL, create_access_table, name);
@@ -584,13 +593,14 @@ static void build_access_db(void *arg, const char *name)
 			  a.access_->guest_addr,
 			  label_id,
 			  label_type,
-			  a.call_trace_tag_);
+			  a.call_trace_tag_,
+			  a.tid_);
 
 		accesses.pop_front();
 		p.tick();
 	}
-
-	exec_stmt(db, NULL, NULL, create_index, name, name);
+	for (i = 0; i < sizeof(create_index) / sizeof(create_index[0]); i++)
+		exec_stmt(db, NULL, NULL, create_index[i], name, i, name);
 
 	exec_stmt(db, NULL, NULL, "END TRANSACTION;");
 }
@@ -789,13 +799,15 @@ static void handle_call(struct mtrace_call_entry *f)
 
 static void handle_access(struct mtrace_access_entry *a)
 {
-	uint64_t call_trace_tag = 0;
+	uint64_t call_trace_tag = ~0UL;
+	uint64_t tid = ~0UL;
 	
 	if (current_stack[a->h.cpu]) {
 		CallTrace *cs = current_stack[a->h.cpu];
 		call_trace_tag = cs->start_->tag;
+		tid = cs->start_->tid;
 	}
-	accesses.push_back(Access(a, call_trace_tag));
+	accesses.push_back(Access(a, call_trace_tag, tid));
 }
 
 static void clear_all(void)
