@@ -192,11 +192,11 @@ class MtraceSummary:
 
                 top = cs.get_top_objs(labelType)
                 for higher in top[0:numPrint]:
-                    print '      %-20s %016lx %16u %16u %16u' % (higher.name, 
-                                                            uhex(higher.allocPc), 
-                                                            higher.count, 
-                                                            higher.tids,
-                                                            higher.labelId)
+                    print '      %-20s %016lx %16u %16u %16u' % (higher.d.get_label_str(), 
+                                                                 higher.d.get_alloc_pc(), 
+                                                                 higher.count, 
+                                                                 higher.tids,
+                                                                 higher.d.labelId)
                 print ''
 
     def print_top_types(self, numPrint):

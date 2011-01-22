@@ -154,31 +154,79 @@ class MtraceInstanceDetail:
         self.dataName = dataName
         self.labelId = labelId
         self.accesses = None
+        self.__inited = False;
 
-    def __build_accesses(self):
-        q = 'SELECT access_id FROM %s_accesses WHERE label_id = %lu;'
-        q = q % (self.dataName,
-                 self.labelId)
+    def __init__(self, dbFile, dataName, labelType, labelId):
+        self.dbFile = dbFile
+        self.dataName = dataName
+        self.labelType = labelType
+        self.labelId = labelId;
+
+        self.__inited = False;
+        self.labelStr = None
+        self.allocPc = None
+        self.accesses = None
+
+    def __init_accesses(self):
+        if self.accesses != None:
+            return
 
         conn = sqlite3.connect(self.dbFile)
         c = conn.cursor()
-        c.execute(q)
 
+        # Access
+        q = 'SELECT access_id FROM %s_accesses WHERE label_id = %lu;'
+        q = q % (self.dataName,
+                 self.labelId)
+        c.execute(q)
         self.accesses = []
         for row in c:
             self.accesses.append(MtraceAccess(self.dbFile, self.dataName, row[0]))
-            
         c.close()
 
     def get_access_num(self):
-        if self.accesses == None:
-            self.__build_accesses()
+        self.__init_accesses()
         return len(self.accesses)
 
     def get_access(self, i):
-        if self.accesses == None:
-            self.__build_accesses()
+        self.__init_accesses()
         return self.accesses[i]
+
+    def __init_state(self):
+        if self.__inited:
+            return
+
+        conn = sqlite3.connect(self.dbFile)
+        c = conn.cursor()
+
+        # allocPc
+        q = 'SELECT alloc_pc FROM %s_labels%u WHERE label_id = %lu'
+        q = q % (self.dataName, self.labelType, self.labelId)
+        c.execute(q)        
+        rs = c.fetchall()
+        if len(rs) != 1:
+            raise Exception('unexpected result')            
+        self.allocPc = rs[0][0]
+
+        # labelStr
+        q = 'SELECT str FROM %s_labels%u WHERE label_id = %lu'
+        q = q % (self.dataName, self.labelType, self.labelId)
+        c.execute(q)
+        rs = c.fetchall()
+        if len(rs) != 1:
+            raise Exception('unexpected result')
+        self.labelStr = rs[0][0]
+
+        c.close()
+        self.__inited = True
+
+    def get_alloc_pc(self):
+        self.__init_state()
+        return uhex(self.allocPc)
+
+    def get_label_str(self):
+        self.__init_state()
+        return self.labelStr
 
     class Iter:
         def __init__(self, detail):

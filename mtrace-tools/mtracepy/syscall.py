@@ -1,15 +1,24 @@
 import sqlite3
 
 from util import *
+from mtrace import MtraceInstanceDetail
 
-class InstanceSummary:
-    def __init__(self, name, allocPc, count, tids, labelId, entryName):
+class XXXInstanceSummary:
+    def __init__(self, name, allocPc, count, tids, labelId):
         self.name = name
         self.allocPc = allocPc
         self.count = count
         self.tids = tids
         self.labelId = labelId
-        self.entryName = entryName
+
+class InstanceSummary:
+    def __init__(self, dbFile, dataName, labelType, labelId, count, tids):
+        self.d = MtraceInstanceDetail(dbFile,
+                                      dataName,
+                                      labelType,
+                                      labelId)
+        self.count = count
+        self.tids = tids
 
 class TypeSummary:
     def __init__(self, name, count, instanceNum):
@@ -142,30 +151,6 @@ class CallSummary:
     def get_unique_type(self, labelType):
         return len(self.get_top_types(labelType))
 
-    def get_label_str(self, labelId, labelType):
-        q = 'SELECT str FROM %s_labels%u WHERE label_id = %lu'
-        q = q % (self.name, labelType, labelId)
-        c = self.get_conn().cursor()
-        c.execute(q)    
-        rs = c.fetchall()        
-        
-        if len(rs) != 1:
-            raise Exception('unexpected result')            
-
-        return rs[0][0]
-
-    def get_label_alloc_pc(self, labelId, labelType):
-        q = 'SELECT alloc_pc FROM %s_labels%u WHERE label_id = %lu'
-        q = q % (self.name, labelType, labelId)
-        c = self.get_conn().cursor()
-        c.execute(q)
-        rs = c.fetchall()
-        
-        if len(rs) != 1:
-            raise Exception('unexpected result')            
-
-        return rs[0][0]
-
     def get_tids(self, labelId, labelType):
         q = 'SELECT DISTINCT tid FROM %s_accesses WHERE label_id = %lu'
         q = q % (self.name, labelId)
@@ -181,7 +166,7 @@ class CallSummary:
         tmpDict = {}
 
         for higher in topObjs:
-            typename = higher.name
+            typename = higher.d.get_label_str()
             accessCount = higher.count
 
             if typename in tmpDict:
@@ -236,12 +221,12 @@ class CallSummary:
                     raise Exception('unexpected result')            
 
                 count = rs2[0][0]
-                tmpDict[labelId] = InstanceSummary(self.get_label_str(labelId, labelType), 
-                                                   self.get_label_alloc_pc(labelId, labelType), 
-                                                   count,
-                                                   len(self.get_tids(labelId, labelType)),
+                tmpDict[labelId] = InstanceSummary(self.dbFile,
+                                                   self.name,
+                                                   labelType,
                                                    labelId,
-                                                   self.get_str_name())
+                                                   count,
+                                                   len(self.get_tids(labelId, labelType)))
 
             s = sorted(tmpDict.values(), key=lambda k: k.count, reverse=True)
             self.topObjs[labelType] = s

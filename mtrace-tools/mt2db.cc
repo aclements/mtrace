@@ -333,7 +333,9 @@ static void build_call_trace_db(void *arg, const char *name)
 		"CREATE INDEX %s_idx_calls%u ON %s_call_traces"
 		"(cpu, access_start, access_end)",
 		"CREATE INDEX %s_idx_calls%u ON %s_call_traces"
-		"(cpu, call_trace_tag)" 
+		"(cpu, call_trace_tag)",
+		"CREATE INDEX %s_idx_calls%u ON %s_call_traces"
+		"(call_trace_tag, pc)" 
 	};
 		
 
@@ -563,6 +565,8 @@ static void build_access_db(void *arg, const char *name)
 		"(guest_addr)",
 		"CREATE INDEX %s_idx_accesses%u ON %s_accesses"
 		"(label_id, tid)",
+		"CREATE INDEX %s_idx_accesses%u ON %s_accesses"
+		"(label_id)",
 	};
 
 	sqlite3 *db = (sqlite3 *) arg;
