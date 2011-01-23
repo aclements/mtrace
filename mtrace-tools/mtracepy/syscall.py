@@ -197,8 +197,7 @@ class CallSummary:
                      self.name, self.pc)
             c = self.get_conn().cursor()
             c.execute(q)    
-            rs = c.fetchall()
-            for row in rs:
+            for row in c:
                 labelId = row[0]
                 q = 'SELECT COUNT(label_id) from %s_accesses where label_type = %u ' + \
                     'AND label_id = %u AND EXISTS ' + \
