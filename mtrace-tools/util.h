@@ -31,6 +31,7 @@ static void __noret__ __chfmt__ edie(const char* errstr, ...)
         exit(EXIT_FAILURE);
 }
 
+__attribute__((__used__))
 static int read_entry(gzFile fp, union mtrace_entry *entry_out)
 {
 	size_t r, left;

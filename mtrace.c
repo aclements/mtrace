@@ -48,12 +48,22 @@ static int mtrace_call_trace;
 void mtrace_log_file_set(const char *path)
 {
     int outfd, p[2], check[2], child, r;
+    struct stat st;
 
     outfd = open(path, O_CREAT|O_WRONLY|O_TRUNC, 0666);
     if (outfd < 0) {
         perror("mtrace: open");
         abort();
     }
+    if (fstat(outfd, &st) < 0) {
+	perror("mtrace: fstat");
+	abort();
+    }
+    if (S_ISFIFO(st.st_mode)) {
+	mtrace_file = outfd;
+	return;
+    }
+
     if (pipe(p) < 0 || pipe(check) < 0) {
 	perror("mtrace: pipe");
 	abort();
@@ -201,10 +211,14 @@ static void mtrace_access_dump(mtrace_access_t type, target_ulong host_addr,
 			       void *retaddr)
 {
     struct mtrace_access_entry entry;
+    static int sampler;
     
     if (!mtrace_enable)
 	return;
     
+    if (sampler++ % 100)
+	return;
+
     entry.h.type = mtrace_entry_access;
     entry.h.size = sizeof(entry);
     entry.h.cpu = cpu_single_env->cpu_index;
@@ -450,6 +464,9 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
         mtrace_call_stack_active[entry.h.cpu] =
             (entry.fcall.state == mtrace_start ||
              entry.fcall.state == mtrace_resume);
+    else if (type == mtrace_entry_lock && strcmp(entry.lock.str, "&mm->mmap_sem") == 0) {
+        mtrace_enable = 1;
+    }
 }
 
 static void (*mtrace_call[])(target_ulong, target_ulong, target_ulong,
