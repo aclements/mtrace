@@ -45,6 +45,7 @@
 extern "C" {
 #include <mtrace-magic.h>
 #include "util.h"
+#include "sql.h"
 }
 
 #include "calltrace.hh"
@@ -160,24 +161,6 @@ static void insert_complete_label(ObjectLabel ol)
 		    ol.label_->label_type);
 	complete_labels[ol.label_->label_type].push_back(ol);
 }
-
-// In theory, using INTEGER won't yield correct results for a 64-bit virtual 
-// address space because INTEGER is a *signed" 64-bit value.  If a label starts 
-// at 0x7FFFFFFFFFFFFFFF and is one byte, the end address, 0x8000000000000000, 
-// will be a negative number, and smaller than the start address. Lucky for us 
-// the AMD64 virtual address space is only 48-bits with a 16-bit sign extension, 
-// so this problem never shows up.
-//
-// Use INTEGER, because it is much faster than BLOB.
-// Use BLOB, because it prints much nicer than INTEGER in the sqlite3 shell.
-
-#if 0
-#define ADDR_TYPE "BLOB"
-#define ADDR_FMT  "x'%016lx'"
-#else
-#define ADDR_TYPE "INTEGER"
-#define ADDR_FMT  "%ld"
-#endif
 
 static void __attribute__ ((format (printf, 4, 5))) 
 exec_stmt(sqlite3 *db, int (*cb)(void*, int, char**, char**),
@@ -367,28 +350,17 @@ static void build_call_trace_db(void *arg, const char *name)
 
 static void build_task_db(void *arg, const char *name)
 {
-	const char *create_tasks_table = 
-		"CREATE TABLE %s_tasks ("
-		"tid 	      	   INTEGER primary key, "
-		"tgid    	   INTEGER, "
-		"str 		   CHAR(32)"
-		")";
-
-	const char *insert_task = 
-		"INSERT INTO %s_tasks (tid, tgid, str) "
-		"VALUES (%lu, %u, \"%s\")";
-
 	sqlite3 *db = (sqlite3 *) arg;
 	Progress p(task_list.size(), 0);
 
 	exec_stmt_noerr(db, NULL, NULL, "DROP TABLE %s_tasks", name);
-	exec_stmt(db, NULL, NULL, create_tasks_table, name);
+	exec_stmt(db, NULL, NULL, CREATE_TASKS_TABLE, name);
 
 	TaskList::iterator it = task_list.begin();
 	for (; it != task_list.end(); ++it) {
 		struct mtrace_task_entry *task = it->second;
 
-		exec_stmt(db, NULL, NULL, insert_task, name, 
+		exec_stmt(db, NULL, NULL, INSERT_TASK, name, 
 			  task->tid, task->tgid, task->str);
 
 		free(task);
@@ -539,27 +511,6 @@ static void get_object(sqlite3 *db, const char *name,
 
 static void build_access_db(void *arg, const char *name)
 {
-	const char *create_access_table = 
-		"CREATE TABLE %s_accesses ("
-		"access_id    		  INTEGER, "
-		"access_type 		  INTEGER, "
-		"cpu 			  INTEGER, "
-		"pc 			  "ADDR_TYPE", "
-		"host_addr 		  "ADDR_TYPE", "
-		"guest_addr 		  "ADDR_TYPE", "
-		"label_id 		  INTEGER, "
-		"label_type 		  INTEGER, "
-		"call_trace_tag 	  INTEGER, "
-		"tid			  INTEGER"
-		")";
-
-	const char *insert_access = 
-		"INSERT INTO %s_accesses ("
-		"access_id, access_type, cpu, pc, "
-		"host_addr, guest_addr, label_id, label_type, call_trace_tag, tid) "
-		"VALUES (%lu, %u, %u, "ADDR_FMT", "ADDR_FMT", "ADDR_FMT", "
-		"%lu, %lu, %lu, %lu)";
-
 	const char *create_index[] = {
 		"CREATE INDEX %s_idx_accesses%u ON %s_accesses"
 		"(guest_addr)",
@@ -574,8 +525,7 @@ static void build_access_db(void *arg, const char *name)
 	unsigned int i;
 
 	exec_stmt_noerr(db, NULL, NULL, "DROP TABLE %s_accesses", name);
-	exec_stmt(db, NULL, NULL, create_access_table, name);
-
+	exec_stmt(db, NULL, NULL, CREATE_ACCESS_TABLE, name);
 	exec_stmt(db, NULL, NULL, "BEGIN TRANSACTION;");
 
 	while (!accesses.empty()) {
@@ -587,7 +537,7 @@ static void build_access_db(void *arg, const char *name)
 			   a.access_->guest_addr,
 			   &label_id, &label_type);
 
-		exec_stmt(db, NULL, NULL, insert_access,
+		exec_stmt(db, NULL, NULL, INSERT_ACCESS,
 			  name,
 			  a.access_->h.access_count, 
 			  a.access_->access_type, 

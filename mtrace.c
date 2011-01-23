@@ -211,13 +211,17 @@ static void mtrace_access_dump(mtrace_access_t type, target_ulong host_addr,
 			       void *retaddr)
 {
     struct mtrace_access_entry entry;
+#if 0
     static int sampler;
+#endif
     
     if (!mtrace_enable)
 	return;
-    
+
+#if 0    
     if (sampler++ % 100)
 	return;
+#endif
 
     entry.h.type = mtrace_entry_access;
     entry.h.size = sizeof(entry);
@@ -464,9 +468,11 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
         mtrace_call_stack_active[entry.h.cpu] =
             (entry.fcall.state == mtrace_start ||
              entry.fcall.state == mtrace_resume);
+#if 0
     else if (type == mtrace_entry_lock && strcmp(entry.lock.str, "&mm->mmap_sem") == 0) {
         mtrace_enable = 1;
     }
+#endif
 }
 
 static void (*mtrace_call[])(target_ulong, target_ulong, target_ulong,
