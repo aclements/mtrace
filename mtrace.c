@@ -39,11 +39,34 @@
 
 static int mtrace_system_enable;
 static int mtrace_enable;
+
 static int mtrace_file;
 static int mtrace_cline_track = 1;
+static int mtrace_sample = 1;
+
 static uint64_t mtrace_access_count;
 static int mtrace_call_stack_active[255];
 static int mtrace_call_trace;
+
+void mtrace_cline_trace_set(int b)
+{
+    mtrace_cline_track = b;
+}
+
+void mtrace_system_enable_set(int b)
+{
+    mtrace_system_enable = b;
+}
+
+void mtrace_call_trace_set(int b)
+{
+    mtrace_call_trace = b;
+}
+
+void mtrace_sample_set(int n)
+{
+    mtrace_sample = n;
+}
 
 void mtrace_log_file_set(const char *path)
 {
@@ -101,21 +124,6 @@ void mtrace_log_file_set(const char *path)
     close(check[0]);
 
     mtrace_file = p[1];
-}
-
-void mtrace_cline_trace_set(int b)
-{
-    mtrace_cline_track = b;
-}
-
-void mtrace_system_enable_set(int b)
-{
-    mtrace_system_enable = b;
-}
-
-void mtrace_call_trace_set(int b)
-{
-    mtrace_call_trace = b;
 }
 
 static void write_all(int fd, const void *data, size_t len)
@@ -211,17 +219,13 @@ static void mtrace_access_dump(mtrace_access_t type, target_ulong host_addr,
 			       void *retaddr)
 {
     struct mtrace_access_entry entry;
-#if 0
     static int sampler;
-#endif
     
     if (!mtrace_enable)
 	return;
 
-#if 0    
-    if (sampler++ % 100)
+    if (sampler++ % mtrace_sample)
 	return;
-#endif
 
     entry.h.type = mtrace_entry_access;
     entry.h.size = sizeof(entry);

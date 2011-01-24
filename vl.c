@@ -2740,6 +2740,9 @@ int main(int argc, char **argv, char **envp)
 	    case QEMU_OPTION_mtrace_calls:
 		mtrace_call_trace_set(1);
 		break;
+	    case QEMU_OPTION_mtrace_sample:
+		mtrace_sample_set(atoi(optarg));
+		break;
             default:
                 os_parse_cmd_args(popt->index, optarg);
             }
