@@ -136,7 +136,7 @@ struct TaskState {
 	struct mtrace_task_entry *entry_;
 };
 
-typedef hash_map<uint64_t, struct mtrace_label_entry *> LabelHash;
+typedef map<uint64_t, struct mtrace_label_entry *>	LabelHash;
 typedef list<ObjectLabel> 	  		     	ObjectList;
 typedef list<Access> 					AccessList;
 typedef list<CallTraceRange> 				CallRangeList;
@@ -232,7 +232,7 @@ static void *open_db(const char *database)
 static void build_labelx_db(void *arg, const char *name, 
 			    mtrace_label_t label_type)
 {
-	uint64_t label_count;
+	static uint64_t label_count;
 
 	const char *create_label_table = 
 		"CREATE TABLE %s_labels%u ("
