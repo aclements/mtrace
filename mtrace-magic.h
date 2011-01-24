@@ -8,7 +8,7 @@ enum {
 typedef enum {
     mtrace_entry_label = 1,
     mtrace_entry_access,
-    mtrace_entry_enable,
+    mtrace_entry_host,
     mtrace_entry_fcall,
     mtrace_entry_segment,
     mtrace_entry_call,
@@ -32,7 +32,7 @@ typedef enum {
     
     mtrace_call_clear_cpu,
     mtrace_call_set_cpu,
-} mtrace_enable_t;
+} mtrace_host_t;
 
 #define __pack__ __attribute__((__packed__))
 
@@ -86,19 +86,20 @@ struct mtrace_call_entry {
 } __pack__;
 
 /*
- * The guest enabled/disabled mtrace and specified an optional string
+ * The guest sent a message to the host (QEMU)
  */
-struct mtrace_enable_entry {
+struct mtrace_host_entry {
     struct mtrace_entry_header h;
-
-    mtrace_enable_t enable_type;
-
+    mtrace_host_t host_type;
+    
     union {
+	/* Enable/disable access tracing */
 	struct {
 	    uint64_t value;
 	    char str[32];
 	} access;
 
+	/* Enable/disable call/ret tracing */
 	struct {
 	    uint64_t cpu;
 	} call;
@@ -175,7 +176,7 @@ union mtrace_entry {
 
     struct mtrace_access_entry access;
     struct mtrace_label_entry label;
-    struct mtrace_enable_entry enable;
+    struct mtrace_host_entry host;
     struct mtrace_fcall_entry fcall;
     struct mtrace_segment_entry seg;
     struct mtrace_call_entry call;
@@ -201,26 +202,26 @@ static inline void mtrace_magic(unsigned long ax, unsigned long bx,
 
 static inline void mtrace_enable_set(unsigned long b, const char *str)
 {
-    volatile struct mtrace_enable_entry enable;
+    volatile struct mtrace_host_entry entry;
 
-    enable.enable_type = mtrace_access_all_cpu;
-    enable.access.value = b ? ~0UL : 0;
-    strncpy((char*)enable.access.str, str, sizeof(enable.access.str));
-    enable.access.str[sizeof(enable.access.str) - 1] = 0;
+    entry.host_type = mtrace_access_all_cpu;
+    entry.access.value = b ? ~0UL : 0;
+    strncpy((char*)entry.access.str, str, sizeof(entry.access.str));
+    entry.access.str[sizeof(entry.access.str) - 1] = 0;
 
-    mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&enable,
-		 mtrace_entry_enable, sizeof(enable), ~0, 0);
+    mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&entry,
+		 mtrace_entry_host, sizeof(entry), ~0, 0);
 }
 
 static inline void mtrace_call_set(unsigned long b, int cpu)
 {
-    volatile struct mtrace_enable_entry enable;
+    volatile struct mtrace_host_entry entry;
 
-    enable.enable_type = b ? mtrace_call_set_cpu : mtrace_call_clear_cpu;
-    enable.call.cpu = cpu;
+    entry.host_type = b ? mtrace_call_set_cpu : mtrace_call_clear_cpu;
+    entry.call.cpu = cpu;
 
-    mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&enable,
-		 mtrace_entry_enable, sizeof(enable), ~0, 0);
+    mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&entry,
+		 mtrace_entry_host, sizeof(entry), ~0, 0);
 }
 
 static inline void mtrace_label_register(mtrace_label_t type,

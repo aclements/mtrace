@@ -439,20 +439,20 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
     mtrace_log_entry(&entry);
 
     /* Special handling */
-    if (type == mtrace_entry_enable) {
-	switch (entry.enable.enable_type) {
+    if (type == mtrace_entry_host) {
+	switch (entry.host.host_type) {
 	case mtrace_access_all_cpu:
-	    mtrace_enable = entry.enable.access.value;
+	    mtrace_enable = entry.host.access.value;
 	    break;
 	case mtrace_call_clear_cpu:
-	    mtrace_call_stack_active[entry.enable.call.cpu] = 0;
+	    mtrace_call_stack_active[entry.host.call.cpu] = 0;
 	    break;
 	case mtrace_call_set_cpu:
-	    mtrace_call_stack_active[entry.enable.call.cpu] = 1;
+	    mtrace_call_stack_active[entry.host.call.cpu] = 1;
 	    break;
 	default:
-	    fprintf(stderr, "bad mtrace_entry_enable type %u\n", 
-		    entry.enable.enable_type);
+	    fprintf(stderr, "bad mtrace_entry_host type %u\n", 
+		    entry.host.host_type);
 	    abort();
 	}
     } 
