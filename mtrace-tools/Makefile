@@ -18,7 +18,7 @@ HDRS	= $(QEMUDIR)/mtrace-magic.h syms.hh calltrace.hh util.h objinfo.h
 
 all: mt2db mt2text
 
-mt2db: mt2db.cc $(HDRS) sql.h
+mt2db: mt2db.cc $(HDRS) sql.h lockset.hh
 	@echo "CXX	$@"
 	$(Q)$(CXX) -o $@ $< $(CFLAGS) $(LDFLAGS)
 

@@ -49,6 +49,7 @@ extern "C" {
 }
 
 #include "calltrace.hh"
+#include "lockset.hh"
 #include "syms.hh"
 
 uint64_t CallTrace::call_interval_count;
@@ -126,6 +127,15 @@ struct Progress {
 	unsigned long span_;
 };
 
+struct TaskState {
+	TaskState(struct mtrace_task_entry *entry) {
+		entry_ = entry;
+	}
+
+	LockSet lock_set_;
+	struct mtrace_task_entry *entry_;
+};
+
 typedef hash_map<uint64_t, struct mtrace_label_entry *> LabelHash;
 typedef list<ObjectLabel> 	  		     	ObjectList;
 typedef list<Access> 					AccessList;
@@ -133,7 +143,7 @@ typedef list<CallTraceRange> 				CallRangeList;
 typedef hash_map<uint64_t, CallTrace *>  		CallTraceHash;
 typedef list<struct mtrace_label_entry *>	     	LabelList;
 typedef list< list<CallInterval *> >   			CallIntervalList;
-typedef hash_map<uint64_t, struct mtrace_task_entry *>	TaskList;
+typedef hash_map<uint64_t, TaskState *>			TaskTable;
 
 static LabelHash    	outstanding_labels[mtrace_label_end];
 static ObjectList	complete_labels[mtrace_label_end];;
@@ -149,9 +159,11 @@ static CallTraceHash 	call_stack;
 
 static CallIntervalList complete_intervals;
 
-static TaskList		task_list;
+static TaskTable	task_table;
 
 static struct mtrace_host_entry mtrace_enable;
+
+static uint64_t 	current_tid[MAX_CPU];
 
 static void insert_complete_label(ObjectLabel ol)
 {
@@ -351,22 +363,23 @@ static void build_call_trace_db(void *arg, const char *name)
 static void build_task_db(void *arg, const char *name)
 {
 	sqlite3 *db = (sqlite3 *) arg;
-	Progress p(task_list.size(), 0);
+	Progress p(task_table.size(), 0);
 
 	exec_stmt_noerr(db, NULL, NULL, "DROP TABLE %s_tasks", name);
 	exec_stmt(db, NULL, NULL, CREATE_TASKS_TABLE, name);
 
-	TaskList::iterator it = task_list.begin();
-	for (; it != task_list.end(); ++it) {
-		struct mtrace_task_entry *task = it->second;
+	TaskTable::iterator it = task_table.begin();
+	for (; it != task_table.end(); ++it) {
+		struct mtrace_task_entry *task = it->second->entry_;
 
 		exec_stmt(db, NULL, NULL, INSERT_TASK, name, 
 			  task->tid, task->tgid, task->str);
 
+		delete it->second;
 		free(task);
 		p.tick();
 	}
-	task_list.clear();
+	task_table.clear();
 }
 
 static void build_call_interval_db(void *arg, const char *name)
@@ -858,30 +871,81 @@ static void handle_segment(struct mtrace_segment_entry *seg)
 static void handle_task(struct mtrace_task_entry *task)
 {
 	if (task->task_type == mtrace_task_init) {
-		TaskList::iterator it = task_list.find(task->tid);
+		TaskTable::iterator it = task_table.find(task->tid);
 
-		if (it != task_list.end()) {
+		if (it != task_table.end()) {
 			if (mtrace_enable.access.value)
 				die("handle_task: Oops, reused TID");
-			free(it->second);
+			free(it->second->entry_);
+			it->second->entry_ = task;
+		} else {
+			task_table[task->tid] = new TaskState(task);
 		}
-		task_list[task->tid] = task;
 	} else if (task->task_type == mtrace_task_update) {
-		struct mtrace_task_entry *cur;
+		TaskState *cur;
 
-		if (task_list.find(task->tid) == task_list.end())
+		if (task_table.find(task->tid) == task_table.end())
 			die("handle_task: Oops, missing task");
 
-		cur = task_list[task->tid];
+		cur = task_table[task->tid];
 		// str is the only thing that might change
-		strcpy(cur->str, task->str);
+		strcpy(cur->entry_->str, task->str);
 		free(task);
 	} else if (task->task_type == mtrace_task_exit) {
-		if (task_list.find(task->tid) == task_list.end())
+		TaskTable::iterator it = task_table.find(task->tid);
+		TaskState *ts;
+
+		if (it == task_table.end())
 			die("handle_task: Oops, missing task exited");
-		// XXX we could remove the task if its existence doesn't
-		// overlap with an mtrace_enable.
+
+		ts = it->second;
+		task_table.erase(it);
+		free(ts->entry_);
+		delete ts;
 	}
+}
+
+static void handle_sched(struct mtrace_sched_entry *sched)
+{
+	int cpu = sched->h.cpu;
+
+	if (cpu >= MAX_CPU)
+		die("handle_task: cpu is too large %u", cpu);
+
+	current_tid[cpu] = sched->tid;
+	free(sched);
+}
+
+static void handle_lock(struct mtrace_lock_entry *lock)
+{
+	TaskState *ts;
+	int cpu = lock->h.cpu;
+	uint64_t tid;
+
+	if (cpu >= MAX_CPU)
+		die("handle_lock: cpu is too large %u", cpu);
+
+	tid = current_tid[cpu];
+	if (tid == 0) {
+		// The kernel acquires locks before mm/mtrace.c
+		// registers its tracers.
+		//die("handle_lock: no TID");
+		free(lock);
+		return;
+	}
+
+	TaskTable::iterator it = task_table.find(tid);	
+	if (it == task_table.end()) {
+		// The kernel acquires locks before mm/mtrace.c
+		// registers its tracers.
+		if (mtrace_enable.access.value)
+			die("handle_lock: no task for TID %lu", tid);
+		free(lock);
+		return;
+	}
+
+	ts = it->second;
+	ts->lock_set_.on_lock(lock);
 }
 
 static void process_log(void *arg, gzFile log)
@@ -916,12 +980,10 @@ static void process_log(void *arg, gzFile log)
 			free(entry);
 			break;
 		case mtrace_entry_lock:
-			// XXX
-			free(entry);
+			handle_lock(&entry->lock);
 			break;
 		case mtrace_entry_sched:
-			// XXX
-			free(entry);
+			handle_sched(&entry->sched);
 			break;
 		case mtrace_entry_task:
 			handle_task(&entry->task);
