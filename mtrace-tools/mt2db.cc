@@ -773,7 +773,11 @@ static void handle_access(struct mtrace_access_entry *a)
 		CallTrace *cs = current_stack[a->h.cpu];
 		call_trace_tag = cs->start_->tag;
 		tid = cs->start_->tid;
+
+		if (task_table.find(tid) == task_table.end())
+			die("XXX");
 	}
+
 	accesses.push_back(Access(a, call_trace_tag, tid));
 }
 
