@@ -25,10 +25,9 @@ tmpl = """
         background-color: #ffffff;
       }
       tr.even > td {
-        background-color: #e9e9e9;
+          background-color: #e2ebf7;
       }
       tr.sum > td {
-        border-top: 1px solid #c5d7ef;
         cursor: pointer;
       }
       tr.detail {
@@ -73,10 +72,10 @@ tmpl = """
     <script type="text/javascript">getState()</script>
     HEADER
     <table style="width:75em">
-      <col width="70%" />
-      <col width="10%" />
-      <col width="10%" />
-      <col />
+      <col style="width:52.5em" /> <!-- 70% -->
+      <col style="width:7.5em" /> <!-- 10% -->
+      <col style="width:7.5em" /> <!-- 10% -->
+      <col style="width:7.5em" /> <!-- 10% -->
       <thead><tr><td>Label class</td><td>Locked stores</td><td>Locked accesses</td><td>Total accesses</td></tr></thead>
       HERE
     </table>
@@ -97,11 +96,22 @@ lutabletmpl = """\
 HERE
 </table>"""
 
-def makeTable(rows, title):
+def makeAccessTable(rows):
     out = []
-    out.append('<thead><tr><td colspan="%d">%s</td></tr></thead>' %
-               (len(rows[0]), title))
     for row in rows:
+        if isinstance(row, str):
+            out.append('<thead><tr><td colspan="%d">%s</td></tr></thead>' %
+                       (len(rows[0]), row))
+            continue
+
+        if row[0] == "st":
+            row[0] = "<b>st</b>"
+        if row[4].startswith(BASEPATH):
+            row[4] = row[4][len(BASEPATH):]
+            if LXR:
+                fname, line = row[4].split(":")
+                row[4] = '<a href="%s/%s#L%s">%s</a>' % \
+                    (LXR, fname, line, row[4])
         out.append("<tr>" + "".join("<td>%s</td>" % c for c in row) + "</tr>")
     return "\n".join(out)
 
@@ -112,33 +122,22 @@ for l in sys.stdin:
         continue
     elif l.startswith("#"):
         header.append(l[1:].strip())
-    elif l.strip() == "--":
-        detail = info[-1][2]
-    elif l[0].isspace():
+    elif l.startswith("    "):
         parts = l.strip().split(None, 5)
-        if parts[4].startswith(BASEPATH):
-            parts[4] = parts[4][len(BASEPATH):]
-            if LXR:
-                fname, line = parts[4].split(":")
-                parts[4] = '<a href="%s/%s#L%s">%s</a>' % \
-                    (LXR, fname, line, parts[4])
-        detail.append(parts)
+        info[-1][1].append(parts)
+    elif l.startswith("  "):
+        info[-1][1].append(l[2:])
     else:
         m = re.match("(.*) ([0-9]+%) +([0-9]+%) +([0-9]+)$", l)
-        info.append(((m.group(1).strip(),) + m.group(2,3,4), [], []))
-        detail = info[-1][1]
+        info.append(((m.group(1).strip(),) + m.group(2,3,4), []))
 
 table = []
-for (n, (lock, locked, unlocked)) in enumerate(info):
+for (n, (lock, detail)) in enumerate(info):
     cls = "even" if n%2 else "odd"
     table.append(rowtmpl % ((cls,) + lock))
-    if locked or unlocked:
-        lutable = []
-        if locked:
-            lutable.append(makeTable(locked, "Locked"))
-        if unlocked:
-            lutable.append(makeTable(unlocked, "Unlocked"))
-        detail = lutabletmpl.replace("HERE", "\n".join(lutable))
+    if detail:
+        lutable = makeAccessTable(detail)
+        detail = lutabletmpl.replace("HERE", lutable)
     else:
         detail = ""
     table.append((detailtmpl % (n, cls, n)).replace("HERE", detail))

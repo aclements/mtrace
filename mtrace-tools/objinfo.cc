@@ -160,6 +160,7 @@ die_data_member_location(struct obj_info *o, Dwarf_Die die)
 
 enum oi_die_type {
 	DIE_TYPE_STRUCT = 1,
+	DIE_TYPE_UNION,
 	DIE_TYPE_ARRAY,
 	DIE_TYPE_REF,
 	DIE_TYPE_BASE,
@@ -177,7 +178,7 @@ struct oi_die
 	// DIE_TYPE_*
 	int size;		/* -1 if incomplete */
 
-	// DIE_TYPE_STRUCT
+	// DIE_TYPE_STRUCT, DIE_TYPE_UNION
 	struct oi_field *fields;
 
 	// DIE_TYPE_ARRAY
@@ -232,10 +233,12 @@ new_type(struct obj_info *o, Dwarf_Die die, enum oi_die_type type)
 }
 
 static void
-process_type_struct(struct obj_info *o, Dwarf_Die root)
+process_type_aggr(struct obj_info *o, Dwarf_Die root, enum oi_die_type type)
 {
+	assert(type == DIE_TYPE_STRUCT || type == DIE_TYPE_UNION);
+
 	Dwarf_Die die;
-	struct oi_die *s = new_type(o, root, DIE_TYPE_STRUCT);
+	struct oi_die *s = new_type(o, root, type);
 	struct oi_field *f, **tail;
 
 	tail = &s->fields;
@@ -317,7 +320,11 @@ process_global(struct obj_info *o, Dwarf_Die gl, DID cuid)
 {
 	switch (die_tag(gl)) {
 	case DW_TAG_structure_type:
-		process_type_struct(o, gl);
+		process_type_aggr(o, gl, DIE_TYPE_STRUCT);
+		break;
+
+	case DW_TAG_union_type:
+		process_type_aggr(o, gl, DIE_TYPE_UNION);
 		break;
 
 	case DW_TAG_array_type:
@@ -337,7 +344,6 @@ process_global(struct obj_info *o, Dwarf_Die gl, DID cuid)
 	case DW_TAG_reference_type:
 //	case DW_TAG_string_type:
 //	case DW_TAG_subroutine_type:
-	case DW_TAG_union_type:	/* XXX */
 //	case DW_TAG_ptr_to_member_type:
 //	case DW_TAG_set_type:
 //	case DW_TAG_subrange_type:
@@ -443,6 +449,7 @@ obj_info_process(struct obj_info *o)
 		struct oi_die *d = it->second;
 		switch (d->type) {
 		case DIE_TYPE_STRUCT:
+		case DIE_TYPE_UNION:
 		case DIE_TYPE_ARRAY:
 		case DIE_TYPE_REF:
 		case DIE_TYPE_BASE:
@@ -481,6 +488,7 @@ obj_info_type_size(struct obj_info *o, int idtype)
 			idtype = o->dies[idtype]->idtype;
 			break;
 		case DIE_TYPE_STRUCT:
+		case DIE_TYPE_UNION:
 		case DIE_TYPE_BASE:
 			return mul * o->dies[idtype]->size;
 		default:
@@ -493,24 +501,27 @@ obj_info_type_size(struct obj_info *o, int idtype)
 	abort();
 }
 
-void
-obj_info_offset_name(struct obj_info *o, int id, int off,
-		     char *out, int len)
+static int
+offset_name_type(struct obj_info *o, int id, char *out, int len)
 {
+	struct oi_die *t = o->dies[id];
 	int n;
 
-	// XXX This first bit is a mess
-	struct oi_die *t = o->dies[id];
 	switch (t->type) {
 	case DIE_TYPE_STRUCT:
-		n = snprintf(out, len, "{struct %s}", t->name);
+		snprintf(out, len, "{struct %s}", t->name);
+		break;
+	case DIE_TYPE_UNION:
+		snprintf(out, len, "{union %s}", t->name);
 		break;
 	case DIE_TYPE_ARRAY:
-		n = snprintf(out, len, "{%s[]}", o->dies[t->idtype]->name);
+		id = offset_name_type(o, t->idtype, out, len);
+		n = strlen(out) - 1;
+		snprintf(out + n, len - n, "[]}");
 		break;
 	case DIE_TYPE_REF:
 	case DIE_TYPE_BASE:
-		n = snprintf(out, len, "{%s}", t->name);
+		snprintf(out, len, "{%s}", t->name);
 		break;
 	case DIE_VARIABLE:
 		n = snprintf(out, len, "%s", t->name);
@@ -522,48 +533,83 @@ obj_info_offset_name(struct obj_info *o, int id, int off,
 			t->type);
 		abort();
 	}
+	return id;
+}
 
-	while (id != -1) {
-		t = o->dies[id];
-		switch (t->type) {
-		case DIE_TYPE_STRUCT:
-		{
-			struct oi_field *f, *l;
-			for (f = l = t->fields; l; l = f, f = f->next) {
-				// XXX Assumes ordering
-				if (!f || off < f->start) {
-					assert(l);
-					n += snprintf(out + n, len - n, ".%s", l->name);
-					break;
-				}
-			}
-			assert(l);
-			off -= l->start;
-			id = l->type;
-			break;
-		}
-		case DIE_TYPE_ARRAY:
-		{
-			unsigned int esize = obj_info_type_size(o, t->idtype);
-			n += snprintf(out + n, len - n, "[%d]", off/esize);
-			off -= (off/esize)*esize;
-			id = t->idtype;
-			break;
-		}
-		case DIE_TYPE_REF:
-			id = t->idtype;
-			break;
-		case DIE_TYPE_BASE:
-			// XXX Unions
-			id = -1;
-			break;
+static int
+offset_name_field(struct obj_info *o, int id, int off,
+		  char *out, int len)
+{
+	int n = 0;
+	struct oi_die *t = o->dies[id];
 
-		default:
-			fprintf(stderr, "%s: unexpected DIE type %d\n",
-				__func__, t->type);
-			abort();
+	switch (t->type) {
+	case DIE_TYPE_STRUCT:
+	{
+		struct oi_field *f, *l;
+		for (f = l = t->fields; l; l = f, f = f->next) {
+			// XXX Assumes ordering
+			if (!f || off < f->start)
+				break;
 		}
+		assert(l);
+		n += snprintf(out + n, len - n, ".%s", l->name ?: "<anon>");
+		return offset_name_field(o, l->type, off - l->start,
+					 out + n, len - n);
 	}
+
+	case DIE_TYPE_UNION:
+	{
+		n += snprintf(out + n, len - n, ".(");
+
+		int i = 0;
+		struct oi_field *f;
+		for (f = t->fields; f; f = f->next) {
+			if (off >= (int)obj_info_type_size(o, f->type))
+				continue;
+			if (i++ > 0)
+				n += snprintf(out + n, len - n, "|");
+			n += snprintf(out + n, len - n, "%s", f->name ?: "<anon>");
+			offset_name_field(o, f->type, off, out + n, len - n);
+			n += strlen(out + n);
+		}
+		n += snprintf(out + n, len - n, ")");
+		if (i)
+			return 0;
+		return off;
+	}
+
+	case DIE_TYPE_ARRAY:
+	{
+		unsigned int esize = obj_info_type_size(o, t->idtype);
+		n += snprintf(out + n, len - n, "[%d]", off/esize);
+		return offset_name_field(o, t->idtype, off - (off/esize)*esize,
+					 out + n, len - n);
+	}
+
+	case DIE_TYPE_REF:
+		return offset_name_field(o, t->idtype, off, out, len);
+
+	case DIE_TYPE_BASE:
+		return off;
+
+	default:
+		fprintf(stderr, "%s: unexpected DIE type %d\n",
+			__func__, t->type);
+		abort();
+	}
+}
+
+void
+obj_info_offset_name(struct obj_info *o, int id, int off,
+		     char *out, int len)
+{
+	int n;
+
+	id = offset_name_type(o, id, out, len);
+	n = strlen(out);
+	off = offset_name_field(o, id, off, out+n, len-n);
+	n = strlen(out);
 
 	if (off)
 		snprintf(out + n, len - n, "+%#x", off);
@@ -711,8 +757,10 @@ main(int argc, char **argv)
 		return 1;
 	}
 	struct obj_info *o = obj_info_create_from_fd(fd);
-	//obj_info_print_struct_offset(o, "vm_area_struct", 56, str, sizeof str);
-	//obj_info_lookup_struct_offset(o, "dentry", 104, str, sizeof str);
+	obj_info_offset_name(o, obj_info_type_by_name(o, "vm_area_struct"), 80, str, sizeof str);
+	printf("%s\n", str);
+	obj_info_offset_name(o, obj_info_type_by_name(o, "vm_area_struct"), 80+24, str, sizeof str);
+	printf("%s\n", str);
 	obj_info_offset_name(o, 0x1f315, 4, str, sizeof str);
 	printf("%s\n", str);
 	obj_info_offset_name(o, obj_info_type_by_name(o, "dentry")/*0x2a3ac*/ /*dentry*/, 209, str, sizeof str);
@@ -723,13 +771,13 @@ main(int argc, char **argv)
 	// while (obj_info_vars_next(o, &var))
 	// 	printf("%s %llx %d\n", var.name, var.location, obj_info_type_size(o, var.idtype));
 
-	char *funcname, *filename;
-	int fileline;
-	obj_info_pc_info(o, 0xffffffff810343d5ull,
-			 &funcname, &filename, &fileline);
-	printf("%s %s:%d\n", funcname, filename, fileline);
-	free(funcname);
-	free(filename);
+	// char *funcname, *filename;
+	// int fileline;
+	// obj_info_pc_info(o, 0xffffffff810343d5ull,
+	// 		 &funcname, &filename, &fileline);
+	// printf("%s %s:%d\n", funcname, filename, fileline);
+	// free(funcname);
+	// free(filename);
 
 	obj_info_destroy(o);
 	return 0;

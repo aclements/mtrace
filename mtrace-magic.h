@@ -14,6 +14,7 @@ typedef enum {
     mtrace_entry_call,
     mtrace_entry_lock,
     mtrace_entry_task,
+    mtrace_entry_sched,
 } mtrace_entry_t;
 
 typedef enum {
@@ -171,6 +172,15 @@ struct mtrace_task_entry {
     char str[32];
 } __pack__;
 
+/*
+ * A task switch in the guest
+ */
+struct mtrace_sched_entry {
+    struct mtrace_entry_header h;
+
+    uint64_t tid;
+};
+
 union mtrace_entry {
     struct mtrace_entry_header h;
 
@@ -182,6 +192,7 @@ union mtrace_entry {
     struct mtrace_call_entry call;
     struct mtrace_lock_entry lock;
     struct mtrace_task_entry task;
+    struct mtrace_sched_entry sched;
 }__pack__;
 
 #ifndef QEMU_MTRACE
@@ -308,6 +319,15 @@ static inline void mtrace_task_register(unsigned long tid,
 
     mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&entry,
 		 mtrace_entry_task, sizeof(entry), ~0, 0);
+}
+
+static inline void mtrace_sched_record(unsigned long tid)
+{
+    volatile struct mtrace_sched_entry entry;
+    entry.tid = tid;
+
+    mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&entry,
+                 mtrace_entry_sched, sizeof(entry), ~0, 0);
 }
 
 #endif /* QEMU_MTRACE */

@@ -223,7 +223,6 @@ static void mtrace_access_dump(mtrace_access_t type, target_ulong host_addr,
     
     if (!mtrace_enable)
 	return;
-
     if (sampler++ % mtrace_sample)
 	return;
 
