@@ -593,7 +593,7 @@ static void handle_label(struct mtrace_label_entry *l)
 		LabelHash::iterator it = o->find(l->guest_addr);
 		
 		if (it == o->end()) {
-			if (mtrace_enable.value)
+			if (mtrace_enable.access.value)
 				die("miss while mtrace enabled");
 
 			// We tolerate a few kfree calls for which we haven't
@@ -605,7 +605,7 @@ static void handle_label(struct mtrace_label_entry *l)
 				die("suspicious number of misses %u", 
 				    l->label_type);
 		} else {
-			if (mtrace_enable.value || 
+			if (mtrace_enable.access.value || 
 			    (it->second->h.access_count <= 
 			     mtrace_enable.h.access_count))
 			{
@@ -693,7 +693,7 @@ static void handle_fcall(struct mtrace_fcall_entry *f)
 
 		current_stack[cpu] = NULL;
 
-		if (mtrace_enable.value ||
+		if (mtrace_enable.access.value ||
 		    cs->start_->h.access_count <= mtrace_enable.h.access_count)
 		{
 			complete_fcalls.push_back(CallTraceRange(cs->start_, f->h.access_count));
@@ -705,7 +705,7 @@ static void handle_fcall(struct mtrace_fcall_entry *f)
 		CallTrace *cs;
 
 		if (current_stack[cpu] == NULL)
-			die("handle_stack_state: NULL -> start");
+			die("handle_stack_state: NULL -> done");
 
 		cs = current_stack[cpu];
 		cs->end_current(f->h.access_count, 0);
@@ -714,7 +714,7 @@ static void handle_fcall(struct mtrace_fcall_entry *f)
 
 		current_stack[cpu] = NULL;
 
-		if (mtrace_enable.value ||
+		if (mtrace_enable.access.value ||
 		    cs->start_->h.access_count <= mtrace_enable.h.access_count)
 		{
 			complete_fcalls.push_back(CallTraceRange(cs->start_, f->h.access_count));
@@ -777,14 +777,23 @@ static void clear_all(void)
 
 static void handle_enable(void *arg, struct mtrace_enable_entry *e)
 {
-	int old = mtrace_enable.value;
+	int old;
+
+	if (e->enable_type == mtrace_call_clear_cpu ||
+	    e->enable_type == mtrace_call_set_cpu) {
+		free(e);
+		return;
+	} else if (e->enable_type != mtrace_access_all_cpu)
+		die("handle_enable: unhandled type %u", e->enable_type);
+
+	old = mtrace_enable.access.value;
 	memcpy(&mtrace_enable, e, sizeof(mtrace_enable));
 
-	if (old && !mtrace_enable.value) {
+	if (old && !mtrace_enable.access.value) {
 		const char *name = "unknown";
 	
-		if (mtrace_enable.str[0])
-			name = mtrace_enable.str;
+		if (mtrace_enable.access.str[0])
+			name = mtrace_enable.access.str;
 
 		complete_outstanding_labels();
 		complete_outstanding_call_traces();
@@ -852,7 +861,7 @@ static void handle_task(struct mtrace_task_entry *task)
 		TaskList::iterator it = task_list.find(task->tid);
 
 		if (it != task_list.end()) {
-			if (mtrace_enable.value)
+			if (mtrace_enable.access.value)
 				die("handle_task: Oops, reused TID");
 			free(it->second);
 		}

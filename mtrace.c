@@ -440,20 +440,22 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
 
     /* Special handling */
     if (type == mtrace_entry_enable) {
-	if (entry.enable.enable_type != mtrace_enable_all) {
-	    printf("oops\n");
+	switch (entry.enable.enable_type) {
+	case mtrace_access_all_cpu:
+	    mtrace_enable = entry.enable.access.value;
+	    break;
+	case mtrace_call_clear_cpu:
+	    mtrace_call_stack_active[entry.enable.call.cpu] = 0;
+	    break;
+	case mtrace_call_set_cpu:
+	    mtrace_call_stack_active[entry.enable.call.cpu] = 1;
+	    break;
+	default:
+	    fprintf(stderr, "bad mtrace_entry_enable type %u\n", 
+		    entry.enable.enable_type);
 	    abort();
 	}
-	mtrace_enable = entry.enable.value;
-    } else if (type == mtrace_entry_fcall)
-        mtrace_call_stack_active[entry.h.cpu] =
-            (entry.fcall.state == mtrace_start ||
-             entry.fcall.state == mtrace_resume);
-#if 0
-    else if (type == mtrace_entry_lock && strcmp(entry.lock.str, "&mm->mmap_sem") == 0) {
-        mtrace_enable = 1;
-    }
-#endif
+    } 
 }
 
 static void (*mtrace_call[])(target_ulong, target_ulong, target_ulong,

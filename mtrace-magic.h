@@ -26,9 +26,12 @@ typedef enum {
 } mtrace_label_t;
 
 typedef enum {
-    mtrace_enable_clear_cpu = 1,
-    mtrace_enable_set_cpu,
-    mtrace_enable_all
+    mtrace_access_clear_cpu = 1,
+    mtrace_access_set_cpu,
+    mtrace_access_all_cpu,
+    
+    mtrace_call_clear_cpu,
+    mtrace_call_set_cpu,
 } mtrace_enable_t;
 
 #define __pack__ __attribute__((__packed__))
@@ -89,8 +92,17 @@ struct mtrace_enable_entry {
     struct mtrace_entry_header h;
 
     mtrace_enable_t enable_type;
-    uint64_t value;
-    char str[32];
+
+    union {
+	struct {
+	    uint64_t value;
+	    char str[32];
+	} access;
+
+	struct {
+	    uint64_t cpu;
+	} call;
+    };
 } __pack__;
 
 /* 
@@ -191,10 +203,21 @@ static inline void mtrace_enable_set(unsigned long b, const char *str)
 {
     volatile struct mtrace_enable_entry enable;
 
-    enable.enable_type = mtrace_enable_all;
-    enable.value = b ? ~0UL : 0;
-    strncpy((char*)enable.str, str, sizeof(enable.str));
-    enable.str[sizeof(enable.str) - 1] = 0;
+    enable.enable_type = mtrace_access_all_cpu;
+    enable.access.value = b ? ~0UL : 0;
+    strncpy((char*)enable.access.str, str, sizeof(enable.access.str));
+    enable.access.str[sizeof(enable.access.str) - 1] = 0;
+
+    mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&enable,
+		 mtrace_entry_enable, sizeof(enable), ~0, 0);
+}
+
+static inline void mtrace_call_set(unsigned long b, int cpu)
+{
+    volatile struct mtrace_enable_entry enable;
+
+    enable.enable_type = b ? mtrace_call_set_cpu : mtrace_call_clear_cpu;
+    enable.call.cpu = cpu;
 
     mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&enable,
 		 mtrace_entry_enable, sizeof(enable), ~0, 0);

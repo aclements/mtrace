@@ -71,7 +71,7 @@ def main(argv = None):
     dataName = argv[2]
     labelId = int(argv[3])
 
-    detail = MtraceInstanceDetail(dbFile, dataName, labelId)
+    detail = MtraceInstanceDetail(dbFile, dataName, None, labelId)
 
     default_print_fn(detail)
 
