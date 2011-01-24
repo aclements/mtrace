@@ -151,7 +151,7 @@ static CallIntervalList complete_intervals;
 
 static TaskList		task_list;
 
-static struct mtrace_enable_entry mtrace_enable;
+static struct mtrace_host_entry mtrace_enable;
 
 static void insert_complete_label(ObjectLabel ol)
 {
@@ -775,16 +775,16 @@ static void clear_all(void)
 	}
 }
 
-static void handle_enable(void *arg, struct mtrace_enable_entry *e)
+static void handle_host(void *arg, struct mtrace_host_entry *e)
 {
 	int old;
 
-	if (e->enable_type == mtrace_call_clear_cpu ||
-	    e->enable_type == mtrace_call_set_cpu) {
+	if (e->host_type == mtrace_call_clear_cpu ||
+	    e->host_type == mtrace_call_set_cpu) {
 		free(e);
 		return;
-	} else if (e->enable_type != mtrace_access_all_cpu)
-		die("handle_enable: unhandled type %u", e->enable_type);
+	} else if (e->host_type != mtrace_access_all_cpu)
+		die("handle_host: unhandled type %u", e->host_type);
 
 	old = mtrace_enable.access.value;
 	memcpy(&mtrace_enable, e, sizeof(mtrace_enable));
@@ -902,8 +902,8 @@ static void process_log(void *arg, gzFile log)
 		case mtrace_entry_access:
 			handle_access(&entry->access);
 			break;
-		case mtrace_entry_enable:
-			handle_enable(arg, &entry->enable);
+		case mtrace_entry_host:
+			handle_host(arg, &entry->host);
 			break;
 		case mtrace_entry_fcall:
 			handle_fcall(&entry->fcall);

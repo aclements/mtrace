@@ -31,9 +31,9 @@ static void print_entry(union mtrace_entry *entry)
 		       entry->access.host_addr,
 		       entry->access.guest_addr);
 		break;
-	case mtrace_entry_enable:
+	case mtrace_entry_host:
 		printf("%-3s [%u]\n", 
-		       "E", entry->enable.access.value);
+		       "E", entry->host.access.value);
 		break;
 	case mtrace_entry_fcall:
 		printf("%-3s [%-3u  %16lu  %16lu  %016lx"
