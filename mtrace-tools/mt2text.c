@@ -33,7 +33,7 @@ static void print_entry(union mtrace_entry *entry)
 		break;
 	case mtrace_entry_enable:
 		printf("%-3s [%u]\n", 
-		       "E", entry->enable.enable);
+		       "E", entry->enable.value);
 		break;
 	case mtrace_entry_fcall:
 		printf("%-3s [%-3u  %16lu  %16lu  %016lx"

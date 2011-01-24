@@ -2,8 +2,7 @@
 #define _MTRACE_MAGIC_H_
 
 enum {
-    MTRACE_ENABLE_SET = 1,
-    MTRACE_ENTRY_REGISTER,
+    MTRACE_ENTRY_REGISTER = 1,
 };
 
 typedef enum {
@@ -25,6 +24,12 @@ typedef enum {
 
     mtrace_label_end
 } mtrace_label_t;
+
+typedef enum {
+    mtrace_enable_clear_cpu = 1,
+    mtrace_enable_set_cpu,
+    mtrace_enable_all
+} mtrace_enable_t;
 
 #define __pack__ __attribute__((__packed__))
 
@@ -83,7 +88,8 @@ struct mtrace_call_entry {
 struct mtrace_enable_entry {
     struct mtrace_entry_header h;
 
-    uint8_t enable;
+    mtrace_enable_t enable_type;
+    uint64_t value;
     char str[32];
 } __pack__;
 
@@ -181,10 +187,17 @@ static inline void mtrace_magic(unsigned long ax, unsigned long bx,
 		       "S" (si), "D" (di));
 }
 
-static inline void mtrace_enable_set(unsigned long b, const char *str, 
-				     unsigned long n)
+static inline void mtrace_enable_set(unsigned long b, const char *str)
 {
-    mtrace_magic(MTRACE_ENABLE_SET, b, (unsigned long)str, n, 0, 0);
+    volatile struct mtrace_enable_entry enable;
+
+    enable.enable_type = mtrace_enable_all;
+    enable.value = b ? ~0UL : 0;
+    strncpy((char*)enable.str, str, sizeof(enable.str));
+    enable.str[sizeof(enable.str) - 1] = 0;
+
+    mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&enable,
+		 mtrace_entry_enable, sizeof(enable), ~0, 0);
 }
 
 static inline void mtrace_label_register(mtrace_label_t type,

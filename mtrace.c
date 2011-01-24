@@ -357,38 +357,6 @@ void mtrace_io_read(void *cb, target_phys_addr_t ram_addr,
     /* Nothing to do.. */
 }
 
-/*
- * Handlers for the mtrace magic instruction
- */
-
-static void mtrace_enable_set(target_ulong b, target_ulong str_addr,
-			      target_ulong n, target_ulong a4,
-			      target_ulong a5)
-{
-    struct mtrace_enable_entry enable;
-    int r;
-
-    mtrace_enable = !!b;
-    enable.h.type = mtrace_entry_enable;
-    enable.h.size = sizeof(enable);
-    enable.h.cpu = 0;
-    enable.h.access_count = mtrace_access_count;
-    enable.enable = mtrace_enable;
-
-
-    if (n > sizeof(enable.str) - 1)
-	n = sizeof(enable.str) - 1;
-    
-    r = cpu_memory_rw_debug(cpu_single_env, str_addr, (uint8_t *)enable.str, n, 0);
-    if (r) {
-	fprintf(stderr, "mtrace_enable_set: cpu_memory_rw_debug failed\n");
-	return;
-    }
-    enable.str[n] = 0;
-
-    mtrace_log_entry((union mtrace_entry *)&enable);
-}
-
 static int mtrace_host_addr(target_ulong guest_addr, target_ulong *host_addr)
 {
     target_phys_addr_t phys;
@@ -421,6 +389,9 @@ static int mtrace_host_addr(target_ulong guest_addr, target_ulong *host_addr)
     return 0;
 }
 
+/*
+ * Handler for the mtrace magic instruction
+ */
 static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
                                   target_ulong len, target_ulong cpu,
                                   target_ulong n5)
@@ -468,7 +439,13 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
     mtrace_log_entry(&entry);
 
     /* Special handling */
-    if (type == mtrace_entry_fcall)
+    if (type == mtrace_entry_enable) {
+	if (entry.enable.enable_type != mtrace_enable_all) {
+	    printf("oops\n");
+	    abort();
+	}
+	mtrace_enable = entry.enable.value;
+    } else if (type == mtrace_entry_fcall)
         mtrace_call_stack_active[entry.h.cpu] =
             (entry.fcall.state == mtrace_start ||
              entry.fcall.state == mtrace_resume);
@@ -482,7 +459,6 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
 static void (*mtrace_call[])(target_ulong, target_ulong, target_ulong,
 			     target_ulong, target_ulong) = 
 {
-    [MTRACE_ENABLE_SET]		= mtrace_enable_set,
     [MTRACE_ENTRY_REGISTER]	= mtrace_entry_register,
 };
 
