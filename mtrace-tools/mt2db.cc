@@ -916,7 +916,12 @@ static void process_log(void *arg, gzFile log)
 			free(entry);
 			break;
 		case mtrace_entry_lock:
-			die("mtrace_entry_lock: XXX");
+			// XXX
+			free(entry);
+			break;
+		case mtrace_entry_sched:
+			// XXX
+			free(entry);
 			break;
 		case mtrace_entry_task:
 			handle_task(&entry->task);
