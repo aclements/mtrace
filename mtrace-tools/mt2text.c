@@ -76,7 +76,7 @@ static void print_entry(union mtrace_entry *entry)
 		printf("%-3s [%-3u  pid %5u]\n",
 		       "sch",
 		       entry->h.cpu,
-		       entry->sched.pid);
+		       entry->sched.tid);
 		break;
 	default:
 		fprintf(stderr, "print_entry: bad type %u\n", entry->h.type);
