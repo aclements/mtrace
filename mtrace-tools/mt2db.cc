@@ -844,6 +844,7 @@ static void handle_host(void *arg, struct mtrace_host_entry *e)
 
 static void handle_segment(struct mtrace_segment_entry *seg)
 {
+#if ONE_SHOT
 	if (seg->object_type != mtrace_label_percpu)
 		die("handle_segment: bad type %u", seg->object_type);
 
@@ -860,12 +861,16 @@ static void handle_segment(struct mtrace_segment_entry *seg)
 		if (l->guest_addr + l->bytes > seg->endaddr)
 			die("handle_segment: bad label: %s", l->str);
 
-		ObjectLabel ol(l, ~0UL);
-		insert_complete_label(ol);
+		outstanding_labels[l->label_type][l->guest_addr] = l;
 	}
 
 	// XXX Oops, we leak the mtrace_label_entry in percpu_labels after
 	// we handle the final segment.
+#else
+	// XXX by adding to outstanding_labels the per_cpu labels will
+	// disappear when complete_oustanding labels is called.
+#error handle_segment is broken
+#endif
 }
 
 static void handle_task(struct mtrace_task_entry *task)
