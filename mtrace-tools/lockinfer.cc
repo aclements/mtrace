@@ -228,19 +228,27 @@ handle_lock(struct mtrace_lock_entry *l)
 	if (strcmp(l->str, lockname) != 0)
 		return;
 
-	LockState ls = l->release ? LS_NONE : (l->read ? LS_READ : LS_WRITE);
+	// A single PID can hold different instances of the same lock,
+	// so we track the acquire count for each PID.
+	static map<uint32_t, int> pidLocks;
+
+	LockState ls;
 	LockState prev = lockStates[curPID];
+	int n = pidLocks[curPID];
 
+	if (l->release) {
+		n--;
+		ls = LS_NONE;
+	} else {
+		n++;
+		ls = l->read ? LS_READ : LS_WRITE;
+		if (ls < prev)
+			ls = prev;
+	}
+
+	assert(n >= 0);
+	pidLocks[curPID] = n;
 	lockStates[curPID] = ls;
-
-	int bad;
-	if (ls == LS_NONE)
-		bad = (prev == LS_NONE);
-	else
-		bad = (prev != LS_NONE);
-	if (bad)
-		fprintf(stderr, "Bad lock transition %s->%s (pid %u)\n",
-			lockStateNames[prev], lockStateNames[ls], curPID);
 }
 
 static void
@@ -256,7 +264,7 @@ process_entry(union mtrace_entry *e)
 	case mtrace_entry_lock:
 		handle_lock(&e->lock);
 		break;
-		printf("%-3s [%-3u  pc %16lx  lock %16lx  %s]\n",
+		fprintf(stderr, "%-3s [%-3u  pc %16lx  lock %16lx  %s]\n",
 		       e->lock.release ? "r" : (e->lock.read ? "ar" : "aw"),
 		       e->h.cpu,
 		       e->lock.pc,
