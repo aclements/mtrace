@@ -21,6 +21,20 @@ const char *lockname;
 
 using namespace std;
 
+enum LockState {
+	LS_NONE = 0,
+	LS_READ,
+	LS_WRITE,
+
+	NUM_LOCK_STATE
+};
+
+const char *lockStateNames[] = {
+	"Unlocked",
+	"Read-locked",
+	"Write-locked",
+};
+
 class OffsetLockSetInfo
 {
 public:
@@ -55,7 +69,7 @@ public:
 				file = strdup("???");
 				lineno = 0;
 			}
-			printf("  %s %6d %016llx %s %s:%d\n",
+			printf("    %s %6d %016llx %s %s:%d\n",
 			       access_type_to_str[vec[i].first.second],
 			       vec[i].second, vec[i].first.first,
 			       func, file, lineno);
@@ -63,27 +77,28 @@ public:
 			free(file);
 		}
 		if (num < pcs.size())
-			printf("  (+ %d more)\n", pcs.size() - num);
+			printf("    (+ %d more)\n", pcs.size() - num);
 	}
 };
 
 class OffsetInfo
 {
 public:
-	OffsetLockSetInfo info[2]; // Indexed by lockSet
+	OffsetLockSetInfo info[NUM_LOCK_STATE];
 
-	void access(struct mtrace_access_entry *a, int lockSet) {
-		++info[lockSet].count;
+	void access(struct mtrace_access_entry *a, LockState ls) {
+		++info[ls].count;
 		if (a->access_type == mtrace_access_st)
-			++info[lockSet].stcount;
-		++info[lockSet].pcs[make_pair(a->pc, a->access_type)];
+			++info[ls].stcount;
+		++info[ls].pcs[make_pair(a->pc, a->access_type)];
 	}
 	int total(bool st) const {
-		if (st)
-			return info[0].stcount + info[1].stcount;
-		return info[0].count + info[1].count;
+		int t = 0;
+		for (int i = 0; i < NUM_LOCK_STATE; ++i)
+			t += st ? info[i].stcount : info[i].count;
+		return t;
 	}
-	float freq(bool st, int ls) const {
+	float freq(bool st, LockState ls) const {
 		int t = total(st);
 		if (t == 0)
 			return 0;
@@ -119,7 +134,9 @@ typedef map<uint64_t, struct mtrace_label_entry> LabelMap;
 
 static LabelMap labels[mtrace_label_end];
 // XXX Assuming a single CPU
-static int lockSet;		// Just 0 or 1 depending on lock
+//static int lockSet;		// Just 0 or 1 depending on lock
+static uint32_t curPID;
+static map<uint32_t, LockState> lockStates;
 
 typedef int Offset;
 // XXX Might want to canonicalize the offsets by rounding them to the
@@ -195,7 +212,8 @@ handle_access(struct mtrace_access_entry *a)
 //		printf("A %s+0x%x %d\n", l->str, offset, lockSet);
 		offsetCounts[make_pair(l->h.cpu == 0xffff ?
 				       LabelClass(l->host_addr) :
-				       LabelClass(l->str), offset)].access(a, lockSet);
+				       LabelClass(l->str), offset)].
+			access(a, lockStates[curPID]);
 		return;
 	}
 	// Didn't find it
@@ -207,18 +225,22 @@ handle_access(struct mtrace_access_entry *a)
 static void
 handle_lock(struct mtrace_lock_entry *l)
 {
-	static int held;
-
 	if (strcmp(l->str, lockname) != 0)
 		return;
 
-	if (l->release)
-		held--;
-	else
-		held++;
+	LockState ls = l->release ? LS_NONE : (l->read ? LS_READ : LS_WRITE);
+	LockState prev = lockStates[curPID];
 
-	assert(held >= 0);
-	lockSet = (held > 0);
+	lockStates[curPID] = ls;
+
+	int bad;
+	if (ls == LS_NONE)
+		bad = (prev == LS_NONE);
+	else
+		bad = (prev != LS_NONE);
+	if (bad)
+		fprintf(stderr, "Bad lock transition %s->%s (pid %u)\n",
+			lockStateNames[prev], lockStateNames[ls], curPID);
 }
 
 static void
@@ -240,6 +262,10 @@ process_entry(union mtrace_entry *e)
 		       e->lock.pc,
 		       e->lock.lock,
 		       e->lock.str);
+		handle_lock(&e->lock);
+		break;
+	case mtrace_entry_sched:
+		curPID = e->sched.pid;
 		break;
 	default:
 		break;
@@ -250,22 +276,28 @@ static bool
 compare_offset_freq(const pair<pair<LabelClass, Offset>, OffsetInfo> &a,
 		    const pair<pair<LabelClass, Offset>, OffsetInfo> &b)
 {
-	if (a.second.freq(true, 1) != b.second.freq(true, 1))
-		return a.second.freq(true, 1) > b.second.freq(true, 1);
+	if (a.second.freq(true, LS_WRITE) != b.second.freq(true, LS_WRITE))
+		return a.second.freq(true, LS_WRITE) > b.second.freq(true, LS_WRITE);
 	return a.second.total(false) > b.second.total(false);
 }
 
 static void
 print_inference(struct obj_info *vmlinux, Addr2line *a2l)
 {
+	static LockState lsOrder[] = {
+		LS_WRITE,
+		LS_READ,
+		LS_NONE,
+	};
+
 	OffsetCountVector counts(offsetCounts.begin(), offsetCounts.end());
 
 	sort(counts.begin(), counts.end(), compare_offset_freq);
 
 	OffsetCountVector::iterator it;
 	for (it = counts.begin(); it < counts.end(); ++it) {
-		float stfreq = it->second.freq(true, 1);
-		float freq = it->second.freq(false, 1);
+		float stfreq = it->second.freq(true, LS_WRITE);
+		float freq = 1 - it->second.freq(false, LS_NONE);
 		int total = it->second.total(false);
 		LabelClass *lname = &it->first.first;
 		if ((stfreq < 0.95 || total < 10) &&
@@ -289,9 +321,13 @@ print_inference(struct obj_info *vmlinux, Addr2line *a2l)
 		printf("%-65s %3d%% %3d%% %d\n", str,
 		       (int)(stfreq*100), (int)(freq*100), total);
 
-		it->second.info[1].print_pcs(a2l, SOURCE_LIMIT);
-		printf("  --\n");
-		it->second.info[0].print_pcs(a2l, SOURCE_LIMIT);
+		for (size_t i = 0; i < sizeof(lsOrder)/sizeof(lsOrder[0]); i++) {
+			LockState ls = lsOrder[i];
+			if (!it->second.info[ls].pcs.size())
+				continue;
+			printf("  %s\n", lockStateNames[ls]);
+			it->second.info[ls].print_pcs(a2l, SOURCE_LIMIT);
+		}
 	}
 }
 

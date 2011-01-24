@@ -72,6 +72,12 @@ static void print_entry(union mtrace_entry *entry)
 		       entry->lock.lock,
 		       entry->lock.str);
 		break;
+        case mtrace_entry_sched:
+		printf("%-3s [%-3u  pid %5u]\n",
+		       "sch",
+		       entry->h.cpu,
+		       entry->sched.pid);
+		break;
 	default:
 		fprintf(stderr, "print_entry: bad type %u\n", entry->h.type);
 	}

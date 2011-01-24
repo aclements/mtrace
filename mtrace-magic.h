@@ -14,6 +14,7 @@ typedef enum {
     mtrace_entry_segment,
     mtrace_entry_call,
     mtrace_entry_lock,
+    mtrace_entry_sched,
 } mtrace_entry_t;
 
 typedef enum {
@@ -133,6 +134,12 @@ struct mtrace_lock_entry {
     uint8_t read;
 } __pack__;
 
+struct mtrace_sched_entry {
+    struct mtrace_entry_header h;
+
+    uint32_t pid;
+};
+
 union mtrace_entry {
     struct mtrace_entry_header h;
 
@@ -143,6 +150,7 @@ union mtrace_entry {
     struct mtrace_segment_entry seg;
     struct mtrace_call_entry call;
     struct mtrace_lock_entry lock;
+    struct mtrace_sched_entry sched;
 }__pack__;
 
 #ifndef QEMU_MTRACE
@@ -235,6 +243,15 @@ static inline void mtrace_lock_register(unsigned long pc,
 
     mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&entry,
 		 mtrace_entry_lock, sizeof(entry), ~0, 0);
+}
+
+static inline void mtrace_sched_record(unsigned int pid)
+{
+    volatile struct mtrace_sched_entry entry;
+    entry.pid = pid;
+
+    mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&entry,
+                 mtrace_entry_sched, sizeof(entry), ~0, 0);
 }
 
 #endif /* QEMU_MTRACE */

@@ -194,7 +194,7 @@ static void mtrace_access_dump(mtrace_access_t type, target_ulong host_addr,
     if (!mtrace_enable)
 	return;
     
-    if (sampler++ % 100)
+    if (sampler++ % 20)
 	return;
 
     entry.h.type = mtrace_entry_access;
