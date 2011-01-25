@@ -418,6 +418,7 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
     else
         entry.h.cpu = cpu;
     entry.h.access_count = mtrace_access_count;
+    entry.h.ts = cpu_get_tsc(cpu_single_env);
 
     /* Special handling */
     if (type == mtrace_entry_label) {

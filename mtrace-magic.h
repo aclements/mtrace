@@ -45,6 +45,7 @@ struct mtrace_entry_header {
     uint16_t size;
     uint16_t cpu;
     uint64_t access_count;
+    uint64_t ts;
 } __pack__;
 
 /*
