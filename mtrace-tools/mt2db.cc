@@ -171,6 +171,12 @@ static struct mtrace_host_entry mtrace_enable;
 
 static uint64_t 	current_tid[MAX_CPU];
 
+static int should_save_entry(struct mtrace_entry_header *h)
+{
+	return (mtrace_enable.access.value || 
+		h->access_count <= mtrace_enable.h.access_count);
+}
+
 static void insert_complete_label(ObjectLabel ol)
 {
 	if (ol.label_->label_type == 0 || 
@@ -493,10 +499,7 @@ static void handle_label(struct mtrace_label_entry *l)
 				die("suspicious number of misses %u", 
 				    l->label_type);
 		} else {
-			if (mtrace_enable.access.value || 
-			    (it->second.label_->h.access_count <= 
-			     mtrace_enable.h.access_count))
-			{
+			if (should_save_entry(&it->second.label_->h)) {
 				ObjectLabel ol = it->second;
 				ol.access_count_end_ = l->h.access_count;
 				insert_complete_label(ol);
@@ -582,11 +585,8 @@ static void handle_fcall(struct mtrace_fcall_entry *f)
 
 		current_stack[cpu] = NULL;
 
-		if (mtrace_enable.access.value ||
-		    cs->start_->h.access_count <= mtrace_enable.h.access_count)
-		{
+		if (should_save_entry(&cs->start_->h))
 			complete_fcalls.push_back(CallTraceRange(cs->start_, f->h.access_count));
-		}
 
 		break;
 	}
@@ -603,9 +603,7 @@ static void handle_fcall(struct mtrace_fcall_entry *f)
 
 		current_stack[cpu] = NULL;
 
-		if (mtrace_enable.access.value ||
-		    cs->start_->h.access_count <= mtrace_enable.h.access_count)
-		{
+		if (should_save_entry(&cs->start_->h)) {
 			complete_fcalls.push_back(CallTraceRange(cs->start_, f->h.access_count));
 			complete_intervals.push_back(cs->timeline_);
 		} else {
@@ -634,10 +632,13 @@ static void handle_call(struct mtrace_call_entry *f)
 
 	cs = current_stack[cpu];
 
-	if (f->ret)
-		cs->pop(f);
-	else
-		cs->push(f);
+	if (should_save_entry(&f->h)) {
+		if (f->ret)
+			cs->pop(f);
+		else
+			cs->push(f);
+	} 
+	free(f);
 }
 
 static int get_object(uint64_t guest_addr, int *label_type, uint64_t *label_id)
@@ -905,7 +906,6 @@ static void process_log(void *arg, gzFile log)
 			break;
 		case mtrace_entry_call:
 			handle_call(&entry->call);
-			free(entry);
 			break;
 		case mtrace_entry_lock:
 			handle_lock(&entry->lock);
