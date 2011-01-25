@@ -78,6 +78,25 @@ struct Access {
 	uint64_t label_id_;
 };
 
+struct LockedSection {
+	LockedSection(uint64_t lock, int label_type, uint64_t label_id, 
+		      uint64_t start_ts, uint64_t end_ts, uint64_t tid)
+	{
+		lock_ = lock;
+		label_type_ = label_type;
+		label_id_ = label_id;
+		start_ts_ = start_ts;
+		end_ts_ = end_ts;
+		tid_ = tid;
+	}
+	uint64_t lock_;
+	int label_type_;
+	uint64_t label_id_;
+	uint64_t start_ts_;
+	uint64_t end_ts_;
+	uint64_t tid_;
+};
+
 struct ObjectLabel {
 
 	ObjectLabel(struct mtrace_label_entry *label, uint64_t label_id)
@@ -150,11 +169,13 @@ typedef hash_map<uint64_t, CallTrace *>  		CallTraceHash;
 typedef list<struct mtrace_label_entry *>	     	LabelList;
 typedef list< list<CallInterval *> >   			CallIntervalList;
 typedef hash_map<uint64_t, TaskState *>			TaskTable;
+typedef list<LockedSection>	     			LockedSectionList;
 
 static LabelHash    	outstanding_labels[mtrace_label_end];
 static ObjectList	complete_labels[mtrace_label_end];;
 static AccessList	accesses;
 static CallRangeList    complete_fcalls;
+static LockedSectionList locked_sections;
 
 static LabelList    	percpu_labels;
 
@@ -456,6 +477,34 @@ static void build_access_db(void *arg, const char *name)
 	exec_stmt(db, NULL, NULL, "END TRANSACTION;");
 }
 
+static void build_locked_sections_db(void *arg, const char *name)
+{
+	sqlite3 *db = (sqlite3 *) arg;
+	Progress p(locked_sections.size(), 0);
+
+	exec_stmt_noerr(db, NULL, NULL, "DROP TABLE %s_locked_sections", name);
+	exec_stmt(db, NULL, NULL, CREATE_LOCKED_SECTIONS_TABLE, name);
+	exec_stmt(db, NULL, NULL, "BEGIN TRANSACTION;");
+
+	while (!locked_sections.empty()) {
+		LockedSection ls = locked_sections.front();
+
+		exec_stmt(db, NULL, NULL, INSERT_LOCKED_SECTION,
+			  name,
+			  ls.lock_,
+			  ls.label_type_,
+			  ls.label_id_,
+			  ls.start_ts_,
+			  ls.end_ts_,
+			  ls.tid_);
+
+		locked_sections.pop_front();
+		p.tick();
+	}
+
+	exec_stmt(db, NULL, NULL, "END TRANSACTION;");
+}
+
 static void complete_outstanding_labels(void)
 {
 	LabelHash* o;
@@ -737,6 +786,11 @@ static void handle_host(void *arg, struct mtrace_host_entry *e)
 
 		build_label_db(arg, name);
 
+		printf("Building locked_sections db '%s' ...", name);
+		fflush(0);
+		build_locked_sections_db(arg, name);
+		printf("done!\n");
+
 		printf("Building tasks db '%s' ... ", name);
 		fflush(0);
 		build_task_db(arg, name);
@@ -851,6 +905,11 @@ static void handle_lock(struct mtrace_lock_entry *lock)
 	int cpu = lock->h.cpu;
 	uint64_t tid;
 
+	if (!should_save_entry(&lock->h)) {
+	    free(lock);
+	    return;
+	}
+
 	if (cpu >= MAX_CPU)
 		die("handle_lock: cpu is too large %u", cpu);
 
@@ -874,7 +933,26 @@ static void handle_lock(struct mtrace_lock_entry *lock)
 	}
 
 	ts = it->second;
-	ts->lock_set_.on_lock(lock);
+
+	if (lock->release) {
+		uint64_t acquire_ts;
+		if (ts->lock_set_.release(lock, &acquire_ts)) {
+			int label_type;
+			uint64_t label_id;
+
+			get_object(lock->lock, &label_type, &label_id);
+			locked_sections.push_back(LockedSection(lock->lock,
+								label_type,
+								label_id,
+								acquire_ts,
+								lock->h.ts,
+								tid));
+		}
+	} else {
+		ts->lock_set_.acquire(lock);
+	}
+
+	free(lock);
 }
 
 static void process_log(void *arg, gzFile log)

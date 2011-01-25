@@ -127,3 +127,22 @@
 	"next_id, ret_id) "		 	     	      		\
 	"VALUES (%lu, %lu, %u, "ADDR_FMT", "ADDR_FMT", %lu, %lu, "	\
 	"%lu, %lu, %lu)"
+
+/* 
+ * locked sections
+ */
+#define CREATE_LOCKED_SECTIONS_TABLE					\
+	"CREATE TABLE %s_locked_sections ("				\
+	"id    		  	  INTEGER PRIMARY KEY, "		\
+	"lock 		  	  INTEGER, "				\
+	"label_type 		  INTEGER, "				\
+	"label_id 		  INTEGER, "   				\
+	"start_ts 		  INTEGER, "				\
+	"end_ts 	  	  INTEGER, "				\
+	"tid			  INTEGER" 				\
+	")"
+
+#define INSERT_LOCKED_SECTION						\
+	"INSERT INTO %s_locked_sections ("				\
+	"lock, label_type, label_id, start_ts, end_ts, tid) "		\
+	"VALUES (%lu, %u, %lu, %lu, %lu, %lu)"

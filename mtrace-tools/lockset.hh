@@ -6,7 +6,8 @@ class LockSet {
 private:
 	struct LockState {
 		LockState(struct mtrace_lock_entry *l) {
-			lock_ = l;
+			lock_ = l->lock;
+			acquire_ts_ = l->h.ts;
 			n_ = 0;
 		}
 
@@ -17,8 +18,6 @@ private:
 			if (n_ == 0)
 				die("releasing lock with no acquires");
 			r = --n_ == 0;
-			if (r)
-				free(lock_);
 			return r;
 		}
 
@@ -26,42 +25,43 @@ private:
 			n_++;
 		}
 
-		struct mtrace_lock_entry *lock_;
+		uint64_t lock_;
+		uint64_t acquire_ts_;
 		int n_;
 	};
 
 	typedef hash_map<uint64_t, struct LockState> LockStateTable;
 
 public:
-	~LockSet(void) {
-		LockStateTable::iterator it = state_.begin();
-		for (; it != state_.end(); ++it)
-			free(it->second.lock_);
+	bool release(struct mtrace_lock_entry *lock, uint64_t *acquire_ts) {
+		LockStateTable::iterator it = state_.find(lock->lock);
+		uint64_t ts;
+
+		if (it == state_.end()) {
+			//printf("LockSet: releasing unheld lock %lx\n", lock->lock);
+			return false;
+		}
+		ts = it->second.acquire_ts_;
+		if (it->second.release()) {
+			state_.erase(it);
+			*acquire_ts = ts;
+			return true;
+		}
+		return false;
 	}
 
-	void on_lock(struct mtrace_lock_entry *lock) {
-		LockStateTable::iterator it = state_.find(lock->lock);
+	void acquire(struct mtrace_lock_entry *lock) {
+		LockStateTable::iterator it = state_.find(lock->lock);		
 
-		if (lock->release) {
-			if (it == state_.end()) {
-				//printf("LockSet: releasing unheld lock %lx\n", lock->lock);
-				free(lock);
-				return;
-			}
-			if (it->second.release())
-				state_.erase(it);
-		} else {
-			if (it == state_.end()) {
-				pair<LockStateTable::iterator, bool> r;
-				LockState ls(lock);
-				r = state_.insert(pair<uint64_t, struct LockState>(lock->lock, ls));
-				if (!r.second)
-					die("on_lock: insert failed");
-				it = r.first;
-			}
-
-			it->second.acquire();
+		if (it == state_.end()) {
+			pair<LockStateTable::iterator, bool> r;
+			LockState ls(lock);
+			r = state_.insert(pair<uint64_t, struct LockState>(lock->lock, ls));
+			if (!r.second)
+				die("on_lock: insert failed");
+			it = r.first;
 		}
+		it->second.acquire();
 	}
 
 private:
