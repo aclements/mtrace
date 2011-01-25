@@ -514,7 +514,7 @@ static void complete_outstanding_call_traces(void)
 	while (it != call_stack.end()) {
 		CallTrace *ct = it->second;
 
-		ct->end_current(~0UL, 0);
+		ct->end_current(MAX_UNSIGNED_INTEGER, 0);
 
 		// We already accounted for the CallTraceRange when we 
 		// processed the mtrace_pause.  The call intervals are 
@@ -715,7 +715,8 @@ static void handle_host(void *arg, struct mtrace_host_entry *e)
 	int old;
 
 	if (e->host_type == mtrace_call_clear_cpu ||
-	    e->host_type == mtrace_call_set_cpu) {
+	    e->host_type == mtrace_call_set_cpu) 
+	{
 		free(e);
 		return;
 	} else if (e->host_type != mtrace_access_all_cpu)
