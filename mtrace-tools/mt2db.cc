@@ -76,14 +76,16 @@ struct Access {
 
 struct ObjectLabel {
 
-	ObjectLabel(struct mtrace_label_entry *label, 
-		    uint64_t access_count_end) 
+	ObjectLabel(struct mtrace_label_entry *label, uint64_t label_id)
 	{
 		this->label_ = label;
-		this->access_count_end_ = access_count_end;
+		this->label_id_ = label_id;
+
+		this->access_count_end_ = 0;
 	}
 
 	struct mtrace_label_entry *label_;
+	uint64_t label_id_;
 	uint64_t access_count_end_;
 };
 
@@ -136,7 +138,7 @@ struct TaskState {
 	struct mtrace_task_entry *entry_;
 };
 
-typedef map<uint64_t, struct mtrace_label_entry *>	LabelHash;
+typedef map<uint64_t, ObjectLabel>			LabelHash;
 typedef list<ObjectLabel> 	  		     	ObjectList;
 typedef list<Access> 					AccessList;
 typedef list<CallTraceRange> 				CallRangeList;
@@ -172,6 +174,23 @@ static void insert_complete_label(ObjectLabel ol)
 		die("insert_complete_label: bad label type: %u", 
 		    ol.label_->label_type);
 	complete_labels[ol.label_->label_type].push_back(ol);
+}
+
+static void insert_outstanding_label(struct mtrace_label_entry *l)
+{
+	static uint64_t label_count;
+	uint64_t label_id;
+	LabelHash* o;
+
+	if (l->label_type == 0 || l->label_type >= mtrace_label_end)
+		die("handle_label: bad label type: %u", l->label_type);
+
+	o = &outstanding_labels[l->label_type];
+	if (o->find(l->guest_addr) != o->end())
+		die("insert_outstanding_label: overlapping labels");
+
+	label_id = ++label_count;
+	(*o).insert(pair<uint64_t, ObjectLabel>(l->guest_addr, ObjectLabel(l, label_id)));
 }
 
 static void __attribute__ ((format (printf, 4, 5))) 
@@ -232,8 +251,6 @@ static void *open_db(const char *database)
 static void build_labelx_db(void *arg, const char *name, 
 			    mtrace_label_t label_type)
 {
-	static uint64_t label_count;
-
 	const char *create_label_table = 
 		"CREATE TABLE %s_labels%u ("
 		"label_id     	     INTEGER PRIMARY KEY, "
@@ -271,11 +288,10 @@ static void build_labelx_db(void *arg, const char *name,
 	ObjectList::iterator it = complete_labels[label_type].begin();
 	for (; it != complete_labels[label_type].end(); ++it) {
 		ObjectLabel ol = *it;
-		uint64_t label_id = ++label_count;
-
+		
 		exec_stmt(db, NULL, NULL, insert_label, name, 
 			  label_type, 
-			  label_id,
+			  ol.label_id_,
 			  ol.label_->str, 
 			  ol.label_->pc, 			  
 			  ol.label_->host_addr, 
@@ -341,6 +357,8 @@ static void build_call_trace_db(void *arg, const char *name)
 	exec_stmt_noerr(db, NULL, NULL, "DROP TABLE %s_call_traces", name);
 	exec_stmt(db, NULL, NULL, create_calls_table, name);
 
+	exec_stmt(db, NULL, NULL, "BEGIN TRANSACTION;");
+
 	CallRangeList::iterator it = complete_fcalls.begin();
 	for (; it != complete_fcalls.end(); ++it) {
 		CallTraceRange cf = (*it);
@@ -358,6 +376,8 @@ static void build_call_trace_db(void *arg, const char *name)
 
 	for (i = 0; i < sizeof(create_index) / sizeof(create_index[0]); i++)
 		exec_stmt(db, NULL, NULL, create_index[i], name, i, name);
+
+	exec_stmt(db, NULL, NULL, "END TRANSACTION;");
 }
 
 static void build_task_db(void *arg, const char *name)
@@ -582,8 +602,8 @@ static void complete_outstanding_labels(void)
 
 		LabelHash::iterator it = o->begin();
 		for (; it != o->end(); ++it) {
-			struct mtrace_label_entry *l = it->second;
-			ObjectLabel ol(l, ~0UL);
+			ObjectLabel ol = it->second;
+			ol.access_count_end_ = MAX_UNSIGNED_INTEGER;
 			insert_complete_label(ol);
 		}
 	}
@@ -592,17 +612,14 @@ static void complete_outstanding_labels(void)
 static void handle_label(struct mtrace_label_entry *l)
 {
 	static uint64_t misses[mtrace_label_end];
-	LabelHash* o;
 
 	if (l->label_type == 0 || l->label_type >= mtrace_label_end)
 	    die("handle_label: bad label type: %u", l->label_type);
 
-	o = &outstanding_labels[l->label_type];
 	if (l->bytes) {
-		if (o->find(l->guest_addr) != o->end())
-			die("oops");
-		(*o)[l->guest_addr] = l;
+		insert_outstanding_label(l);
 	} else {
+		LabelHash* o = &outstanding_labels[l->label_type];
 		LabelHash::iterator it = o->find(l->guest_addr);
 		
 		if (it == o->end()) {
@@ -619,10 +636,11 @@ static void handle_label(struct mtrace_label_entry *l)
 				    l->label_type);
 		} else {
 			if (mtrace_enable.access.value || 
-			    (it->second->h.access_count <= 
+			    (it->second.label_->h.access_count <= 
 			     mtrace_enable.h.access_count))
 			{
-				ObjectLabel ol(it->second, l->h.access_count);
+				ObjectLabel ol = it->second;
+				ol.access_count_end_ = l->h.access_count;
 				insert_complete_label(ol);
 			}
 			o->erase(it);
@@ -634,7 +652,7 @@ static void complete_outstanding_call_traces(void)
 {
 #if ONE_SHOT
 	CallTraceHash::iterator it = call_stack.begin();
-	
+
 	while (it != call_stack.end()) {
 		CallTrace *ct = it->second;
 
@@ -861,7 +879,7 @@ static void handle_segment(struct mtrace_segment_entry *seg)
 		if (l->guest_addr + l->bytes > seg->endaddr)
 			die("handle_segment: bad label: %s", l->str);
 
-		outstanding_labels[l->label_type][l->guest_addr] = l;
+		insert_outstanding_label(l);
 	}
 
 	// XXX Oops, we leak the mtrace_label_entry in percpu_labels after
@@ -1007,6 +1025,7 @@ static void process_log(void *arg, gzFile log)
 
 static void process_symbols(void *arg, const char *nm_file)
 {
+	list<struct mtrace_label_entry *> tmp;
 	uint64_t addr;
 	uint64_t size;
 	uint64_t percpu_start;
@@ -1047,8 +1066,7 @@ static void process_symbols(void *arg, const char *nm_file)
 			l->guest_addr = addr;
 			l->bytes = size;
 
-			ObjectLabel ol(l, 0x7fffffffffffffffUL);
-			insert_complete_label(ol);
+			tmp.push_back(l);
 			continue;
 		}
 
@@ -1074,17 +1092,15 @@ static void process_symbols(void *arg, const char *nm_file)
 	// Move all the labels for percpu variables from the mtrace_label_static 
 	// list to the temporary list.  Once we know each CPUs percpu base 
 	// address we add percpu objects onto the mtrace_label_percpu list.
-	ObjectList::iterator it = complete_labels[mtrace_label_static].begin();
-	ObjectList::iterator tmp = it;
-	++tmp;
-	for (; it != complete_labels[mtrace_label_static].end(); it = tmp, ++tmp) {
-		ObjectLabel ol = *it;
-		if (percpu_start <= ol.label_->guest_addr && 
-		    ol.label_->guest_addr < percpu_end)
-		{
-			complete_labels[mtrace_label_static].erase(it);
-			percpu_labels.push_back(ol.label_);
-		}
+	list<struct mtrace_label_entry *>::iterator it = tmp.begin();
+	list<struct mtrace_label_entry *>::iterator next = it;
+	++next;
+	for (; it != tmp.end(); it = next, ++next) {
+		struct mtrace_label_entry *l = *it;
+		if (percpu_start <= l->guest_addr && l->guest_addr < percpu_end)
+			percpu_labels.push_back(l);
+		else
+			insert_outstanding_label(l);
 	}
 
 	fclose(f);

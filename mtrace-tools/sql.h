@@ -16,6 +16,8 @@
 #define ADDR_FMT  "%ld"
 #endif
 
+#define MAX_UNSIGNED_INTEGER 0x7fffffffffffffffUL
+
 /* 
  * accesses 
 */
