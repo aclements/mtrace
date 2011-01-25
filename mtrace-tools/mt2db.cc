@@ -712,42 +712,33 @@ static int get_object(uint64_t guest_addr, int *label_type, uint64_t *label_id)
 		lh = &outstanding_labels[t];
 		it = lh->lower_bound(guest_addr);
 
-		if (it == lh->begin()) {
-			label = it->second.label_;
-			if (label->guest_addr <= guest_addr && 
-			    guest_addr < label->guest_addr + label->bytes)
-			{
-				*label_type = t;
-				*label_id = it->second.label_id_;
-				return 1;
+		if (it != lh->begin()) {
+			if (it != lh->end()) {
+				label = it->second.label_;
+				if (label->guest_addr == guest_addr)
+					goto found;
+				--it;
+			} else {
+				--it;
 			}
-			continue;
-		}
-
-		if (it != lh->end()) {
-			label = it->second.label_;
-			if (label->guest_addr == guest_addr)
-			{
-				*label_type = t;
-				*label_id = it->second.label_id_;
-				return 1;
-			}
-			--it;
-		} else {
-			--it;
 		}
 
 		label = it->second.label_;		
-
 		if (label->guest_addr <= guest_addr && 
 		    guest_addr < label->guest_addr + label->bytes)
 		{
-			*label_type = t;
-			*label_id = it->second.label_id_;
-			return 1;
+			goto found;
 		}
+
+		continue;
+	found:
+		*label_type = t;
+		*label_id = it->second.label_id_;
+		return 1;
 	}
 
+	*label_type = 0;
+	*label_id = 0;
 	return 0;
 }
 
