@@ -20,7 +20,7 @@
 
 /* 
  * accesses 
-*/
+ */
 #define CREATE_ACCESS_TABLE						\
 	"CREATE TABLE %s_accesses ("					\
 	"access_id    		  INTEGER, "				\
@@ -44,6 +44,32 @@
 	"%lu, %u, %lu, %lu)"
 
 /*
+ * labels
+ */
+#define CREATE_LABEL_TABLE						\
+    	"CREATE TABLE %s_labels%u ("					\
+	"label_id     	     INTEGER PRIMARY KEY, "			\
+	"str 		     CHAR(32), "     	  			\
+	"alloc_pc 	     "ADDR_TYPE", "				\
+	"host_addr 	     "ADDR_TYPE", "				\
+	"host_addr_end 	     "ADDR_TYPE", "				\
+	"guest_addr 	     "ADDR_TYPE", "				\
+	"guest_addr_end      "ADDR_TYPE", "				\
+	"bytes 		     INTEGER, "	  				\
+	"access_start 	     INTEGER, "					\
+	"access_end 	     INTEGER" 					\
+	")"
+
+#define INSERT_LABEL							\
+    	"INSERT INTO %s_labels%u (label_id, str, alloc_pc, "		\
+	"host_addr, host_addr_end, "	    	 	   		\
+	"guest_addr, guest_addr_end, bytes, "				\
+	"access_start, access_end) " 	    				\
+	"VALUES (%lu, \"%s\", "ADDR_FMT", "ADDR_FMT", "ADDR_FMT", "	\
+	ADDR_FMT", "ADDR_FMT", %lu, "	  	      		  	\
+	"%lu, %lu)"
+
+/*
  * tasks
  */
 #define CREATE_TASKS_TABLE						\
@@ -56,3 +82,48 @@
 #define INSERT_TASK							\
 	"INSERT INTO %s_tasks (tid, tgid, str) "			\
 	"VALUES (%lu, %lu, \"%s\")"
+
+/*
+ * call stacks/traces
+ */
+#define CREATE_CALLS_TABLE						\
+    	"CREATE TABLE %s_call_traces ("					\
+	"call_trace_id 	   INTEGER primary key, "			\
+	"call_trace_tag    INTEGER, "	   				\
+	"cpu 		   INTEGER, "					\
+	"tid 		   "ADDR_TYPE", "				\
+	"pc 		   "ADDR_TYPE", "				\
+	"name 		   VARCHAR(32), "				\
+	"depth 		   INTEGER, "					\
+	"access_start 	   INTEGER, "					\
+	"access_end 	   INTEGER" 					\
+	")"
+
+#define INSERT_CALL							\
+    	"INSERT INTO %s_call_traces (call_trace_tag, cpu, tid, "	\
+	"pc, name, depth, access_start, access_end) "	       		\
+	"VALUES (%lu, %u, "ADDR_FMT", "ADDR_FMT", \"%s\", %u, %lu, %lu)"
+
+/*
+ * call intervals
+ */
+#define CREATE_INTERVALS_TABLE						\
+	"CREATE TABLE %s_call_intervals ("				\
+	"id 	      	INTEGER PRIMARY KEY, "				\
+	"call_trace_tag INTEGER, "	     				\
+	"cpu 		INTEGER, "					\
+	"start_pc 	"ADDR_TYPE", "					\
+	"end_pc 	"ADDR_TYPE", "					\
+	"access_start 	INTEGER, "   					\
+	"access_end 	INTEGER, "					\
+	"prev_id	INTEGER, "					\
+	"next_id	INTEGER, "					\
+	"ret_id		INTEGER" 					\
+	")"
+
+#define INSERT_INTERVAL							\
+	"INSERT INTO %s_call_intervals (id, call_trace_tag, cpu, "	\
+	"start_pc, end_pc, access_start, access_end, prev_id, "	 	\
+	"next_id, ret_id) "		 	     	      		\
+	"VALUES (%lu, %lu, %u, "ADDR_FMT", "ADDR_FMT", %lu, %lu, "	\
+	"%lu, %lu, %lu)"

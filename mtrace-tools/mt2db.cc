@@ -255,29 +255,6 @@ static void *open_db(const char *database)
 static void build_labelx_db(void *arg, const char *name, 
 			    mtrace_label_t label_type)
 {
-	const char *create_label_table = 
-		"CREATE TABLE %s_labels%u ("
-		"label_id     	     INTEGER PRIMARY KEY, "
-		"str 		     CHAR(32), "
-		"alloc_pc 	     "ADDR_TYPE", "
-		"host_addr 	     "ADDR_TYPE", "
-		"host_addr_end 	     "ADDR_TYPE", "
-		"guest_addr 	     "ADDR_TYPE", "
-		"guest_addr_end      "ADDR_TYPE", "
-		"bytes 		     INTEGER, "
-		"access_start 	     INTEGER, "
-		"access_end 	     INTEGER"
-		")";
-
-	const char *insert_label = 
-		"INSERT INTO %s_labels%u (label_id, str, alloc_pc, "
-		"host_addr, host_addr_end, "
-		"guest_addr, guest_addr_end, bytes, "
-		"access_start, access_end) "
-		"VALUES (%lu, \"%s\", "ADDR_FMT", "ADDR_FMT", "ADDR_FMT", "
-		ADDR_FMT", "ADDR_FMT", %lu, "
-		"%lu, %lu)";
-	
 	const char *create_index = 
 		"CREATE INDEX %s_idx_labels%u ON %s_labels%u"
 		"(guest_addr, guest_addr_end, access_start, access_end)";
@@ -287,13 +264,13 @@ static void build_labelx_db(void *arg, const char *name,
 
 	exec_stmt_noerr(db, NULL, NULL, "DROP TABLE %s_labels%u", 
 			name, label_type);
-	exec_stmt(db, NULL, NULL, create_label_table, name, label_type);
+	exec_stmt(db, NULL, NULL, CREATE_LABEL_TABLE, name, label_type);
 
 	ObjectList::iterator it = complete_labels[label_type].begin();
 	for (; it != complete_labels[label_type].end(); ++it) {
 		ObjectLabel ol = *it;
 		
-		exec_stmt(db, NULL, NULL, insert_label, name, 
+		exec_stmt(db, NULL, NULL, INSERT_LABEL, name, 
 			  label_type, 
 			  ol.label_id_,
 			  ol.label_->str, 
@@ -326,24 +303,6 @@ static void build_label_db(void *arg, const char *name)
 
 static void build_call_trace_db(void *arg, const char *name)
 {
-	const char *create_calls_table = 
-		"CREATE TABLE %s_call_traces ("
-		"call_trace_id 	   INTEGER primary key, "
-		"call_trace_tag    INTEGER, "
-		"cpu 		   INTEGER, "
-		"tid 		   "ADDR_TYPE", "
-		"pc 		   "ADDR_TYPE", "
-		"name 		   VARCHAR(32), "
-		"depth 		   INTEGER, "
-		"access_start 	   INTEGER, "
-		"access_end 	   INTEGER"
-		")";
-
-	const char *insert_call = 
-		"INSERT INTO %s_call_traces (call_trace_tag, cpu, tid, "
-		"pc, name, depth, access_start, access_end) "
-		"VALUES (%lu, %u, "ADDR_FMT", "ADDR_FMT", \"%s\", %u, %lu, %lu)";
-
 	const char *create_index[] = {
 		"CREATE INDEX %s_idx_calls%u ON %s_call_traces"
 		"(cpu, access_start, access_end)",
@@ -359,7 +318,7 @@ static void build_call_trace_db(void *arg, const char *name)
 	unsigned int i;
 
 	exec_stmt_noerr(db, NULL, NULL, "DROP TABLE %s_call_traces", name);
-	exec_stmt(db, NULL, NULL, create_calls_table, name);
+	exec_stmt(db, NULL, NULL, CREATE_CALLS_TABLE, name);
 
 	exec_stmt(db, NULL, NULL, "BEGIN TRANSACTION;");
 
@@ -371,7 +330,7 @@ static void build_call_trace_db(void *arg, const char *name)
 		if (fname == NULL)
 			fname = "(unknown)";
 
-		exec_stmt(db, NULL, NULL, insert_call, name, cf.start_->tag, cf.start_->h.cpu,
+		exec_stmt(db, NULL, NULL, INSERT_CALL, name, cf.start_->tag, cf.start_->h.cpu,
 			  cf.start_->tid, cf.start_->pc, fname, cf.start_->depth,
 			  cf.start_->h.access_count, cf.access_stop_);
 
@@ -408,30 +367,11 @@ static void build_task_db(void *arg, const char *name)
 
 static void build_call_interval_db(void *arg, const char *name)
 {
-	const char *create_intervals_table = 
-		"CREATE TABLE %s_call_intervals ("
-		"id 	      	INTEGER PRIMARY KEY, "
-		"call_trace_tag INTEGER, "
-		"cpu 		INTEGER, "
-		"start_pc 	"ADDR_TYPE", "
-		"end_pc 	"ADDR_TYPE", "
-		"access_start 	INTEGER, "
-		"access_end 	INTEGER, "
-		"prev_id	INTEGER, "
-		"next_id	INTEGER, "
-		"ret_id		INTEGER"
-		")";
-
-	const char *insert_interval = 
-		"INSERT INTO %s_call_intervals (id, call_trace_tag, cpu, start_pc, end_pc, "
-		"access_start, access_end, prev_id, next_id, ret_id)"
-		"VALUES (%lu, %lu, %lu, "ADDR_FMT", "ADDR_FMT", %lu, %lu, %lu, %lu, %lu)";
-
 	sqlite3 *db = (sqlite3 *) arg;
 	Progress p(complete_intervals.size(), 0);
 
 	exec_stmt_noerr(db, NULL, NULL, "DROP TABLE %s_call_intervals", name);
-	exec_stmt(db, NULL, NULL, create_intervals_table, name);
+	exec_stmt(db, NULL, NULL, CREATE_INTERVALS_TABLE, name);
 
 	exec_stmt(db, NULL, NULL, "BEGIN TRANSACTION;");
 
@@ -442,7 +382,7 @@ static void build_call_interval_db(void *arg, const char *name)
 		while (!ci_list.empty()) {
 			CallInterval *ci = ci_list.front();
 
-			exec_stmt(db, NULL, NULL, insert_interval, name, 
+			exec_stmt(db, NULL, NULL, INSERT_INTERVAL, name, 
 				  ci->id_,
 				  ci->call_trace_tag_, 
 				  ci->cpu_,
@@ -575,7 +515,7 @@ static void complete_outstanding_call_traces(void)
 		CallTrace *ct = it->second;
 
 		ct->end_current(~0UL, 0);
-		
+
 		// We already accounted for the CallTraceRange when we 
 		// processed the mtrace_pause.  The call intervals are 
 		// what's left.
