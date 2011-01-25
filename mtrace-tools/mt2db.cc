@@ -62,16 +62,20 @@ using namespace::__gnu_cxx;
 
 struct Access {
 	Access(struct mtrace_access_entry *access, uint64_t call_trace_tag, 
-	       uint64_t tid) 
+	       uint64_t tid, int label_type, uint64_t label_id) 
 	{
 		this->access_ = access;
 		this->call_trace_tag_ = call_trace_tag;
 		this->tid_ = tid;
+		this->label_type_ = label_type;
+		this->label_id_ = label_id;
 	}
 
 	struct mtrace_access_entry *access_;
 	uint64_t call_trace_tag_;
 	uint64_t tid_;
+	int label_type_;
+	uint64_t label_id_;
 };
 
 struct ObjectLabel {
@@ -462,86 +466,6 @@ static void build_call_interval_db(void *arg, const char *name)
 	exec_stmt(db, NULL, NULL, "END TRANSACTION;");
 }
 
-struct cached_object {
-	uint64_t guest_addr;
-	uint64_t guest_addr_end;
-	uint64_t access_start;
-	uint64_t access_end;
-
-	uint64_t label_id;
-	uint64_t label_type;
-};
-
-static int get_access_var(void *arg, int ac, char **av, char **colname)
-{
-	struct cached_object *co = (struct cached_object *)arg;
-
-	if (co->label_id != 0)
-		die("get_access_var: multiple matching vars?");
-
-	co->label_id = strtoll(av[0], NULL, 10);
-	co->guest_addr = strtoll(av[1], NULL, 10);
-	co->guest_addr_end = strtoll(av[2], NULL, 10);
-	co->access_start = strtoll(av[3], NULL, 10);
-	co->access_end = strtoll(av[4], NULL, 10);
-	return 0;
-}
-
-static void get_object(sqlite3 *db, const char *name, 
-		       uint64_t access_count, uint64_t guest_addr, 
-		       uint64_t* label_id, int* label_type)
-{
-	static list<struct cached_object> *cache;
-
-	const char *select_object = 
-		"SELECT label_id, guest_addr, guest_addr_end, "
-		"access_start, access_end FROM %s_labels%u WHERE "
-		"guest_addr <= "ADDR_FMT" and guest_addr_end > "ADDR_FMT" and "
-		"access_start <= %lu and access_end > %lu LIMIT 1";
-
-	struct cached_object co;
-	int type;
-
-	if (cache == NULL)
-		cache = new list<struct cached_object>(16);
-
-	list<struct cached_object>::iterator it;
-	for (it = cache->begin(); it != cache->end(); ++it) {
-		if (it->guest_addr <= guest_addr && it->guest_addr_end > guest_addr &&
-		    it->access_start <= access_count && it->access_end > access_count) 
-		{
-			co = *it;
-			cache->erase(it);
-			cache->push_front(co);
-
-			*label_id = co.label_id;
-			*label_type = co.label_type;
-			return;
-		}
-	}
-
-	co.label_id = 0;
-	for (type = mtrace_label_heap; type < mtrace_label_end; type++) {
-		exec_stmt(db, get_access_var, (void*)&co, select_object, 
-			  name,
-			  type,
-			  guest_addr, 
-			  guest_addr, 
-			  access_count,
-			  access_count);
-
-		if (co.label_id) {
-			co.label_type = type;
-			cache->pop_back();
-			cache->push_front(co);
-
-			*label_id = co.label_id;
-			*label_type = type;
-			return ;
-		}
-	}
-}
-
 static void build_access_db(void *arg, const char *name)
 {
 	const char *create_index[] = {
@@ -563,12 +487,6 @@ static void build_access_db(void *arg, const char *name)
 
 	while (!accesses.empty()) {
 		Access a = accesses.front();
-		uint64_t label_id = 0;
-		int label_type = 0;
-
-		get_object(db, name, a.access_->h.access_count, 
-			   a.access_->guest_addr,
-			   &label_id, &label_type);
 
 		exec_stmt(db, NULL, NULL, INSERT_ACCESS,
 			  name,
@@ -578,8 +496,8 @@ static void build_access_db(void *arg, const char *name)
 			  a.access_->pc,
 			  a.access_->host_addr,
 			  a.access_->guest_addr,
-			  label_id,
-			  label_type,
+			  a.label_id_,
+			  a.label_type_,
 			  a.call_trace_tag_,
 			  a.tid_);
 
@@ -782,9 +700,62 @@ static void handle_call(struct mtrace_call_entry *f)
 		cs->push(f);
 }
 
+static int get_object(uint64_t guest_addr, int *label_type, uint64_t *label_id)
+{
+	int t;
+
+	for (t = 1; t < mtrace_label_end; t++) {
+		struct mtrace_label_entry *label;
+		LabelHash::iterator it;
+		LabelHash *lh;
+
+		lh = &outstanding_labels[t];
+		it = lh->lower_bound(guest_addr);
+
+		if (it == lh->begin()) {
+			label = it->second.label_;
+			if (label->guest_addr <= guest_addr && 
+			    guest_addr < label->guest_addr + label->bytes)
+			{
+				*label_type = t;
+				*label_id = it->second.label_id_;
+				return 1;
+			}
+			continue;
+		}
+
+		if (it != lh->end()) {
+			label = it->second.label_;
+			if (label->guest_addr == guest_addr)
+			{
+				*label_type = t;
+				*label_id = it->second.label_id_;
+				return 1;
+			}
+			--it;
+		} else {
+			--it;
+		}
+
+		label = it->second.label_;		
+
+		if (label->guest_addr <= guest_addr && 
+		    guest_addr < label->guest_addr + label->bytes)
+		{
+			*label_type = t;
+			*label_id = it->second.label_id_;
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
 static void handle_access(struct mtrace_access_entry *a)
 {
 	uint64_t call_trace_tag = ~0UL;
+	uint64_t label_id = 0;
+	int label_type = 0;
 	uint64_t tid = ~0UL;
 	
 	if (current_stack[a->h.cpu]) {
@@ -792,7 +763,9 @@ static void handle_access(struct mtrace_access_entry *a)
 		call_trace_tag = cs->start_->tag;
 		tid = cs->start_->tid;
 	}
-	accesses.push_back(Access(a, call_trace_tag, tid));
+
+	get_object(a->guest_addr, &label_type, &label_id);
+	accesses.push_back(Access(a, call_trace_tag, tid, label_type, label_id));
 }
 
 static void clear_all(void)
