@@ -3,11 +3,12 @@ from util import uhex
 
 class MtraceSerialSection:
     
-    def __init__(self, serialId, startTs, endTs, tid):
+    def __init__(self, serialId, startTs, endTs, read, tid):
         self.serialId = serialId
         self.startTs = startTs
         self.endTs = endTs
         self.tid = tid
+        self.read = read
 
     def __str__(self):
         return '%lu -- [%lu, %lu]' % (self.tid, self.startTs, self.endTs)
@@ -27,6 +28,10 @@ class MtraceLock:
         self.sections = None
         self.name = None
         self.holdTime = None
+        self.exclusiveHoldTime = None
+        self.readHoldTime = None
+        self.tids = {}
+
         self.inited = False
 
     def __str__(self):
@@ -38,17 +43,31 @@ class MtraceLock:
         c = self.db.cursor()
 
         # Sections
-        q = 'SELECT id, start_ts, end_ts, tid FROM %s_locked_sections where ' + \
+        q = 'SELECT id, start_ts, end_ts, read, tid FROM %s_locked_sections where ' + \
             'label_id = %lu'
         q = q % (self.dataName,
                  self.labelId)
         c.execute(q)
         self.sections = []
         self.holdTime = 0
+        self.readHoldTime = 0
+        self.exclusiveHoldTime = 0
         for row in c:
-            section = MtraceSerialSection(row[0], row[1], row[2], row[3])
+            section = MtraceSerialSection(row[0], row[1], row[2], row[3], row[4])
             self.sections.append(section)
-            self.holdTime += section.endTs - section.startTs
+            holdTime = section.endTs - section.startTs
+            self.holdTime += holdTime
+            if section.read:
+                self.readHoldTime += holdTime
+            else:
+                self.exclusiveHoldTime += holdTime
+                #
+                # XXX should track per-tide exclusive AND read
+                #
+                time = holdTime
+                if section.tid in self.tids:
+                    time += self.tids[section.tid]
+                self.tids[section.tid] = time
 
         # Name
         q = 'SELECT str FROM %s_labels%u WHERE label_id = %lu'
@@ -69,9 +88,18 @@ class MtraceLock:
     def get_hold_time(self):
         self.__init_state()
         return self.holdTime
+    def get_read_hold_time(self):
+        self.__init_state()
+        return self.readHoldTime
+    def get_exclusive_hold_time(self):
+        self.__init_state()
+        return self.exclusiveHoldTime
     def get_name(self):
         self.__init_state()
         return self.name
+    def get_tids(self):
+        self.__init_state()
+        return self.tids
 
 def get_locks(dbFile, dataName):
     conn = sqlite3.connect(dbFile)
