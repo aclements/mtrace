@@ -1,6 +1,8 @@
 #!/usr/bin/python
 
 import mtracepy.lock
+from mtracepy.util import uhex
+import sqlite3
 import sys
 
 default_filters         = []
@@ -67,15 +69,45 @@ def main(argv = None):
     dataName = argv[2]
     parse_args(argv)
 
+    tidSet = {}
+
     locks = mtracepy.lock.get_locks(dbFile, dataName)
     locks = sorted(locks, key=lambda l: l.get_exclusive_hold_time(), reverse=True)
     locks = apply_filters(locks, default_filters)
+    print '%-20s  %16s  %16s  %16s  %16s' % ('name', 'id', 'lock', 'serial', 'tids %')
+    print '%-20s  %16s  %16s  %16s  %16s' % ('----', '--', '----', '------', '------')
     for l in locks:
         tids = l.get_tids()
-        print l
+        tidsPercent = ''
         for tid in tids.keys():
+            tidSet[tid] = 1
             time = tids[tid]
-            print '  %lu:%lu' % (tid, (time * 100) / l.get_exclusive_hold_time())
+            tidsPercent += '%lu:%lu%% ' % (tid, (time * 100) / l.get_exclusive_hold_time())
+
+        print '%-20s  %16lu  %16lx  %16lu            %-16s' % (l.get_name(), 
+                                                               l.get_label_id(), 
+                                                               uhex(l.get_lock()),
+                                                               l.get_exclusive_hold_time(),
+                                                               tidsPercent)
+
+    # Print TID strings
+    print '\n'
+    print '%-20s  %16s' % ('tid', 'name')
+    print '%-20s  %16s' % ('---', '----')
+    conn = sqlite3.connect(dbFile)
+    c = conn.cursor()
+    tmpl = 'SELECT str FROM %s_tasks WHERE tid = %s'
+    for tid in tidSet.keys():
+        q = tmpl % (dataName, tid)
+        c.execute(q)
+        rs = c.fetchall()
+        if len(rs) != 1:
+            raise Exception('%s returned %u rows' % (query, len(rs)))
+        if len(rs) == 0:
+            print '%-20s              %s' % (tid, '(unknown)')
+        else:
+            print '%-20s              %s' % (tid, rs[0][0])
+
 
 if __name__ == "__main__":
     sys.exit(main())

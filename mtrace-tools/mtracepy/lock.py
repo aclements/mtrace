@@ -82,6 +82,10 @@ class MtraceLock:
 
         self.inited = True
 
+    def get_label_id(self):
+        return self.labelId
+    def get_lock(self):
+        return self.lock
     def get_sections(self):
         self.__init_state()
         return self.sections
