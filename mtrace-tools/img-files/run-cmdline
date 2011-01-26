@@ -13,7 +13,7 @@ PATH=/sbin:/usr/sbin:/bin:/usr/bin
 
 do_start()
 {
-    /usr/bin/run-cmdline.py 5 &
+    /usr/bin/run-cmdline.py 10 &
     return 0
 }
 
