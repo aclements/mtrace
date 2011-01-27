@@ -69,32 +69,44 @@ def main(argv = None):
     dataName = argv[2]
     parse_args(argv)
 
+    conn = sqlite3.connect(dbFile)
+    c = conn.cursor()
+    tmpl = 'SELECT start_ts, end_ts FROM %s_summary'
+    q = tmpl % dataName
+    c.execute(q)
+    rs = c.fetchall()
+    if len(rs) != 1:
+        raise Exception('%s returned %u rows' % (query, len(rs)))
+    row = rs[0]
+    duration = row[1] - row[0]
+    
     tidSet = {}
 
     locks = mtracepy.lock.get_locks(dbFile, dataName)
     locks = sorted(locks, key=lambda l: l.get_exclusive_hold_time(), reverse=True)
     locks = apply_filters(locks, default_filters)
-    print '%-20s  %16s  %16s  %16s  %16s' % ('name', 'id', 'lock', 'serial', 'tids %')
-    print '%-20s  %16s  %16s  %16s  %16s' % ('----', '--', '----', '------', '------')
+    print '%-20s  %16s  %16s  %16s  %16s  %16s' % ('name', 'id', 'lock', 'serial', 'tot %', 'tids %')
+    print '%-20s  %16s  %16s  %16s  %16s  %16s' % ('----', '--', '----', '------', '-----', '------')
     for l in locks:
         tids = l.get_tids()
         tidsPercent = ''
+        totPercent = (l.get_exclusive_hold_time() * 100) / duration
         for tid in tids.keys():
             tidSet[tid] = 1
             time = tids[tid]
             tidsPercent += '%lu:%lu%% ' % (tid, (time * 100) / l.get_exclusive_hold_time())
 
-        print '%-20s  %16lu  %16lx  %16lu            %-16s' % (l.get_name(), 
-                                                               l.get_label_id(), 
-                                                               uhex(l.get_lock()),
-                                                               l.get_exclusive_hold_time(),
-                                                               tidsPercent)
+        print '%-20s  %16lu  %16lx  %16lu  %16lu            %-16s' % (l.get_name(), 
+                                                                      l.get_label_id(), 
+                                                                      uhex(l.get_lock()),
+                                                                      l.get_exclusive_hold_time(),
+                                                                      totPercent,
+                                                                      tidsPercent)
 
     # Print TID strings
     print '\n'
     print '%-20s  %16s' % ('tid', 'name')
     print '%-20s  %16s' % ('---', '----')
-    conn = sqlite3.connect(dbFile)
     c = conn.cursor()
     tmpl = 'SELECT str FROM %s_tasks WHERE tid = %s'
     for tid in tidSet.keys():
