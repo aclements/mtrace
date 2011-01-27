@@ -66,7 +66,8 @@ static void print_entry(union mtrace_entry *entry)
 		break;
 	case mtrace_entry_lock:
 		printf("%-3s [%-3u  pc %16lx  lock %16lx  %s]\n",
-		       entry->lock.release ? "r" : (entry->lock.read ? "ar" : "aw"),
+		       entry->lock.op == mtrace_lockop_release ? "r" 
+		       		      : (entry->lock.read ? "ar" : "aw"),
 		       entry->h.cpu,
 		       entry->lock.pc,
 		       entry->lock.lock,

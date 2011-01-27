@@ -509,6 +509,18 @@ static void build_locked_sections_db(void *arg, const char *name)
 	exec_stmt(db, NULL, NULL, "END TRANSACTION;");
 }
 
+static void build_summary_db(void *arg, const char *name, 
+			     struct mtrace_host_entry *start, 
+			     struct mtrace_host_entry *end)
+{
+	sqlite3 *db = (sqlite3 *) arg;
+
+	exec_stmt_noerr(db, NULL, NULL, "DROP TABLE %s_summary", name);
+	exec_stmt(db, NULL, NULL, CREATE_SUMMARY_TABLE, name);
+	exec_stmt(db, NULL, NULL, INSERT_SUMMARY, name,
+		  start->h.ts, end->h.ts);
+}
+
 static void complete_outstanding_labels(void)
 {
 	LabelHash* o;
@@ -766,7 +778,7 @@ static void clear_all(void)
 
 static void handle_host(void *arg, struct mtrace_host_entry *e)
 {
-	int old;
+	struct mtrace_host_entry old;
 
 	if (e->host_type == mtrace_call_clear_cpu ||
 	    e->host_type == mtrace_call_set_cpu) 
@@ -776,10 +788,10 @@ static void handle_host(void *arg, struct mtrace_host_entry *e)
 	} else if (e->host_type != mtrace_access_all_cpu)
 		die("handle_host: unhandled type %u", e->host_type);
 
-	old = mtrace_enable.access.value;
-	memcpy(&mtrace_enable, e, sizeof(mtrace_enable));
+	old = mtrace_enable;
+	mtrace_enable = *e;
 
-	if (old && !mtrace_enable.access.value) {
+	if (old.access.value && !mtrace_enable.access.value) {
 		const char *name = "unknown";
 	
 		if (mtrace_enable.access.str[0])
@@ -787,6 +799,8 @@ static void handle_host(void *arg, struct mtrace_host_entry *e)
 
 		complete_outstanding_labels();
 		complete_outstanding_call_traces();
+
+		build_summary_db(arg, name, &old, &mtrace_enable);
 
 		build_label_db(arg, name);
 
@@ -938,13 +952,14 @@ static void handle_lock(struct mtrace_lock_entry *lock)
 
 	ts = it->second;
 
-	if (lock->release) {
+	switch (lock->op) {
+	case mtrace_lockop_release: {
 		uint64_t acquire_ts;
 		int read_mode;
 		if (ts->lock_set_.release(lock, &acquire_ts, &read_mode)) {
 			int label_type;
 			uint64_t label_id;
-
+			
 			get_object(lock->lock, &label_type, &label_id);
 			locked_sections.push_back(LockedSection(lock->lock,
 								label_type,
@@ -954,8 +969,13 @@ static void handle_lock(struct mtrace_lock_entry *lock)
 								read_mode,
 								tid));
 		}
-	} else {
+		break;
+	}
+	case mtrace_lockop_acquire:	
 		ts->lock_set_.acquire(lock);
+		break;
+	default:
+		die("handle_lock: bad op %u", lock->op);
 	}
 
 	free(lock);

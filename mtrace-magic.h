@@ -145,13 +145,19 @@ struct mtrace_access_entry {
 /*
  * A guest lock acquire/release
  */
+typedef enum {
+    mtrace_lockop_acquire = 1,
+    mtrace_lockop_acquired,
+    mtrace_lockop_release,
+} mtrace_lockop_t;
+
 struct mtrace_lock_entry {
     struct mtrace_entry_header h;
 
     uint64_t pc;
     uint64_t lock;
     char str[32];
-    uint8_t release;
+    mtrace_lockop_t op;
     uint8_t read;
 } __pack__;
 
@@ -291,7 +297,7 @@ static inline void mtrace_fcall_register(unsigned long tid,
 static inline void mtrace_lock_register(unsigned long pc,
                                         void *lock,
 					const char *str,
-					unsigned long release,
+					mtrace_lockop_t op,
 					unsigned long is_read)
 {
     volatile struct mtrace_lock_entry entry;
@@ -299,7 +305,7 @@ static inline void mtrace_lock_register(unsigned long pc,
     entry.lock = (unsigned long)lock;
     strncpy((char*)entry.str, str, sizeof(entry.str));
     entry.str[sizeof(entry.str)-1] = 0;
-    entry.release = release;
+    entry.op = op;
     entry.read = is_read;
 
     mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&entry,

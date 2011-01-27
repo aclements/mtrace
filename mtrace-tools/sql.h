@@ -147,3 +147,17 @@
 	"INSERT INTO %s_locked_sections ("				\
 	"lock, label_type, label_id, start_ts, end_ts, read, tid) "	\
 	"VALUES ("ADDR_FMT", %u, %lu, %lu, %lu, %u, %lu)"
+
+/*
+ * summary
+ */
+#define CREATE_SUMMARY_TABLE						\
+    	"CREATE TABLE %s_summary ("					\
+	"start_ts     		 INTEGER, "				\
+	"end_ts			 INTEGER" 				\
+	")"
+
+#define INSERT_SUMMARY							\
+    	"INSERT INTO %s_summary ("					\
+	"start_ts, end_ts) "						\
+	"VALUES (%lu, %lu)"
