@@ -974,6 +974,9 @@ static void handle_lock(struct mtrace_lock_entry *lock)
 	case mtrace_lockop_acquire:	
 		ts->lock_set_.acquire(lock);
 		break;
+	case mtrace_lockop_acquired:
+		ts->lock_set_.acquired(lock);
+		break;
 	default:
 		die("handle_lock: bad op %u", lock->op);
 	}
