@@ -153,7 +153,7 @@ class Label
 public:
 	uint64_t guest_addr;
 	uint64_t bytes;
-	LabelClass *cls;             // XXX Intern this
+	LabelClass *cls;
 
 	Label() : cls(NULL) { }
 
@@ -349,8 +349,6 @@ print_inference(struct obj_info *vmlinux, Addr2line *a2l)
 		else
 			obj_info_offset_name(vmlinux, id, off, str, sizeof(str));
 
-		// XXX Hmm.  If they're all reads, then perhaps it
-		// isn't protected.
 		printf("%-65s %3d%% %3d%% %d\n", str,
 		       (int)(stfreq*100), (int)(freq*100), total);
 
