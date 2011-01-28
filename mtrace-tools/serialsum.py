@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 import mtracepy.lock
+import mtracepy.harcrit
 from mtracepy.util import uhex
 import sqlite3
 import sys
@@ -79,9 +80,26 @@ def main(argv = None):
         raise Exception('%s returned %u rows' % (query, len(rs)))
     row = rs[0]
     duration = row[1] - row[0]
+
+    sumPercent = 0
+    harcrits = mtracepy.harcrit.get_harcrits(dbFile, dataName)
+    harcrits = sorted(harcrits, key=lambda hc: hc.get_exclusive_hold_time(), reverse=True)
+    print '%-20s  %16s  %12s  %8s    %-24s  %-s' % (
+        'name', 'id', 'serial', 'tot %', 'cpus %', 'tids %')
+    print '%-20s  %16s  %12s  %8s    %-24s  %-s' % (
+        '----', '--', '------', '-----', '------', '------')
+    for hc in harcrits:
+        totPercent = float(hc.get_exclusive_hold_time() * 100) / float(duration)
+        sumPercent += totPercent
+        print '%-20s  %16lu  %12lu  %8f' % (hc.get_name(),
+                                             hc.get_label_id(),
+                                             hc.get_exclusive_hold_time(),
+                                             totPercent)
+    print sumPercent
+    return
+
     
     tidSet = {}
-
     locks = mtracepy.lock.get_locks(dbFile, dataName)
     locks = sorted(locks, key=lambda l: l.get_exclusive_hold_time(), reverse=True)
     locks = apply_filters(locks, default_filters)

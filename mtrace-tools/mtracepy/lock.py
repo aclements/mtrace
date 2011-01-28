@@ -33,7 +33,6 @@ class MtraceLock:
         self.readHoldTime = None
         self.tids = None
         self.cpus = None
-
         self.inited = False
 
     def __str__(self):
