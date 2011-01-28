@@ -4,7 +4,8 @@ using namespace::__gnu_cxx;
 
 struct CriticalSection {
 	uint64_t acquire_ts_;
-	int read_mode_;
+	int 	 read_mode_;
+	int	 start_cpu_;
 };
 
 class LockSet {
@@ -15,16 +16,31 @@ private:
 			read_ = l->read;
 			acquire_ts_ = l->h.ts;
 			acquired_ts_ = 0;
+			start_cpu_ = l->h.cpu;
 			n_ = 0;
 		}
 
-		// Returns 1 if no longer held
-		int release(void) {
+		// Returns 1 if no longer held and fills in cs
+		int release(CriticalSection *cs) {
 			int r;
 
 			if (n_ == 0)
 				die("releasing lock with no acquires");
 			r = --n_ == 0;
+			if (r) {
+				// The trylock code (e.g. __raw_spin_trylock in spinlock_api_smp.h.)
+				// calls lock_acquire if the lock is successfully acquired and never
+				// calls lock_acquired.
+				//
+				// The mtrace entry should probably include a 'trylock' flag, but
+				// for now this hack is sufficient.
+				cs->acquire_ts_ = acquire_ts_;
+				if (acquired_ts_)
+					cs->acquire_ts_ = acquired_ts_;
+
+				cs->read_mode_ = read_;
+				cs->start_cpu_ = start_cpu_;
+			}
 			return r;
 		}
 
@@ -40,6 +56,7 @@ private:
 		uint64_t lock_;
 		uint64_t acquire_ts_;
 		uint64_t acquired_ts_;
+		int start_cpu_;
 		int read_;
 		int n_;
 	};
@@ -69,10 +86,8 @@ public:
 			ts = it->second.acquired_ts_;
 		r = it->second.read_;
 
-		if (it->second.release()) {
+		if (it->second.release(cs)) {
 			state_.erase(it);
-			cs->acquire_ts_ = ts;
-			cs->read_mode_ = r;
 			return true;
 		}
 		return false;

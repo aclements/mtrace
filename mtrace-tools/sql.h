@@ -139,14 +139,16 @@
 	"label_id 		  INTEGER, "   				\
 	"start_ts 		  INTEGER, "				\
 	"end_ts 	  	  INTEGER, "				\
+	"start_cpu		  INTEGER, "				\
 	"read			  INTEGER, "				\
 	"tid			  INTEGER" 				\
 	")"
 
 #define INSERT_LOCKED_SECTION						\
 	"INSERT INTO %s_locked_sections ("				\
-	"lock, label_type, label_id, start_ts, end_ts, read, tid) "	\
-	"VALUES ("ADDR_FMT", %u, %lu, %lu, %lu, %u, %lu)"
+	"lock, label_type, label_id, start_ts, end_ts, start_cpu, "	\
+	"read, tid) "	   	     	       	       		  	\
+	"VALUES ("ADDR_FMT", %u, %lu, %lu, %lu, %u, %u, %lu)"
 
 /*
  * summary

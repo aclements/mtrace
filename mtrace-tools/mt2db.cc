@@ -80,24 +80,21 @@ struct Access {
 
 struct LockedSection {
 	LockedSection(uint64_t lock, int label_type, uint64_t label_id, 
-		      uint64_t start_ts, uint64_t end_ts, int read_mode, 
-		      uint64_t tid)
+		      uint64_t end_ts, uint64_t tid, CriticalSection *cs)
 	{
 		lock_ = lock;
 		label_type_ = label_type;
 		label_id_ = label_id;
-		start_ts_ = start_ts;
 		end_ts_ = end_ts;
-		read_ = read_mode;
 		tid_ = tid;
+		cs_ = *cs;
 	}
 	uint64_t lock_;
 	int label_type_;
 	uint64_t label_id_;
-	uint64_t start_ts_;
 	uint64_t end_ts_;
-	int read_;
 	uint64_t tid_;
+	CriticalSection cs_;
 };
 
 struct ObjectLabel {
@@ -497,9 +494,10 @@ static void build_locked_sections_db(void *arg, const char *name)
 			  ls.lock_,
 			  ls.label_type_,
 			  ls.label_id_,
-			  ls.start_ts_,
+			  ls.cs_.acquire_ts_,
 			  ls.end_ts_,
-			  ls.read_,
+			  ls.cs_.start_cpu_,
+			  ls.cs_.read_mode_,
 			  ls.tid_);
 
 		locked_sections.pop_front();
@@ -963,10 +961,9 @@ static void handle_lock(struct mtrace_lock_entry *lock)
 			locked_sections.push_back(LockedSection(lock->lock,
 								label_type,
 								label_id,
-								cs.acquire_ts_,
 								lock->h.ts,
-								cs.read_mode_,
-								tid));
+								tid,
+								&cs));
 		}
 		break;
 	}
