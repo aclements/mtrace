@@ -146,9 +146,9 @@
 
 #define INSERT_LOCKED_SECTION						\
 	"INSERT INTO %s_locked_sections ("				\
-	"lock, label_type, label_id, start_ts, end_ts, start_cpu, "	\
+	"id, lock, label_type, label_id, start_ts, end_ts, start_cpu, "	\
 	"read, tid) "	   	     	       	       		  	\
-	"VALUES ("ADDR_FMT", %u, %lu, %lu, %lu, %u, %u, %lu)"
+	"VALUES (%lu, "ADDR_FMT", %u, %lu, %lu, %lu, %u, %u, %lu)"
 
 /*
  * summary

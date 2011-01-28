@@ -495,6 +495,7 @@ static void build_locked_sections_db(void *arg, const char *name)
 
 		exec_stmt(db, NULL, NULL, INSERT_LOCKED_SECTION,
 			  name,
+			  ls.cs_.id_,
 			  ls.lock_,
 			  ls.label_type_,
 			  ls.label_id_,
@@ -922,6 +923,7 @@ static void handle_sched(struct mtrace_sched_entry *sched)
 
 static void handle_lock(struct mtrace_lock_entry *lock)
 {
+	static uint64_t lock_count;
 	TaskState *ts;
 	int cpu = lock->h.cpu;
 	uint64_t tid;
@@ -972,9 +974,11 @@ static void handle_lock(struct mtrace_lock_entry *lock)
 		}
 		break;
 	}
-	case mtrace_lockop_acquire:	
-		ts->lock_set_.acquire(lock);
+	case mtrace_lockop_acquire: {
+		uint64_t id = ++lock_count;
+		ts->lock_set_.acquire(lock, id);
 		break;
+	}
 	case mtrace_lockop_acquired:
 		ts->lock_set_.acquired(lock);
 		break;

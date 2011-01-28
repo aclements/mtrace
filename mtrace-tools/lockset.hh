@@ -6,17 +6,19 @@ struct CriticalSection {
 	uint64_t acquire_ts_;
 	int 	 read_mode_;
 	int	 start_cpu_;
+	uint64_t id_;
 };
 
 class LockSet {
 private:
 	struct LockState {
-		LockState(struct mtrace_lock_entry *l) {
+		LockState(struct mtrace_lock_entry *l, uint64_t id) {
 			lock_ = l->lock;
 			read_ = l->read;
 			acquire_ts_ = l->h.ts;
 			acquired_ts_ = 0;
 			start_cpu_ = l->h.cpu;
+			id_ = id;
 			n_ = 0;
 		}
 
@@ -40,6 +42,7 @@ private:
 
 				cs->read_mode_ = read_;
 				cs->start_cpu_ = start_cpu_;
+				cs->id_ = id_;
 			}
 			return r;
 		}
@@ -56,6 +59,7 @@ private:
 		uint64_t lock_;
 		uint64_t acquire_ts_;
 		uint64_t acquired_ts_;
+		uint64_t id_;
 		int start_cpu_;
 		int read_;
 		int n_;
@@ -67,24 +71,11 @@ public:
 	bool release(struct mtrace_lock_entry *lock, struct CriticalSection *cs)
 	{
 		LockStateTable::iterator it = state_.find(lock->lock);
-		uint64_t ts;
-		int r;
 
 		if (it == state_.end()) {
 			//printf("LockSet: releasing unheld lock %lx\n", lock->lock);
 			return false;
 		}
-
-		// The trylock code (e.g. __raw_spin_trylock in spinlock_api_smp.h.)
-		// calls lock_acquire if the lock is successfully acquired and never
-		// calls lock_acquired.
-		//
-		// The mtrace entry should probably include a 'trylock' flag, but
-		// for now this hack is sufficient.
-		ts = it->second.acquire_ts_;
-		if (it->second.acquired_ts_)
-			ts = it->second.acquired_ts_;
-		r = it->second.read_;
 
 		if (it->second.release(cs)) {
 			state_.erase(it);
@@ -93,12 +84,12 @@ public:
 		return false;
 	}
 
-	void acquire(struct mtrace_lock_entry *lock) {
+	void acquire(struct mtrace_lock_entry *lock, uint64_t id) {
 		LockStateTable::iterator it = state_.find(lock->lock);		
 
 		if (it == state_.end()) {
 			pair<LockStateTable::iterator, bool> r;
-			LockState ls(lock);
+			LockState ls(lock, id);
 			r = state_.insert(pair<uint64_t, struct LockState>(lock->lock, ls));
 			if (!r.second)
 				die("on_lock: insert failed");
