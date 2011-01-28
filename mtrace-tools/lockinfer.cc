@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -127,30 +128,48 @@ public:
 			return o.varid < varid;
 		return o.name < name;
 	}
+
+	typedef set<LabelClass*, bool(*)(LabelClass*, LabelClass*)> Intern;
+	static Intern labelClassIntern;
+
+	static bool PtrLess(LabelClass *a, LabelClass *b) {
+		return *a < *b;
+	}
+
+	LabelClass *intern()
+	{
+		Intern::iterator it = labelClassIntern.find(this);
+		if (it != labelClassIntern.end())
+			return *it;
+		LabelClass *copy = new LabelClass(*this);
+		labelClassIntern.insert(copy);
+		return copy;
+	}
 };
+LabelClass::Intern LabelClass::labelClassIntern(LabelClass::PtrLess);
 
 class Label
 {
 public:
 	uint64_t guest_addr;
 	uint64_t bytes;
-	LabelClass cls;             // XXX Intern this
+	LabelClass *cls;             // XXX Intern this
 
-	Label() : cls(-1) { }
+	Label() : cls(NULL) { }
 
 	explicit Label(struct mtrace_label_entry *l)
-		: guest_addr(l->guest_addr), bytes(l->bytes), cls(l->str) { }
+		: guest_addr(l->guest_addr), bytes(l->bytes),
+		  cls(LabelClass(l->str).intern()) { }
 
 	Label(struct obj_info *o, struct obj_info_var *v)
 		: guest_addr(v->location),
 		  bytes(obj_info_type_size(o, v->idtype)),
-		  cls(v->name) { }
+		  cls(LabelClass(v->name).intern()) { }
 
 	bool contains(uint64_t addr) {
 		return guest_addr <= addr && addr <= guest_addr + bytes;
 	}
 };
-
 
 typedef map<uint64_t, Label> LabelMap;
 
@@ -162,8 +181,8 @@ static map<uint32_t, LockState> lockStates;
 typedef int Offset;
 // XXX Might want to canonicalize the offsets by rounding them to the
 // beginning of arrays and maybe base types.
-typedef map<pair<LabelClass, Offset>, OffsetInfo> OffsetCountMap;
-typedef vector<pair<pair<LabelClass, Offset>, OffsetInfo> > OffsetCountVector;
+typedef map<pair<LabelClass*, Offset>, OffsetInfo> OffsetCountMap;
+typedef vector<pair<pair<LabelClass*, Offset>, OffsetInfo> > OffsetCountVector;
 static OffsetCountMap offsetCounts;
 
 static int nAccess, unresolvedAccess;
@@ -287,8 +306,8 @@ process_entry(union mtrace_entry *e)
 }
 
 static bool
-compare_offset_freq(const pair<pair<LabelClass, Offset>, OffsetInfo> &a,
-		    const pair<pair<LabelClass, Offset>, OffsetInfo> &b)
+compare_offset_freq(const pair<pair<LabelClass*, Offset>, OffsetInfo> &a,
+		    const pair<pair<LabelClass*, Offset>, OffsetInfo> &b)
 {
 	if (a.second.freq(true, LS_WRITE) != b.second.freq(true, LS_WRITE))
 		return a.second.freq(true, LS_WRITE) > b.second.freq(true, LS_WRITE);
@@ -313,7 +332,7 @@ print_inference(struct obj_info *vmlinux, Addr2line *a2l)
 		float stfreq = it->second.freq(true, LS_WRITE);
 		float freq = 1 - it->second.freq(false, LS_NONE);
 		int total = it->second.total(false);
-		LabelClass *lname = &it->first.first;
+		LabelClass *lname = it->first.first;
 		if ((stfreq < 0.95 || total < 10) &&
 		    !(lname->name == "vm_area_struct" ||
 		      lname->name == "mm_struct"))
@@ -352,7 +371,7 @@ main(int argc, char **argv)
 	int vmlinuxfd;
 	struct obj_info *vmlinux;
 	union mtrace_entry entry;
-	int count = 0, limit = 1000000;
+	int count = 0, limit = 0; //1000000;
 	int r;
 
 	if (argc != 4)
