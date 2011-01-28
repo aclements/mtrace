@@ -2,6 +2,11 @@
 
 using namespace::__gnu_cxx;
 
+struct CriticalSection {
+	uint64_t acquire_ts_;
+	int read_mode_;
+};
+
 class LockSet {
 private:
 	struct LockState {
@@ -42,8 +47,7 @@ private:
 	typedef hash_map<uint64_t, struct LockState> LockStateTable;
 
 public:
-	bool release(struct mtrace_lock_entry *lock, uint64_t *acquire_ts, 
-		     int *read_mode) 
+	bool release(struct mtrace_lock_entry *lock, struct CriticalSection *cs)
 	{
 		LockStateTable::iterator it = state_.find(lock->lock);
 		uint64_t ts;
@@ -67,8 +71,8 @@ public:
 
 		if (it->second.release()) {
 			state_.erase(it);
-			*acquire_ts = ts;
-			*read_mode = r;
+			cs->acquire_ts_ = ts;
+			cs->read_mode_ = r;
 			return true;
 		}
 		return false;

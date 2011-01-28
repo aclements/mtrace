@@ -954,9 +954,8 @@ static void handle_lock(struct mtrace_lock_entry *lock)
 
 	switch (lock->op) {
 	case mtrace_lockop_release: {
-		uint64_t acquire_ts;
-		int read_mode;
-		if (ts->lock_set_.release(lock, &acquire_ts, &read_mode)) {
+		CriticalSection cs;
+		if (ts->lock_set_.release(lock, &cs)) {
 			int label_type;
 			uint64_t label_id;
 			
@@ -964,9 +963,9 @@ static void handle_lock(struct mtrace_lock_entry *lock)
 			locked_sections.push_back(LockedSection(lock->lock,
 								label_type,
 								label_id,
-								acquire_ts,
+								cs.acquire_ts_,
 								lock->h.ts,
-								read_mode,
+								cs.read_mode_,
 								tid));
 		}
 		break;
