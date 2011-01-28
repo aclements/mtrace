@@ -129,12 +129,33 @@ public:
 	}
 };
 
+class Label
+{
+public:
+	uint64_t guest_addr;
+	uint64_t bytes;
+	LabelClass cls;             // XXX Intern this
 
-typedef map<uint64_t, struct mtrace_label_entry> LabelMap;
+	Label() : cls(-1) { }
+
+	explicit Label(struct mtrace_label_entry *l)
+		: guest_addr(l->guest_addr), bytes(l->bytes), cls(l->str) { }
+
+	Label(struct obj_info *o, struct obj_info_var *v)
+		: guest_addr(v->location),
+		  bytes(obj_info_type_size(o, v->idtype)),
+		  cls(v->name) { }
+
+	bool contains(uint64_t addr) {
+		return guest_addr <= addr && addr <= guest_addr + bytes;
+	}
+};
+
+
+typedef map<uint64_t, Label> LabelMap;
 
 static LabelMap labels[mtrace_label_end];
 // XXX Assuming a single CPU
-//static int lockSet;		// Just 0 or 1 depending on lock
 static uint32_t curPID;
 static map<uint32_t, LockState> lockStates;
 
@@ -150,22 +171,11 @@ static int nAccess, unresolvedAccess;
 static void
 process_static(struct obj_info *o)
 {
-	struct mtrace_label_entry l;
 	struct obj_info_var var;
-
-	l.h.type = mtrace_entry_label;
-	l.h.cpu = 0xffff;
-	l.h.access_count = 0;
-	l.str[sizeof(l.str) - 1] = 0;
-	l.label_type = mtrace_label_static;
-
 	obj_info_vars_reset(o);
 	while (obj_info_vars_next(o, &var)) {
-		strncpy(l.str, var.name, sizeof(l.str) - 1);
-		l.guest_addr = var.location;
-		l.bytes = obj_info_type_size(o, var.idtype);
-		l.host_addr = var.id; // Kludge!
-		labels[l.label_type][l.guest_addr] = l;
+		labels[mtrace_label_static][var.location] =
+			Label(o, &var);
 	}
 }
 
@@ -181,7 +191,7 @@ handle_label(struct mtrace_label_entry *l)
 		// don't separate it out, there are conflicts.
 		if (it != m->end())
 			die("oops");
-		(*m)[l->guest_addr] = *l;
+		(*m)[l->guest_addr] = Label(l);
 	} else if (it == m->end()) {
 		if (misses++ > 200)
 			die("suspicious number of misses");
@@ -203,16 +213,12 @@ handle_access(struct mtrace_access_entry *a)
 			continue;
 		it--;
 		// Check if we're in the label
-		struct mtrace_label_entry *l = &it->second;
-		assert(a->guest_addr >= l->guest_addr);
-		if (a->guest_addr >= l->guest_addr + l->bytes)
+		Label *l = &it->second;
+		if (!l->contains(a->guest_addr))
 			continue;
 		// Found it
 		int offset = a->guest_addr - l->guest_addr;
-//		printf("A %s+0x%x %d\n", l->str, offset, lockSet);
-		offsetCounts[make_pair(l->h.cpu == 0xffff ?
-				       LabelClass(l->host_addr) :
-				       LabelClass(l->str), offset)].
+		offsetCounts[make_pair(l->cls, offset)].
 			access(a, lockStates[curPID]);
 		return;
 	}
@@ -346,7 +352,7 @@ main(int argc, char **argv)
 	int vmlinuxfd;
 	struct obj_info *vmlinux;
 	union mtrace_entry entry;
-	int count = 0, limit = 0; //1000000;
+	int count = 0, limit = 1000000;
 	int r;
 
 	if (argc != 4)
