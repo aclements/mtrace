@@ -479,6 +479,10 @@ static void build_access_db(void *arg, const char *name)
 
 static void build_locked_sections_db(void *arg, const char *name)
 {
+	const char *create_index = 
+		"CREATE INDEX %s_idx_locked_sections ON %s_locked_sections"
+		"(label_id)";
+
 	sqlite3 *db = (sqlite3 *) arg;
 	Progress p(locked_sections.size(), 0);
 
@@ -505,6 +509,7 @@ static void build_locked_sections_db(void *arg, const char *name)
 	}
 
 	exec_stmt(db, NULL, NULL, "END TRANSACTION;");
+	exec_stmt(db, NULL, NULL, create_index, name, name);
 }
 
 static void build_summary_db(void *arg, const char *name, 

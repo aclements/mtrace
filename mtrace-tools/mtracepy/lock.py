@@ -3,10 +3,11 @@ from util import uhex
 
 class MtraceSerialSection:
     
-    def __init__(self, serialId, startTs, endTs, read, tid):
+    def __init__(self, serialId, startTs, endTs, startCpu, read, tid):
         self.serialId = serialId
         self.startTs = startTs
         self.endTs = endTs
+        self.startCpu = startCpu
         self.tid = tid
         self.read = read
 
@@ -30,7 +31,8 @@ class MtraceLock:
         self.holdTime = None
         self.exclusiveHoldTime = None
         self.readHoldTime = None
-        self.tids = {}
+        self.tids = None
+        self.cpus = None
 
         self.inited = False
 
@@ -40,20 +42,25 @@ class MtraceLock:
     def __init_state(self):
         if self.inited:
             return
-        c = self.db.cursor()
 
-        # Sections
-        q = 'SELECT id, start_ts, end_ts, read, tid FROM %s_locked_sections where ' + \
-            'label_id = %lu'
-        q = q % (self.dataName,
-                 self.labelId)
-        c.execute(q)
+        self.cpus = {}
+        self.tids = {}
         self.sections = []
         self.holdTime = 0
         self.readHoldTime = 0
         self.exclusiveHoldTime = 0
+
+        c = self.db.cursor()
+
+        # Sections
+        q = 'SELECT id, start_ts, end_ts, start_cpu, read, tid FROM %s_locked_sections WHERE ' + \
+            'label_id = %lu'
+        q = q % (self.dataName,
+                 self.labelId)
+        c.execute(q)
         for row in c:
-            section = MtraceSerialSection(row[0], row[1], row[2], row[3], row[4])
+            section = MtraceSerialSection(row[0], row[1], row[2], 
+                                          row[3], row[4], row[5])
             self.sections.append(section)
             holdTime = section.endTs - section.startTs
             self.holdTime += holdTime
@@ -62,12 +69,17 @@ class MtraceLock:
             else:
                 self.exclusiveHoldTime += holdTime
                 #
-                # XXX should track per-tide exclusive AND read
+                # XXX should track per-tid exclusive AND read
                 #
                 time = holdTime
                 if section.tid in self.tids:
                     time += self.tids[section.tid]
                 self.tids[section.tid] = time
+
+                time = holdTime
+                if section.startCpu in self.cpus:
+                    time += self.cpus[section.startCpu]
+                self.cpus[section.startCpu] = time
 
         # Name
         q = 'SELECT str FROM %s_labels%u WHERE label_id = %lu'
@@ -104,6 +116,9 @@ class MtraceLock:
     def get_tids(self):
         self.__init_state()
         return self.tids
+    def get_cpus(self):
+        self.__init_state()
+        return self.cpus
 
 def get_locks(dbFile, dataName):
     conn = sqlite3.connect(dbFile)
