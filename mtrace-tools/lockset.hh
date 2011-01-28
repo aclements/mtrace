@@ -29,21 +29,8 @@ private:
 			if (n_ == 0)
 				die("releasing lock with no acquires");
 			r = --n_ == 0;
-			if (r) {
-				// The trylock code (e.g. __raw_spin_trylock in spinlock_api_smp.h.)
-				// calls lock_acquire if the lock is successfully acquired and never
-				// calls lock_acquired.
-				//
-				// The mtrace entry should probably include a 'trylock' flag, but
-				// for now this hack is sufficient.
-				cs->acquire_ts_ = acquire_ts_;
-				if (acquired_ts_)
-					cs->acquire_ts_ = acquired_ts_;
-
-				cs->read_mode_ = read_;
-				cs->start_cpu_ = start_cpu_;
-				cs->id_ = id_;
-			}
+			if (r)
+				get_critical_section(cs);
 			return r;
 		}
 
@@ -56,6 +43,22 @@ private:
 				acquired_ts_ = l->h.ts;
 		}
 
+		void get_critical_section(CriticalSection *cs) {
+			// The trylock code (e.g. __raw_spin_trylock in spinlock_api_smp.h.)
+			// calls lock_acquire if the lock is successfully acquired and never
+			// calls lock_acquired.
+			//
+			// The mtrace entry should probably include a 'trylock' flag, but
+			// for now this hack is sufficient.
+			cs->acquire_ts_ = acquire_ts_;
+			if (acquired_ts_)
+				cs->acquire_ts_ = acquired_ts_;
+			
+			cs->read_mode_ = read_;
+			cs->start_cpu_ = start_cpu_;
+			cs->id_ = id_;
+		}
+
 		uint64_t lock_;
 		uint64_t acquire_ts_;
 		uint64_t acquired_ts_;
@@ -65,7 +68,7 @@ private:
 		int n_;
 	};
 
-	typedef hash_map<uint64_t, struct LockState> LockStateTable;
+	typedef hash_map<uint64_t, LockState *> LockStateTable;
 
 public:
 	bool release(struct mtrace_lock_entry *lock, struct CriticalSection *cs)
@@ -77,8 +80,11 @@ public:
 			return false;
 		}
 
-		if (it->second.release(cs)) {
+		if (it->second->release(cs)) {
+			LockState *ls = it->second;
 			state_.erase(it);
+			stack_.remove(ls);
+			delete ls;
 			return true;
 		}
 		return false;
@@ -89,13 +95,14 @@ public:
 
 		if (it == state_.end()) {
 			pair<LockStateTable::iterator, bool> r;
-			LockState ls(lock, id);
-			r = state_.insert(pair<uint64_t, struct LockState>(lock->lock, ls));
+			LockState *ls = new LockState(lock, id);
+			r = state_.insert(pair<uint64_t, LockState *>(lock->lock, ls));
 			if (!r.second)
 				die("on_lock: insert failed");
+			stack_.push_front(ls);
 			it = r.first;
 		}
-		it->second.acquire();
+		it->second->acquire();
 	}
 
 	void acquired(struct mtrace_lock_entry *lock) {
@@ -103,9 +110,20 @@ public:
 
 		if (it == state_.end())
 			die("acquired: missing lock");
-		it->second.acquired(lock);
+		it->second->acquired(lock);
+	}
+
+	bool empty(void) {
+		return stack_.empty();
+	}
+
+	void top(CriticalSection *cs) {
+		if (stack_.empty())
+			die("top: stack is empty");
+		stack_.front()->get_critical_section(cs);
 	}
 
 private:
-	hash_map<uint64_t, struct LockState> state_;
+	LockStateTable state_;
+	list<LockState *> stack_;
 };

@@ -32,16 +32,17 @@
 	"label_id 		  INTEGER, "   				\
 	"label_type 		  INTEGER, "				\
 	"call_trace_tag 	  INTEGER, "				\
-	"tid			  INTEGER" 				\
+	"tid			  INTEGER, " 				\
+	"locked_id		  INTEGER" 				\
 	")"
 
 #define INSERT_ACCESS							\
 	"INSERT INTO %s_accesses ("					\
 	"access_id, access_type, cpu, pc, "				\
 	"host_addr, guest_addr, label_id, label_type, call_trace_tag, " \
-	"tid) "     			  	      		      	\
+	"tid, locked_id) "		  	      		      	\
 	"VALUES (%lu, %u, %u, "ADDR_FMT", "ADDR_FMT", "ADDR_FMT", "   	\
-	"%lu, %u, %lu, %lu)"
+	"%lu, %u, %lu, %lu, %lu)"
 
 /*
  * labels

@@ -62,13 +62,14 @@ using namespace::__gnu_cxx;
 
 struct Access {
 	Access(struct mtrace_access_entry *access, uint64_t call_trace_tag, 
-	       uint64_t tid, int label_type, uint64_t label_id) 
+	       uint64_t tid, int label_type, uint64_t label_id, uint64_t locked_id) 
 	{
 		this->access_ = access;
 		this->call_trace_tag_ = call_trace_tag;
 		this->tid_ = tid;
 		this->label_type_ = label_type;
 		this->label_id_ = label_id;
+		this->locked_id_ = locked_id;
 	}
 
 	struct mtrace_access_entry *access_;
@@ -76,6 +77,7 @@ struct Access {
 	uint64_t tid_;
 	int label_type_;
 	uint64_t label_id_;
+	uint64_t locked_id_;
 };
 
 struct LockedSection {
@@ -466,7 +468,8 @@ static void build_access_db(void *arg, const char *name)
 			  a.label_id_,
 			  a.label_type_,
 			  a.call_trace_tag_,
-			  a.tid_);
+			  a.tid_,
+			  a.locked_id_);
 
 		accesses.pop_front();
 		p.tick();
@@ -757,16 +760,30 @@ static void handle_access(struct mtrace_access_entry *a)
 	uint64_t call_trace_tag = ~0UL;
 	uint64_t label_id = 0;
 	int label_type = 0;
-	uint64_t tid = ~0UL;
+	uint64_t tid = 0;
+	uint64_t locked_id = 0;
 	
 	if (current_stack[a->h.cpu]) {
 		CallTrace *cs = current_stack[a->h.cpu];
 		call_trace_tag = cs->start_->tag;
 		tid = cs->start_->tid;
+
+		TaskTable::iterator it = task_table.find(tid);	
+		if (it != task_table.end()) {
+			CriticalSection crit;
+			TaskState *ts;
+
+			ts = it->second;
+
+			if (!ts->lock_set_.empty()) {
+				ts->lock_set_.top(&crit);
+				locked_id = crit.id_;
+			}
+		}
 	}
 
 	get_object(a->guest_addr, &label_type, &label_id);
-	accesses.push_back(Access(a, call_trace_tag, tid, label_type, label_id));
+	accesses.push_back(Access(a, call_trace_tag, tid, label_type, label_id, locked_id));
 }
 
 static void clear_all(void)
