@@ -230,6 +230,7 @@ static void mtrace_access_dump(mtrace_access_t type, target_ulong host_addr,
     entry.h.size = sizeof(entry);
     entry.h.cpu = cpu_single_env->cpu_index;
     entry.h.access_count = access_count;
+    entry.h.ts = 0; /* Unimplemented timestamp */
     entry.access_type = type;
     entry.pc = mtrace_get_pc((unsigned long)retaddr);
     entry.host_addr = host_addr;
