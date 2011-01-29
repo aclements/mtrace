@@ -15,6 +15,7 @@ typedef enum {
     mtrace_entry_call,
     mtrace_entry_lock,
     mtrace_entry_sched,
+    mtrace_entry_label_visible,
 } mtrace_entry_t;
 
 typedef enum {
@@ -140,6 +141,13 @@ struct mtrace_sched_entry {
     uint32_t pid;
 };
 
+struct mtrace_label_visible_entry {
+    struct mtrace_entry_header h;
+
+    uint64_t guest_addr;
+    uint8_t visible;
+};
+
 union mtrace_entry {
     struct mtrace_entry_header h;
 
@@ -151,6 +159,7 @@ union mtrace_entry {
     struct mtrace_call_entry call;
     struct mtrace_lock_entry lock;
     struct mtrace_sched_entry sched;
+    struct mtrace_label_visible_entry label_visible;
 }__pack__;
 
 #ifndef QEMU_MTRACE
@@ -252,6 +261,17 @@ static inline void mtrace_sched_record(unsigned int pid)
 
     mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&entry,
                  mtrace_entry_sched, sizeof(entry), ~0, 0);
+}
+
+static inline void mtrace_label_visible_record(const void * addr,
+					       unsigned int visible)
+{
+	volatile struct mtrace_label_visible_entry entry;
+	entry.guest_addr = (uint64_t)addr;
+	entry.visible = visible;
+
+	mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&entry,
+		     mtrace_entry_label_visible, sizeof(entry), ~0, 0);
 }
 
 #endif /* QEMU_MTRACE */

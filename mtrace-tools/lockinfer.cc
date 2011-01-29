@@ -24,6 +24,7 @@ using namespace std;
 
 enum LockState {
 	LS_NONE = 0,
+	LS_UNREACHABLE,
 	LS_READ,
 	LS_WRITE,
 
@@ -32,6 +33,7 @@ enum LockState {
 
 const char *lockStateNames[] = {
 	"Unlocked",
+	"Unreachable",
 	"Read-locked",
 	"Write-locked",
 };
@@ -93,19 +95,27 @@ public:
 			++info[ls].stcount;
 		++info[ls].pcs[make_pair(a->pc, a->access_type)];
 	}
-	int total(bool st) const {
+
+	int Accesses() const {
 		int t = 0;
 		for (int i = 0; i < NUM_LOCK_STATE; ++i)
-			t += st ? info[i].stcount : info[i].count;
+			t += info[i].count;
 		return t;
 	}
-	float freq(bool st, LockState ls) const {
-		int t = total(st);
-		if (t == 0)
-			return 0;
-		if (st)
-			return (float)info[ls].stcount / t;
-		return (float)info[ls].count / t;
+
+	float LockedStoreFreq() const {
+		int lst = info[LS_WRITE].stcount;
+		int ust = info[LS_NONE].stcount + info[LS_READ].stcount;
+		if (lst + ust)
+			return (float)lst / (lst + ust);
+		return 0;
+	}
+	float LockedAccessFreq() const {
+		int la = info[LS_WRITE].count;
+		int ua = info[LS_NONE].count + info[LS_READ].count;
+		if (la + ua)
+			return (float)la / (la + ua);
+		return 0;
 	}
 };
 
@@ -154,17 +164,22 @@ public:
 	uint64_t guest_addr;
 	uint64_t bytes;
 	LabelClass *cls;
+	bool visible;
 
-	Label() : cls(NULL) { }
+	Label() { }
 
 	explicit Label(struct mtrace_label_entry *l)
 		: guest_addr(l->guest_addr), bytes(l->bytes),
-		  cls(LabelClass(l->str).intern()) { }
+		  cls(LabelClass(l->str).intern()) {
+		// XXX Hard-coded
+		visible = (cls->name != "vm_area_struct");
+	}
 
 	Label(struct obj_info *o, struct obj_info_var *v)
 		: guest_addr(v->location),
 		  bytes(obj_info_type_size(o, v->idtype)),
-		  cls(LabelClass(v->name).intern()) { }
+		  cls(LabelClass(v->name).intern()),
+		  visible(true) { }
 
 	bool contains(uint64_t addr) {
 		return guest_addr <= addr && addr <= guest_addr + bytes;
@@ -219,32 +234,36 @@ handle_label(struct mtrace_label_entry *l)
 	}
 }
 
-static void
-handle_access(struct mtrace_access_entry *a)
+static Label *
+get_label(uint64_t addr)
 {
-	nAccess++;
-	// Map it to a label
 	LabelMap::iterator it;
 	for (int lt = mtrace_label_heap; lt < mtrace_label_end; lt++) {
-		it = labels[lt].upper_bound(a->guest_addr);
+		it = labels[lt].upper_bound(addr);
 		// Upper bound returns the *next* label.
 		if (it == labels[lt].begin())
 			continue;
 		it--;
 		// Check if we're in the label
 		Label *l = &it->second;
-		if (!l->contains(a->guest_addr))
-			continue;
-		// Found it
-		int offset = a->guest_addr - l->guest_addr;
-		offsetCounts[make_pair(l->cls, offset)].
-			access(a, lockStates[curPID]);
-		return;
+		if (l->contains(addr))
+			return l;
 	}
-	// Didn't find it
-	// XXX Many of these appear to be code, I think
-//	printf("A ??? %d\n", lockSet);
-	unresolvedAccess++;
+	return NULL;
+}
+
+static void
+handle_access(struct mtrace_access_entry *a)
+{
+	nAccess++;
+	Label *l = get_label(a->guest_addr);
+	if (!l) {
+		unresolvedAccess++;
+	} else {
+		int offset = a->guest_addr - l->guest_addr;
+		LockState ls = l->visible ? lockStates[curPID] : LS_UNREACHABLE;
+		offsetCounts[make_pair(l->cls, offset)].access(a, ls);
+	}
 }
 
 static void
@@ -277,6 +296,14 @@ handle_lock(struct mtrace_lock_entry *l)
 }
 
 static void
+handle_label_visible(struct mtrace_label_visible_entry *e)
+{
+	Label *l = get_label(e->guest_addr);
+	assert(l);
+	l->visible = !!e->visible;
+}
+
+static void
 process_entry(union mtrace_entry *e)
 {
 	switch (e->h.type) {
@@ -300,6 +327,9 @@ process_entry(union mtrace_entry *e)
 	case mtrace_entry_sched:
 		curPID = e->sched.pid;
 		break;
+	case mtrace_entry_label_visible:
+		handle_label_visible(&e->label_visible);
+		break;
 	default:
 		break;
 	}
@@ -309,9 +339,9 @@ static bool
 compare_offset_freq(const pair<pair<LabelClass*, Offset>, OffsetInfo> &a,
 		    const pair<pair<LabelClass*, Offset>, OffsetInfo> &b)
 {
-	if (a.second.freq(true, LS_WRITE) != b.second.freq(true, LS_WRITE))
-		return a.second.freq(true, LS_WRITE) > b.second.freq(true, LS_WRITE);
-	return a.second.total(false) > b.second.total(false);
+	if (a.second.LockedStoreFreq() != b.second.LockedStoreFreq())
+		return a.second.LockedStoreFreq() > b.second.LockedStoreFreq();
+	return a.second.Accesses() > b.second.Accesses();
 }
 
 static void
@@ -321,6 +351,7 @@ print_inference(struct obj_info *vmlinux, Addr2line *a2l)
 		LS_WRITE,
 		LS_READ,
 		LS_NONE,
+		LS_UNREACHABLE,
 	};
 
 	OffsetCountVector counts(offsetCounts.begin(), offsetCounts.end());
@@ -329,9 +360,9 @@ print_inference(struct obj_info *vmlinux, Addr2line *a2l)
 
 	OffsetCountVector::iterator it;
 	for (it = counts.begin(); it < counts.end(); ++it) {
-		float stfreq = it->second.freq(true, LS_WRITE);
-		float freq = 1 - it->second.freq(false, LS_NONE);
-		int total = it->second.total(false);
+		float stfreq = it->second.LockedStoreFreq();
+		float freq = it->second.LockedAccessFreq();
+		int total = it->second.Accesses();
 		LabelClass *lname = it->first.first;
 		if ((stfreq < 0.95 || total < 10) &&
 		    !(lname->name == "vm_area_struct" ||
