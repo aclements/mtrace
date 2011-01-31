@@ -985,7 +985,10 @@ static void handle_lock(struct mtrace_lock_entry *lock)
 		if (ts->lock_set_.release(lock, &cs)) {
 			int label_type;
 			uint64_t label_id;
-			
+
+			if (cs.start_cpu_ != lock->h.cpu)
+				die("handle_lock: cpu mismatch");
+
 			get_object(lock->lock, &label_type, &label_id);
 			locked_sections.push_back(LockedSection(lock->lock,
 								label_type,
