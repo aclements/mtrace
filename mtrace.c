@@ -48,6 +48,11 @@ static uint64_t mtrace_access_count;
 static int mtrace_call_stack_active[255];
 static int mtrace_call_trace;
 
+static struct {
+    uint64_t offset;
+    uint64_t start;
+} mtrace_tsc[255];
+
 void mtrace_cline_trace_set(int b)
 {
     mtrace_cline_track = b;
@@ -357,6 +362,26 @@ void mtrace_io_read(void *cb, target_phys_addr_t ram_addr,
     /* Nothing to do.. */
 }
 
+static inline uint64_t mtrace_get_tsc(CPUX86State *env)
+{
+#if 0
+    return cpu_get_tsc(env);
+#endif
+    return (cpu_get_tsc(env) - mtrace_tsc[env->cpu_index].start) + 
+	mtrace_tsc[env->cpu_index].offset;
+}
+
+void mtrace_exec_start(CPUX86State *env)
+{
+    mtrace_tsc[env->cpu_index].start = cpu_get_tsc(env);
+}
+
+void mtrace_exec_stop(CPUX86State *env)
+{
+    mtrace_tsc[env->cpu_index].offset += 
+	(cpu_get_tsc(env) - mtrace_tsc[env->cpu_index].start);
+}
+
 static int mtrace_host_addr(target_ulong guest_addr, target_ulong *host_addr)
 {
     target_phys_addr_t phys;
@@ -419,7 +444,7 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
     else
         entry.h.cpu = cpu;
     entry.h.access_count = mtrace_access_count;
-    entry.h.ts = cpu_get_tsc(cpu_single_env);
+    entry.h.ts = mtrace_get_tsc(cpu_single_env);
 
     /* Special handling */
     if (type == mtrace_entry_label) {

@@ -38,6 +38,8 @@
 #include <sys/prctl.h>
 #endif
 
+#include "mtrace.h"
+
 #ifdef SIGRTMIN
 #define SIG_IPI (SIGRTMIN+4)
 #else
@@ -912,6 +914,7 @@ static int qemu_cpu_exec(CPUState *env)
 
 bool cpu_exec_all(void)
 {
+    int r;
     if (next_cpu == NULL)
         next_cpu = first_cpu;
     for (; next_cpu != NULL && !exit_request; next_cpu = next_cpu->next_cpu) {
@@ -923,7 +926,10 @@ bool cpu_exec_all(void)
         if (qemu_alarm_pending())
             break;
         if (cpu_can_run(env)) {
-            if (qemu_cpu_exec(env) == EXCP_DEBUG) {
+	    mtrace_exec_start(env);
+	    r = qemu_cpu_exec(env);
+	    mtrace_exec_stop(env);
+            if (r == EXCP_DEBUG) {
                 break;
             }
         } else if (env->stop) {

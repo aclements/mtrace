@@ -13,4 +13,7 @@ void mtrace_cline_trace_set(int b);
 void mtrace_call_trace_set(int b);
 void mtrace_sample_set(int n);
 
+void mtrace_exec_start(CPUState *env);
+void mtrace_exec_stop(CPUState *env);
+
 #endif

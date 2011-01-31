@@ -194,6 +194,11 @@ static struct mtrace_host_entry mtrace_enable;
 
 static uint64_t 	current_tid[MAX_CPU];
 
+static struct {
+	uint64_t last_ts;
+	uint64_t ts_offset;
+} timekeeper[MAX_CPU];
+
 static int should_save_entry(struct mtrace_entry_header *h)
 {
 	return (mtrace_enable.access.value || 
@@ -1006,6 +1011,21 @@ static void handle_lock(struct mtrace_lock_entry *lock)
 	free(lock);
 }
 
+static void handle_ts(union mtrace_entry *entry)
+{
+	int cpu;
+
+	if (entry->h.type == mtrace_entry_access)
+		return;
+	cpu = entry->h.cpu;
+
+	if (timekeeper[cpu].last_ts >= entry->h.ts) {
+		die("process_log: CPU %u backwards ts %lu -> %lu", 
+		    cpu, timekeeper[cpu].last_ts, entry->h.ts);
+	}
+	timekeeper[cpu].last_ts = entry->h.ts;
+}
+
 static void process_log(void *arg, gzFile log)
 {
 	union mtrace_entry *entry;
@@ -1017,6 +1037,8 @@ static void process_log(void *arg, gzFile log)
 	printf("Scanning log file ...\n");
 	fflush(0);
         while ((r = read_entry(log, entry)) > 0) {
+		handle_ts(entry);
+
 		switch(entry->h.type) {
 		case mtrace_entry_label:
 			handle_label(&entry->label);

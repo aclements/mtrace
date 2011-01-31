@@ -56,6 +56,7 @@ struct mtrace_segment_entry {
 
     uint64_t baseaddr;
     uint64_t endaddr;
+    uint16_t cpu;
     mtrace_label_t object_type;
 } __pack__;
 
@@ -262,7 +263,7 @@ static inline void mtrace_label_register(mtrace_label_t type,
     label.pc = call_site;
 
     mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&label,
-		 mtrace_entry_label, sizeof(label), 0, 0);
+		 mtrace_entry_label, sizeof(label), ~0, 0);
 }
 
 static inline void mtrace_segment_register(unsigned long baseaddr,
@@ -274,8 +275,9 @@ static inline void mtrace_segment_register(unsigned long baseaddr,
     entry.baseaddr = baseaddr;
     entry.endaddr = endaddr;
     entry.object_type = type;
+    entry.cpu = cpu;
     mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&entry,
-		 mtrace_entry_segment, sizeof(entry), cpu, 0);
+		 mtrace_entry_segment, sizeof(entry), ~0, 0);
 }
 
 static inline void mtrace_fcall_register(unsigned long tid,
