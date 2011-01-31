@@ -469,8 +469,6 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
 	}
     }
 
-    mtrace_log_entry(&entry);
-
     /* Special handling */
     if (type == mtrace_entry_host) {
 	entry.host.global_ts = mtrace_get_global_tsc(cpu_single_env);
@@ -490,6 +488,8 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
 	    abort();
 	}
     } 
+
+    mtrace_log_entry(&entry);
 }
 
 static void (*mtrace_call[])(target_ulong, target_ulong, target_ulong,
