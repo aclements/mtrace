@@ -28,6 +28,8 @@
 #include "mtrace-magic.h"
 #include "mtrace.h"
 
+#include <sys/wait.h>
+
 /* 64-byte cache lines */
 #define MTRACE_CLINE_SHIFT	6
 
@@ -47,6 +49,8 @@ static int mtrace_sample = 1;
 static uint64_t mtrace_access_count;
 static int mtrace_call_stack_active[255];
 static int mtrace_call_trace;
+
+static pid_t child_pid;
 
 static struct {
     uint64_t offset;
@@ -128,6 +132,7 @@ void mtrace_log_file_set(const char *path)
     }
     close(check[0]);
 
+    child_pid = child;
     mtrace_file = p[1];
 }
 
@@ -362,13 +367,15 @@ void mtrace_io_read(void *cb, target_phys_addr_t ram_addr,
     /* Nothing to do.. */
 }
 
-static inline uint64_t mtrace_get_tsc(CPUX86State *env)
+static inline uint64_t mtrace_get_percore_tsc(CPUX86State *env)
 {
-#if 0
-    return cpu_get_tsc(env);
-#endif
     return (cpu_get_tsc(env) - mtrace_tsc[env->cpu_index].start) + 
 	mtrace_tsc[env->cpu_index].offset;
+}
+
+static inline uint64_t mtrace_get_global_tsc(CPUX86State *env)
+{
+    return cpu_get_tsc(env);
 }
 
 void mtrace_exec_start(CPUX86State *env)
@@ -444,7 +451,7 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
     else
         entry.h.cpu = cpu;
     entry.h.access_count = mtrace_access_count;
-    entry.h.ts = mtrace_get_tsc(cpu_single_env);
+    entry.h.ts = mtrace_get_percore_tsc(cpu_single_env);
 
     /* Special handling */
     if (type == mtrace_entry_label) {
@@ -466,6 +473,7 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
 
     /* Special handling */
     if (type == mtrace_entry_host) {
+	entry.host.global_ts = mtrace_get_global_tsc(cpu_single_env);
 	switch (entry.host.host_type) {
 	case mtrace_access_all_cpu:
 	    mtrace_enable = entry.host.access.value;
@@ -565,6 +573,12 @@ static void mtrace_cleanup(void)
     if (mtrace_file) {
 	mtrace_log_entry(NULL);
 	close(mtrace_file);
+	if (child_pid) {
+	    if (waitpid(child_pid, NULL, 0) < 0) {
+		perror("mtrace_cleanup: waitpid");
+		abort();
+	    }
+	}
     }
     mtrace_file = 0;
 }

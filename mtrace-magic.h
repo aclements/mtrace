@@ -45,7 +45,7 @@ struct mtrace_entry_header {
     uint16_t size;
     uint16_t cpu;
     uint64_t access_count;
-    uint64_t ts;
+    uint64_t ts;		/* per-core time stamp */
 } __pack__;
 
 /*
@@ -94,6 +94,7 @@ struct mtrace_call_entry {
 struct mtrace_host_entry {
     struct mtrace_entry_header h;
     mtrace_host_t host_type;
+    uint64_t global_ts;		/* global time stamp */
     
     union {
 	/* Enable/disable access tracing */
