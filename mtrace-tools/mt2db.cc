@@ -57,6 +57,7 @@ uint64_t CallTrace::call_interval_count;
 using namespace::std;
 using namespace::__gnu_cxx;
 
+#define MISS_DELAY	200
 #define MAX_CPU		4
 #define ONE_SHOT 	1
 
@@ -530,7 +531,7 @@ static void build_summary_db(void *arg, const char *name,
 	exec_stmt_noerr(db, NULL, NULL, "DROP TABLE %s_summary", name);
 	exec_stmt(db, NULL, NULL, CREATE_SUMMARY_TABLE, name);
 	exec_stmt(db, NULL, NULL, INSERT_SUMMARY, name,
-		  start->h.ts, end->h.ts);
+		  start->global_ts, end->global_ts);
 }
 
 static void complete_outstanding_labels(void)
@@ -986,6 +987,9 @@ static void handle_lock(struct mtrace_lock_entry *lock)
 			int label_type;
 			uint64_t label_id;
 
+			// XXX A few of these is probably ok.  Instead of die
+			// we should note the unexpected result and throw away
+			// the data point.
 			if (cs.start_cpu_ != lock->h.cpu)
 				die("handle_lock: cpu mismatch");
 
@@ -1018,9 +1022,12 @@ static void handle_ts(union mtrace_entry *entry)
 {
 	int cpu;
 
-	if (entry->h.type == mtrace_entry_access)
-		return;
 	cpu = entry->h.cpu;
+	if (entry->h.type == mtrace_entry_access) {
+		timekeeper[cpu].ts_offset += MISS_DELAY;
+		return;
+	}
+	entry->h.ts += timekeeper[cpu].ts_offset;
 
 	if (timekeeper[cpu].last_ts >= entry->h.ts) {
 		die("process_log: CPU %u backwards ts %lu -> %lu", 
