@@ -135,6 +135,7 @@
 #define CREATE_LOCKED_SECTIONS_TABLE					\
 	"CREATE TABLE %s_locked_sections ("				\
 	"id    		  	  INTEGER PRIMARY KEY, "		\
+	"str			  CHAR(32), "	       			\
 	"lock 		  	  "ADDR_TYPE", "			\
 	"pc 		  	  "ADDR_TYPE", "			\
 	"label_type 		  INTEGER, "				\
@@ -148,10 +149,10 @@
 
 #define INSERT_LOCKED_SECTION						\
 	"INSERT INTO %s_locked_sections ("				\
-	"id, lock, pc, label_type, label_id, start_ts, "		\
+	"id, str, lock, pc, label_type, label_id, start_ts, "		\
 	"end_ts, start_cpu, read, tid) "				\
-	"VALUES (%lu, "ADDR_FMT", "ADDR_FMT", %u, %lu, %lu, %lu, "	\
-	"%u, %u, %lu)"
+	"VALUES (%lu, \"%s\", "ADDR_FMT", "ADDR_FMT", %u, %lu, %lu, "	\
+	"%lu, %u, %u, %lu)"
 
 /*
  * summary

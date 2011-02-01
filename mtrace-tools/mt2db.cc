@@ -491,12 +491,16 @@ static void build_access_db(void *arg, const char *name)
 
 static void build_locked_sections_db(void *arg, const char *name)
 {
-	const char *create_index = 
-		"CREATE INDEX %s_idx_locked_sections ON %s_locked_sections"
-		"(label_id)";
+	const char *create_index[] =  {
+		"CREATE INDEX %s_idx_locked_sections%u ON %s_locked_sections"
+		"(label_id)",
+		"CREATE INDEX %s_idx_locked_sections%u ON %s_locked_sections"
+		"(label_id, lock)",
+	};
 
 	sqlite3 *db = (sqlite3 *) arg;
 	Progress p(locked_sections.size(), 0);
+	unsigned int i;
 
 	exec_stmt_noerr(db, NULL, NULL, "DROP TABLE %s_locked_sections", name);
 	exec_stmt(db, NULL, NULL, CREATE_LOCKED_SECTIONS_TABLE, name);
@@ -508,6 +512,7 @@ static void build_locked_sections_db(void *arg, const char *name)
 		exec_stmt(db, NULL, NULL, INSERT_LOCKED_SECTION,
 			  name,
 			  ls.cs_.id_,
+			  ls.cs_.str_,
 			  ls.lock_,
 			  ls.cs_.pc_,
 			  ls.label_type_,
@@ -522,8 +527,10 @@ static void build_locked_sections_db(void *arg, const char *name)
 		p.tick();
 	}
 
+	for (i = 0; i < sizeof(create_index) / sizeof(create_index[0]); i++)
+		exec_stmt(db, NULL, NULL, create_index[i], name, i, name);
+
 	exec_stmt(db, NULL, NULL, "END TRANSACTION;");
-	exec_stmt(db, NULL, NULL, create_index, name, name);
 }
 
 static void build_summary_db(void *arg, const char *name, 

@@ -9,6 +9,7 @@ struct CriticalSection {
 	int 	 read_mode_;
 	int	 start_cpu_;
 	uint64_t id_;
+	char	 str_[32];
 };
 
 class LockSet {
@@ -23,6 +24,7 @@ private:
 			pc_ = l->pc;
 			id_ = id;
 			n_ = 0;
+			strcpy(str_, l->str);
 		}
 
 		// Returns 1 if no longer held and fills in cs
@@ -64,6 +66,7 @@ private:
 			cs->start_cpu_ = start_cpu_;
 			cs->id_ = id_;
 			cs->pc_ = pc_;
+			strcpy(cs->str_, str_);
 		}
 
 		uint64_t lock_;
@@ -74,6 +77,7 @@ private:
 		int start_cpu_;
 		int read_;
 		int n_;
+		char str_[32];
 	};
 
 	typedef hash_map<uint64_t, LockState *> LockStateTable;
