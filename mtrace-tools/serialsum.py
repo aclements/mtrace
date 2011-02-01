@@ -7,7 +7,10 @@ from mtracepy.util import uhex
 import sqlite3
 import sys
 
-default_filters         = []
+DEFAULT_FILTERS         = []
+DEFAULT_COLS            = ['pc', 'length', 'percent']
+PRINT_COLS              = []
+SUMMARY                 = None
 
 class FilterLabel:
     def __init__(self, labelName):
@@ -45,7 +48,21 @@ def apply_filters(lst, filters):
 
 def usage():
     print """Usage: serialsum.py DB-file name [ -filter-label filter-label 
-    -filter-tid-count filter-tid-count -filter-cpu-count filter-cpu-count ]
+    -filter-tid-count filter-tid-count -filter-cpu-count filter-cpu-count 
+    -print col ]
+
+    'filter-tid-count' is the number of TIDs minus one that must execute
+      a serial section
+
+    'filter-cpu-count' is the number of CPUs minus one that must execute
+      a serial section
+
+    'col' is the name of a column.  Valid values are:
+      'pc'      --
+      'length'  --
+      'percent' --
+      'cpus'    --
+      'tids'    --
 """
     exit(1)
 
@@ -53,25 +70,77 @@ def parse_args(argv):
     args = argv[3:]
 
     def filter_label_handler(label):
-        global default_filters
-        default_filters.append(FilterLabel(label))
+        global DEFAULT_FILTERS
+        DEFAULT_FILTERS.append(FilterLabel(label))
 
     def filter_tid_count_handler(count):
-        global default_filters
-        default_filters.append(FilterTidCount(int(count)))
+        global DEFAULT_FILTERS
+        DEFAULT_FILTERS.append(FilterTidCount(int(count)))
 
     def filter_cpu_count_handler(count):
-        global default_filters
-        default_filters.append(FilterCpuCount(int(count)))
+        global DEFAULT_FILTERS
+        DEFAULT_FILTERS.append(FilterCpuCount(int(count)))
+
+    def print_handler(col):
+        global PRINT_COLS
+        PRINT_COLS.append(col)
 
     handler = {
         '-filter-label'  : filter_label_handler,
         '-filter-tid-count' : filter_tid_count_handler,
-        '-filter-cpu-count' : filter_cpu_count_handler
+        '-filter-cpu-count' : filter_cpu_count_handler,
+        '-print' : print_handler
     }
 
     for i in range(0, len(args), 2):
         handler[args[i]](args[i + 1])
+
+    global PRINT_COLS
+    if len(PRINT_COLS) == 0:
+        PRINT_COLS = DEFAULT_COLS
+
+def get_col_value(lock, col):
+    def get_pc():
+        '''Return the PC of the most costly section'''
+        pcs = lock.get_pcs()
+        pc = sorted(pcs.keys(), key=lambda k: pcs[k], reverse=True)[0]
+        return '%016lx' % uhex(pc)
+       
+    def get_length():
+        return str(lock.get_exclusive_hold_time())
+
+    def get_percent():
+        return '%.2f' % ((lock.get_exclusive_hold_time() * 100.0) / SUMMARY.work)
+
+    def get_cpus():
+        cpuTable = lock.get_cpus()
+        cpus = cpuTable.keys()
+        time = cpuTable[cpus[0]]
+        cpuString = '%u:%.2f%%' % (cpus[0], (time * 100.0) / lock.get_exclusive_hold_time())
+        for cpu in cpus[1:]:
+            time = cpuTable[cpu]
+            cpuString += ' %u:%.2f%%' % (cpu, (time * 100.0) / lock.get_exclusive_hold_time())
+        return cpuString
+
+    def get_tids():
+        tids = lock.get_tids()
+        tidsPercent = ''
+        totPercent = (lock.get_exclusive_hold_time() * 100.0) / float(SUMMARY.work)
+        for tid in tids.keys():
+            time = tids[tid]
+            tidsPercent += '%lu:%.2f%% ' % (tid, (time * 100.0) / lock.get_exclusive_hold_time())
+        return tidsPercent
+
+    colValueFuncs = {
+        'pc' : get_pc,
+        'length' : get_length,
+        'percent' : get_percent,
+        'cpus' : get_cpus,
+        'tids' : get_tids
+    }
+    
+    return colValueFuncs[col]()
+    
 
 def main(argv = None):
     if argv is None:
@@ -83,19 +152,38 @@ def main(argv = None):
     dataName = argv[2]
     parse_args(argv)
 
-    summary = mtracepy.summary.MtraceSummary(dbFile, dataName)
-    duration = summary.work
+    global SUMMARY
+    SUMMARY = mtracepy.summary.MtraceSummary(dbFile, dataName)
+    duration = SUMMARY.work
     
     tidSet = {}
+
     locks = mtracepy.lock.get_locks(dbFile, dataName)
     locks.extend(mtracepy.harcrit.get_harcrits(dbFile, dataName));
+
     locks = sorted(locks, key=lambda l: l.get_exclusive_hold_time(), reverse=True)
-    locks = apply_filters(locks, default_filters)
-    print '%-20s  %16s  %16s  %16s  %12s  %8s    %-36s  %-s' % (
-        'name', 'id', 'lock', 'pc', 'serial', 'tot %', 'cpus %', 'tids %')
-    print '%-20s  %16s  %16s  %16s  %12s  %8s    %-36s  %-s' % (
-        '----', '--', '----', '--', '------', '-----', '------', '------')
+    locks = apply_filters(locks, DEFAULT_FILTERS)
+
+    headerStr = '%-20s  %16s  %16s' % ('name', 'id', 'lock')
+    borderStr = '%-20s  %16s  %16s' % ('----', '--', '----')
+    for col in PRINT_COLS:
+        headerStr += '  %16s' % col
+        borderStr += '  %16s' % '----'
+#    print '%-20s  %16s  %16s' % ('name', 'id', 'lock')
+#    print '%-20s  %16s  %16s' % ('----', '--', '----')
+ 
+    print headerStr
+    print borderStr
+   
+
     for l in locks:
+        valStr = '%-20s  %16lu  %16lx' % (l.get_name(), l.get_label_id(), uhex(l.get_lock()))
+        for col in PRINT_COLS:
+            valStr += '  %16s' % get_col_value(l, col)
+        print valStr
+        continue
+
+            
         tids = l.get_tids()
         tidsPercent = ''
         totPercent = (l.get_exclusive_hold_time() * 100.0) / float(duration)

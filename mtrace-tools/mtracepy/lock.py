@@ -27,8 +27,8 @@ class MtraceLock:
         self.db = db
         self.dataName = dataName
 
-        self.sections = None
         self.name = None
+        self.sections = None
         self.holdTime = None
         self.exclusiveHoldTime = None
         self.readHoldTime = None
@@ -133,7 +133,6 @@ class MtraceLock:
 def get_locks(dbFile, dataName):
     conn = sqlite3.connect(dbFile)
     c = conn.cursor()
-
     q = 'SELECT DISTINCT label_type, label_id, lock FROM %s_locked_sections'
     q = q % (dataName)
     c.execute(q)
