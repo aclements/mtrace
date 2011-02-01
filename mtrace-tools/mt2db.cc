@@ -200,6 +200,8 @@ static struct {
 	uint64_t ts_offset;
 } timekeeper[MAX_CPU];
 
+uint64_t spin_time;
+
 static int should_save_entry(struct mtrace_entry_header *h)
 {
 	return (mtrace_enable.access.value || 
@@ -531,7 +533,7 @@ static void build_summary_db(void *arg, const char *name,
 	exec_stmt_noerr(db, NULL, NULL, "DROP TABLE %s_summary", name);
 	exec_stmt(db, NULL, NULL, CREATE_SUMMARY_TABLE, name);
 	exec_stmt(db, NULL, NULL, INSERT_SUMMARY, name,
-		  start->global_ts, end->global_ts, MISS_DELAY);
+		  start->global_ts, end->global_ts, spin_time, MISS_DELAY);
 }
 
 static void complete_outstanding_labels(void)
@@ -992,6 +994,8 @@ static void handle_lock(struct mtrace_lock_entry *lock)
 			// the data point.
 			if (cs.start_cpu_ != lock->h.cpu)
 				die("handle_lock: cpu mismatch");
+
+			spin_time += cs.spin_time_;
 
 			get_object(lock->lock, &label_type, &label_id);
 			locked_sections.push_back(LockedSection(lock->lock,

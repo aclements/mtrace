@@ -4,6 +4,7 @@ using namespace::__gnu_cxx;
 
 struct CriticalSection {
 	uint64_t acquire_ts_;
+	uint64_t spin_time_;
 	int 	 read_mode_;
 	int	 start_cpu_;
 	uint64_t id_;
@@ -44,6 +45,7 @@ private:
 		}
 
 		void get_critical_section(CriticalSection *cs) {
+			cs->spin_time_ = 0;
 			// The trylock code (e.g. __raw_spin_trylock in spinlock_api_smp.h.)
 			// calls lock_acquire if the lock is successfully acquired and never
 			// calls lock_acquired.
@@ -51,9 +53,11 @@ private:
 			// The mtrace entry should probably include a 'trylock' flag, but
 			// for now this hack is sufficient.
 			cs->acquire_ts_ = acquire_ts_;
-			if (acquired_ts_)
+			if (acquired_ts_) {
 				cs->acquire_ts_ = acquired_ts_;
-			
+				cs->spin_time_ = acquired_ts_ - acquire_ts_;
+			}
+
 			cs->read_mode_ = read_;
 			cs->start_cpu_ = start_cpu_;
 			cs->id_ = id_;

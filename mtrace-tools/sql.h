@@ -158,10 +158,11 @@
     	"CREATE TABLE %s_summary ("					\
 	"start_ts     		 INTEGER, "				\
 	"end_ts			 INTEGER, " 				\
+	"spin_time		 INTEGER, "				\
 	"miss_delay		 INTEGER" 				\
 	")"
 
 #define INSERT_SUMMARY							\
     	"INSERT INTO %s_summary ("					\
-	"start_ts, end_ts, miss_delay) "				\
-	"VALUES (%lu, %lu, %u)"
+	"start_ts, end_ts, spin_time, miss_delay) "			\
+	"VALUES (%lu, %lu, %lu, %u)"

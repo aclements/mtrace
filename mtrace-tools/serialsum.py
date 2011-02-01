@@ -84,7 +84,7 @@ def main(argv = None):
     parse_args(argv)
 
     summary = mtracepy.summary.MtraceSummary(dbFile, dataName)
-    duration = summary.endTs - summary.startTs
+    duration = summary.work
     
     tidSet = {}
     locks = mtracepy.lock.get_locks(dbFile, dataName)
