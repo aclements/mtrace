@@ -81,10 +81,14 @@ private:
 public:
 	bool release(struct mtrace_lock_entry *lock, struct CriticalSection *cs)
 	{
+		static int misses;
+
 		LockStateTable::iterator it = state_.find(lock->lock);
 
 		if (it == state_.end()) {
-			//printf("LockSet: releasing unheld lock %lx\n", lock->lock);
+			misses++;
+			if (misses >= 10)
+				die("LockSet: released too many unheld locks\n");
 			return false;
 		}
 
@@ -114,10 +118,17 @@ public:
 	}
 
 	void acquired(struct mtrace_lock_entry *lock) {
+		static int misses;
+
 		LockStateTable::iterator it = state_.find(lock->lock);		
 
-		if (it == state_.end())
-			die("acquired: missing lock");
+		if (it == state_.end()) {
+			misses++;
+			if (misses >= 10)
+				die("LockSet: acquired too many missing locks");
+
+			return;
+		}
 		it->second->acquired(lock);
 	}
 
