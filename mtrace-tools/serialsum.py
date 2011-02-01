@@ -2,6 +2,7 @@
 
 import mtracepy.lock
 import mtracepy.harcrit
+import mtracepy.summary
 from mtracepy.util import uhex
 import sqlite3
 import sys
@@ -20,7 +21,14 @@ class FilterTidCount:
         self.count = count
 
     def filter(self, lock):
-        return len(lock.get_tids()) >= self.count
+        return len(lock.get_tids()) > self.count
+
+class FilterCpuCount:
+    def __init__(self, count):
+        self.count = count
+
+    def filter(self, lock):
+        return len(lock.get_cpus()) > self.count
 
 def apply_filters(lst, filters):
     if len(filters) > 0:
@@ -37,7 +45,7 @@ def apply_filters(lst, filters):
 
 def usage():
     print """Usage: serialsum.py DB-file name [ -filter-label filter-label 
-    -filter-tid-count filter-tid-count ]
+    -filter-tid-count filter-tid-count -filter-cpu-count filter-cpu-count ]
 """
     exit(1)
 
@@ -52,9 +60,14 @@ def parse_args(argv):
         global default_filters
         default_filters.append(FilterTidCount(int(count)))
 
+    def filter_cpu_count_handler(count):
+        global default_filters
+        default_filters.append(FilterCpuCount(int(count)))
+
     handler = {
         '-filter-label'  : filter_label_handler,
-        '-filter-tid-count' : filter_tid_count_handler
+        '-filter-tid-count' : filter_tid_count_handler,
+        '-filter-cpu-count' : filter_cpu_count_handler
     }
 
     for i in range(0, len(args), 2):
@@ -70,72 +83,48 @@ def main(argv = None):
     dataName = argv[2]
     parse_args(argv)
 
-    conn = sqlite3.connect(dbFile)
-    c = conn.cursor()
-    tmpl = 'SELECT start_ts, end_ts FROM %s_summary'
-    q = tmpl % dataName
-    c.execute(q)
-    rs = c.fetchall()
-    if len(rs) != 1:
-        raise Exception('%s returned %u rows' % (query, len(rs)))
-    row = rs[0]
-    duration = row[1] - row[0]
-
-    sumPercent = 0
-    harcrits = mtracepy.harcrit.get_harcrits(dbFile, dataName)
-    harcrits = sorted(harcrits, key=lambda hc: hc.get_exclusive_hold_time(), reverse=True)
-    print '%-20s  %16s  %12s  %8s    %-24s  %-s' % (
-        'name', 'id', 'serial', 'tot %', 'cpus %', 'tids %')
-    print '%-20s  %16s  %12s  %8s    %-24s  %-s' % (
-        '----', '--', '------', '-----', '------', '------')
-    for hc in harcrits:
-        totPercent = float(hc.get_exclusive_hold_time() * 100) / float(duration)
-        sumPercent += totPercent
-        print '%-20s  %16lu  %12lu  %8f' % (hc.get_name(),
-                                             hc.get_label_id(),
-                                             hc.get_exclusive_hold_time(),
-                                             totPercent)
-    print sumPercent
-    return
-
+    summary = mtracepy.summary.MtraceSummary(dbFile, dataName)
+    duration = summary.endTs - summary.startTs
     
     tidSet = {}
     locks = mtracepy.lock.get_locks(dbFile, dataName)
+    locks.extend(mtracepy.harcrit.get_harcrits(dbFile, dataName));
     locks = sorted(locks, key=lambda l: l.get_exclusive_hold_time(), reverse=True)
     locks = apply_filters(locks, default_filters)
-    print '%-20s  %16s  %16s  %12s  %8s    %-24s  %-s' % (
+    print '%-20s  %16s  %16s  %12s  %8s    %-36s  %-s' % (
         'name', 'id', 'lock', 'serial', 'tot %', 'cpus %', 'tids %')
-    print '%-20s  %16s  %16s  %12s  %8s    %-24s  %-s' % (
+    print '%-20s  %16s  %16s  %12s  %8s    %-36s  %-s' % (
         '----', '--', '----', '------', '-----', '------', '------')
     for l in locks:
         tids = l.get_tids()
         tidsPercent = ''
-        totPercent = (l.get_exclusive_hold_time() * 100) / duration
+        totPercent = (l.get_exclusive_hold_time() * 100.0) / float(duration)
         for tid in tids.keys():
             tidSet[tid] = 1
             time = tids[tid]
-            tidsPercent += '%lu:%lu%% ' % (tid, (time * 100) / l.get_exclusive_hold_time())
+            tidsPercent += '%lu:%.2f%% ' % (tid, (time * 100.0) / l.get_exclusive_hold_time())
 
         cpuTable = l.get_cpus()
         cpus = cpuTable.keys()
         time = cpuTable[cpus[0]]
-        cpuString = '%u:%lu%%' % (cpus[0], (time * 100) / l.get_exclusive_hold_time())
+        cpuString = '%u:%.2f%%' % (cpus[0], (time * 100.0) / l.get_exclusive_hold_time())
         for cpu in cpus[1:]:
             time = cpuTable[cpu]
-            cpuString += ' %u:%lu%%' % (cpu, (time * 100) / l.get_exclusive_hold_time())
+            cpuString += ' %u:%.2f%%' % (cpu, (time * 100.0) / l.get_exclusive_hold_time())
 
-        print '%-20s  %16lu  %16lx  %12lu  %8lu    %-24s  %-s' % (l.get_name(), 
-                                                                  l.get_label_id(), 
-                                                                  uhex(l.get_lock()),
-                                                                  l.get_exclusive_hold_time(),
-                                                                  totPercent,
-                                                                  cpuString,
-                                                                  tidsPercent)
+        print '%-20s  %16lu  %16lx  %12lu  %8.2f    %-36s  %-s' % (l.get_name(), 
+                                                                   l.get_label_id(), 
+                                                                   uhex(l.get_lock()),
+                                                                   l.get_exclusive_hold_time(),
+                                                                   totPercent,
+                                                                   cpuString,
+                                                                   tidsPercent)
 
     # Print TID strings
     print '\n'
     print '%-20s  %16s' % ('tid', 'name')
     print '%-20s  %16s' % ('---', '----')
+    conn = sqlite3.connect(dbFile)
     c = conn.cursor()
     tmpl = 'SELECT str FROM %s_tasks WHERE tid = %s'
     for tid in tidSet.keys():
