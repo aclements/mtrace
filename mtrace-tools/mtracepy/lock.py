@@ -52,15 +52,20 @@ class MtraceLock:
         self.readHoldTime = 0
         self.exclusiveHoldTime = 0
 
+        lockStr = None
+
         c = self.db.cursor()
 
         # Sections
-        q = 'SELECT id, start_ts, end_ts, start_cpu, read, tid, pc FROM %s_locked_sections WHERE ' + \
-            'label_id = %lu'
+        q = 'SELECT id, start_ts, end_ts, start_cpu, read, tid, pc, str FROM %s_locked_sections WHERE ' + \
+            'label_id = %lu and lock = %lu'
         q = q % (self.dataName,
-                 self.labelId)
+                 self.labelId,
+                 self.lock)
         c.execute(q)
         for row in c:
+            if lockStr == None:
+                lockStr = row[7]
             section = MtraceSerialSection(row[0], row[1], row[2], 
                                           row[3], row[4], row[5], row[6])
             self.sections.append(section)
@@ -97,7 +102,7 @@ class MtraceLock:
         rs = c.fetchall()
         if len(rs) != 1:
             raise Exception('%s returned %u rows' % (query, len(rs)))
-        self.name = rs[0][0]
+        self.name = rs[0][0] + ':' + lockStr
 
         self.inited = True
 
