@@ -3,13 +3,14 @@ from util import uhex
 
 class MtraceSerialSection:
     
-    def __init__(self, serialId, startTs, endTs, startCpu, read, tid):
+    def __init__(self, serialId, startTs, endTs, startCpu, read, tid, pc):
         self.serialId = serialId
         self.startTs = startTs
         self.endTs = endTs
         self.startCpu = startCpu
         self.tid = tid
         self.read = read
+        self.pc = pc
 
     def __str__(self):
         return '%lu -- [%lu, %lu]' % (self.tid, self.startTs, self.endTs)
@@ -33,6 +34,7 @@ class MtraceLock:
         self.readHoldTime = None
         self.tids = None
         self.cpus = None
+        self.pcs = None
         self.inited = False
 
     def __str__(self):
@@ -44,6 +46,7 @@ class MtraceLock:
 
         self.cpus = {}
         self.tids = {}
+        self.pcs = {}
         self.sections = []
         self.holdTime = 0
         self.readHoldTime = 0
@@ -52,14 +55,14 @@ class MtraceLock:
         c = self.db.cursor()
 
         # Sections
-        q = 'SELECT id, start_ts, end_ts, start_cpu, read, tid FROM %s_locked_sections WHERE ' + \
+        q = 'SELECT id, start_ts, end_ts, start_cpu, read, tid, pc FROM %s_locked_sections WHERE ' + \
             'label_id = %lu'
         q = q % (self.dataName,
                  self.labelId)
         c.execute(q)
         for row in c:
             section = MtraceSerialSection(row[0], row[1], row[2], 
-                                          row[3], row[4], row[5])
+                                          row[3], row[4], row[5], row[6])
             self.sections.append(section)
             holdTime = section.endTs - section.startTs
             self.holdTime += holdTime
@@ -79,6 +82,11 @@ class MtraceLock:
                 if section.startCpu in self.cpus:
                     time += self.cpus[section.startCpu]
                 self.cpus[section.startCpu] = time
+
+                time = holdTime
+                if section.pc in self.pcs:
+                    time += self.pcs[section.pc]
+                self.pcs[section.pc] = time
 
         # Name
         q = 'SELECT str FROM %s_labels%u WHERE label_id = %lu'
@@ -118,6 +126,9 @@ class MtraceLock:
     def get_cpus(self):
         self.__init_state()
         return self.cpus
+    def get_pcs(self):
+        self.__init_state()
+        return self.pcs
 
 def get_locks(dbFile, dataName):
     conn = sqlite3.connect(dbFile)

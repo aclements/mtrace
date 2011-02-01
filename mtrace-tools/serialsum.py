@@ -91,10 +91,10 @@ def main(argv = None):
     locks.extend(mtracepy.harcrit.get_harcrits(dbFile, dataName));
     locks = sorted(locks, key=lambda l: l.get_exclusive_hold_time(), reverse=True)
     locks = apply_filters(locks, default_filters)
-    print '%-20s  %16s  %16s  %12s  %8s    %-36s  %-s' % (
-        'name', 'id', 'lock', 'serial', 'tot %', 'cpus %', 'tids %')
-    print '%-20s  %16s  %16s  %12s  %8s    %-36s  %-s' % (
-        '----', '--', '----', '------', '-----', '------', '------')
+    print '%-20s  %16s  %16s  %16s  %12s  %8s    %-36s  %-s' % (
+        'name', 'id', 'lock', 'pc', 'serial', 'tot %', 'cpus %', 'tids %')
+    print '%-20s  %16s  %16s  %16s  %12s  %8s    %-36s  %-s' % (
+        '----', '--', '----', '--', '------', '-----', '------', '------')
     for l in locks:
         tids = l.get_tids()
         tidsPercent = ''
@@ -112,13 +112,18 @@ def main(argv = None):
             time = cpuTable[cpu]
             cpuString += ' %u:%.2f%%' % (cpu, (time * 100.0) / l.get_exclusive_hold_time())
 
-        print '%-20s  %16lu  %16lx  %12lu  %8.2f    %-36s  %-s' % (l.get_name(), 
-                                                                   l.get_label_id(), 
-                                                                   uhex(l.get_lock()),
-                                                                   l.get_exclusive_hold_time(),
-                                                                   totPercent,
-                                                                   cpuString,
-                                                                   tidsPercent)
+        pcs = l.get_pcs()
+        pc = sorted(pcs.keys(), key=lambda k: pcs[k], reverse=True)[0]
+        #print pcs
+        #print pc
+        print '%-20s  %16lu  %16lx  %16lx  %12lu  %8.2f    %-36s  %-s' % (l.get_name(), 
+                                                                          l.get_label_id(), 
+                                                                          uhex(l.get_lock()),
+                                                                          uhex(pc),
+                                                                          l.get_exclusive_hold_time(),
+                                                                          totPercent,
+                                                                          cpuString,
+                                                                          tidsPercent)
 
     # Print TID strings
     print '\n'

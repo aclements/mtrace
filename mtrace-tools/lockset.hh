@@ -5,6 +5,7 @@ using namespace::__gnu_cxx;
 struct CriticalSection {
 	uint64_t acquire_ts_;
 	uint64_t spin_time_;
+	uint64_t pc_;
 	int 	 read_mode_;
 	int	 start_cpu_;
 	uint64_t id_;
@@ -19,6 +20,7 @@ private:
 			acquire_ts_ = l->h.ts;
 			acquired_ts_ = 0;
 			start_cpu_ = l->h.cpu;
+			pc_ = l->pc;
 			id_ = id;
 			n_ = 0;
 		}
@@ -61,10 +63,12 @@ private:
 			cs->read_mode_ = read_;
 			cs->start_cpu_ = start_cpu_;
 			cs->id_ = id_;
+			cs->pc_ = pc_;
 		}
 
 		uint64_t lock_;
 		uint64_t acquire_ts_;
+		uint64_t pc_;
 		uint64_t acquired_ts_;
 		uint64_t id_;
 		int start_cpu_;

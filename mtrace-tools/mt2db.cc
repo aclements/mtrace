@@ -58,6 +58,7 @@ using namespace::std;
 using namespace::__gnu_cxx;
 
 #define MISS_DELAY	200
+#define LOCK_DELAY	500
 #define MAX_CPU		4
 #define ONE_SHOT 	1
 
@@ -508,6 +509,7 @@ static void build_locked_sections_db(void *arg, const char *name)
 			  name,
 			  ls.cs_.id_,
 			  ls.lock_,
+			  ls.cs_.pc_,
 			  ls.label_type_,
 			  ls.label_id_,
 			  ls.cs_.acquire_ts_,
@@ -1001,9 +1003,10 @@ static void handle_lock(struct mtrace_lock_entry *lock)
 			locked_sections.push_back(LockedSection(lock->lock,
 								label_type,
 								label_id,
-								lock->h.ts,
+								lock->h.ts + LOCK_DELAY,
 								tid,
 								&cs));
+			timekeeper[lock->h.cpu].ts_offset += LOCK_DELAY;
 		}
 		break;
 	}
