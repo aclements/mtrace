@@ -531,7 +531,7 @@ static void build_summary_db(void *arg, const char *name,
 	exec_stmt_noerr(db, NULL, NULL, "DROP TABLE %s_summary", name);
 	exec_stmt(db, NULL, NULL, CREATE_SUMMARY_TABLE, name);
 	exec_stmt(db, NULL, NULL, INSERT_SUMMARY, name,
-		  start->global_ts, end->global_ts);
+		  start->global_ts, end->global_ts, MISS_DELAY);
 }
 
 static void complete_outstanding_labels(void)
