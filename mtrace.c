@@ -45,6 +45,7 @@ static int mtrace_enable;
 static int mtrace_file;
 static int mtrace_cline_track = 1;
 static int mtrace_sample = 1;
+static int mtrace_quantum;
 
 static uint64_t mtrace_access_count;
 static int mtrace_call_stack_active[255];
@@ -80,6 +81,21 @@ void mtrace_call_trace_set(int b)
 void mtrace_sample_set(int n)
 {
     mtrace_sample = n;
+}
+
+int mtrace_enable_get(void)
+{
+    return mtrace_enable;
+}
+
+void mtrace_quantum_set(int n)
+{
+    mtrace_quantum = n;
+}
+
+int mtrace_quantum_get(void)
+{
+    return mtrace_quantum;
 }
 
 void mtrace_log_file_set(const char *path)

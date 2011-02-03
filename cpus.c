@@ -886,11 +886,14 @@ static int qemu_cpu_exec(CPUState *env)
 #endif
     if (use_icount) {
         int64_t count;
+	int max_count;
         int decr;
         qemu_icount -= (env->icount_decr.u16.low + env->icount_extra);
         env->icount_decr.u16.low = 0;
         env->icount_extra = 0;
         count = qemu_icount_round (qemu_next_deadline());
+	if (mtrace_enable_get() && (max_count = mtrace_quantum_get()))
+	    count = count > max_count ? max_count : count;
         qemu_icount += count;
         decr = (count > 0xffff) ? 0xffff : count;
         count -= decr;
