@@ -9,6 +9,7 @@ void mtrace_cline_track_free(uint8_t *cline_track);
 
 void mtrace_log_file_set(const char *path);
 void mtrace_system_enable_set(int b);
+int  mtrace_system_enable_get(void);
 void mtrace_cline_trace_set(int b);
 void mtrace_call_trace_set(int b);
 void mtrace_sample_set(int n);

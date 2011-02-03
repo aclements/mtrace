@@ -67,6 +67,11 @@ void mtrace_system_enable_set(int b)
     mtrace_system_enable = b;
 }
 
+int mtrace_system_enable_get(void)
+{
+    return mtrace_system_enable;
+}
+
 void mtrace_call_trace_set(int b)
 {
     mtrace_call_trace = b;
