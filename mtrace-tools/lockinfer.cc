@@ -111,8 +111,8 @@ public:
 		return 0;
 	}
 	float LockedAccessFreq() const {
-		int la = info[LS_WRITE].count;
-		int ua = info[LS_NONE].count + info[LS_READ].count;
+		int la = info[LS_WRITE].count + info[LS_READ].count;
+		int ua = info[LS_NONE].count;
 		if (la + ua)
 			return (float)la / (la + ua);
 		return 0;
