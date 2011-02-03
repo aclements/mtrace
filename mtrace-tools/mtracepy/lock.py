@@ -88,10 +88,12 @@ class MtraceLock:
                     time += self.cpus[section.startCpu]
                 self.cpus[section.startCpu] = time
 
-                time = holdTime
+                entry = [ holdTime, 1]
                 if section.pc in self.pcs:
-                    time += self.pcs[section.pc]
-                self.pcs[section.pc] = time
+                    old = self.pcs[section.pc]
+                    entry = [ old[0] + holdTime,
+                              old[1] + 1 ]
+                self.pcs[section.pc] = entry
 
         # Name
         q = 'SELECT str FROM %s_labels%u WHERE label_id = %lu'

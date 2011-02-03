@@ -49,10 +49,12 @@ class MtraceHarcrit:
                 time += self.cpus[section.startCpu]
             self.cpus[section.startCpu] = time
 
-            time = self.missDelay
+            entry = [ self.missDelay, 1 ]
             if section.pc in self.pcs:
-                time += self.pcs[section.pc]
-            self.pcs[section.pc] = time
+                old = self.pcs[section.pc]
+                entry = [ old[0] + self.missDelay, 
+                          old[1] + 1 ]
+            self.pcs[section.pc] = entry
         
 
         # exclusive hold time

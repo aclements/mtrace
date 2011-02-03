@@ -112,7 +112,7 @@ def get_col_value(lock, col):
     def get_pc():
         '''Return the PC of the most costly section'''
         pcs = lock.get_pcs()
-        pc = sorted(pcs.keys(), key=lambda k: pcs[k], reverse=True)[0]
+        pc = sorted(pcs.keys(), key=lambda k: pcs[k][0], reverse=True)[0]
         pc = '%016lx' % uhex(pc)
         if DEFAULT_ADDR2LINE:
             s = '  %s  %-64s  %s' % (pc, 
@@ -180,8 +180,8 @@ def main(argv = None):
     locks = sorted(locks, key=lambda l: l.get_exclusive_hold_time(), reverse=True)
     locks = apply_filters(locks, DEFAULT_FILTERS)
 
-    headerStr = '%-20s  %16s  %16s' % ('name', 'id', 'lock')
-    borderStr = '%-20s  %16s  %16s' % ('----', '--', '----')
+    headerStr = '%-40s  %16s  %16s' % ('name', 'id', 'lock')
+    borderStr = '%-40s  %16s  %16s' % ('----', '--', '----')
     for col in PRINT_COLS:
         headerStr += '  %16s' % col
         borderStr += '  %16s' % '----'
@@ -190,7 +190,7 @@ def main(argv = None):
     print borderStr
 
     for l in locks:
-        valStr = '%-20s  %16lu  %16lx' % (l.get_name(), l.get_label_id(), uhex(l.get_lock()))
+        valStr = '%-40s  %16lu  %16lx' % (l.get_name(), l.get_label_id(), uhex(l.get_lock()))
         for col in PRINT_COLS:
             valStr += '  %16s' % get_col_value(l, col)
         print valStr
