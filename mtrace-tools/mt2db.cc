@@ -194,6 +194,7 @@ static TaskTable	task_table;
 
 static struct mtrace_host_entry mtrace_enable;
 static struct mtrace_machine_entry mtrace_machine;
+static uint64_t num_ops;
 
 static uint64_t 	current_tid[MAX_CPU];
 
@@ -546,7 +547,8 @@ static void build_summary_db(void *arg, const char *name,
 		  mtrace_machine.num_cpus, mtrace_machine.num_ram,
 		  start->global_ts, end->global_ts, spin_time, MISS_DELAY,
 		  timekeeper[0].ts_offset, timekeeper[1].ts_offset,
-		  timekeeper[2].ts_offset, timekeeper[3].ts_offset);
+		  timekeeper[2].ts_offset, timekeeper[3].ts_offset,
+		  num_ops);
 }
 
 static void complete_outstanding_labels(void)
@@ -1062,6 +1064,11 @@ static void handle_machine(struct mtrace_machine_entry *machine)
 	mtrace_machine = *machine;
 }
 
+static void handle_appdata(struct mtrace_appdata_entry *appdata)
+{
+	num_ops = appdata->u64;
+}
+
 static void process_log(void *arg, gzFile log)
 {
 	union mtrace_entry *entry;
@@ -1078,6 +1085,9 @@ static void process_log(void *arg, gzFile log)
 		switch(entry->h.type) {
 		case mtrace_entry_machine:
 			handle_machine(&entry->machine);
+			break;
+		case mtrace_entry_appdata:
+			handle_appdata(&entry->appdata);
 			break;
 		case mtrace_entry_label:
 			handle_label(&entry->label);

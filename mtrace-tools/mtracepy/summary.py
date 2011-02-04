@@ -15,7 +15,7 @@ class MtraceSummary:
     
         q = '''SELECT start_ts, end_ts, spin_time, miss_delay, 
                num_cpus, num_ram, cpu0_ts_offset, cpu1_ts_offset, 
-               cpu2_ts_offset, cpu3_ts_offset FROM %s_summary'''
+               cpu2_ts_offset, cpu3_ts_offset, num_ops FROM %s_summary'''
         q = q % (dataName)
         c.execute(q)
 
@@ -33,11 +33,14 @@ class MtraceSummary:
         self.tscOffset = []
         for offset in row[6:10]:
             self.tscOffset.append(offset)
+        self.numOps = row[10]
 
         self.work = self.endTs - self.startTs - self.spinTime
 
     def __str__(self):
         s = ''
+        s += '  %-16s %lu\n' % ('cycles', self.endTs - self.startTs)
+        s += '  %-16s %lu\n' % ('num ops', self.numOps)
         s += '  %-16s %lu\n' % ('work', self.work)
         s += '  %-16s %lu\n' % ('spin', self.spinTime)
         s += '  %-16s %lu\n' % ('miss delay', self.missDelay)
