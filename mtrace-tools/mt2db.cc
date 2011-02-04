@@ -481,6 +481,7 @@ static void build_access_db(void *arg, const char *name)
 			  a.tid_,
 			  a.locked_id_);
 
+		free(a.access_);
 		accesses.pop_front();
 		p.tick();
 	}

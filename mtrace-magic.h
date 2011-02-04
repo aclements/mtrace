@@ -140,6 +140,8 @@ struct mtrace_access_entry {
     struct mtrace_entry_header h;
 
     mtrace_access_t access_type;
+    uint8_t traffic:1;
+    uint8_t lock:1;
     uint64_t pc;
     uint64_t host_addr;
     uint64_t guest_addr;

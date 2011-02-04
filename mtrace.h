@@ -12,6 +12,7 @@ void mtrace_system_enable_set(int b);
 int  mtrace_system_enable_get(void);
 void mtrace_cline_trace_set(int b);
 void mtrace_call_trace_set(int b);
+void mtrace_lock_trace_set(int b);
 void mtrace_sample_set(int n);
 int  mtrace_enable_get(void);
 void mtrace_quantum_set(int n);

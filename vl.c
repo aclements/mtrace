@@ -2737,6 +2737,9 @@ int main(int argc, char **argv, char **envp)
 	    case QEMU_OPTION_mtrace_all:
 		mtrace_cline_trace_set(0);
 		break;
+	    case QEMU_OPTION_mtrace_locked:
+		mtrace_lock_trace_set(1);
+		break;
 	    case QEMU_OPTION_mtrace_calls:
 		mtrace_call_trace_set(1);
 		break;

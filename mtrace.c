@@ -42,6 +42,7 @@
 
 static int mtrace_system_enable;
 static int mtrace_enable;
+static int mtrace_lock_trace;
 
 static int mtrace_file;
 static int mtrace_cline_track = 1;
@@ -51,6 +52,7 @@ static int mtrace_quantum;
 static uint64_t mtrace_access_count;
 static int mtrace_call_stack_active[255];
 static int mtrace_call_trace;
+static volatile int mtrace_lock_active[255];
 
 static pid_t child_pid;
 
@@ -62,6 +64,11 @@ static struct {
 void mtrace_cline_trace_set(int b)
 {
     mtrace_cline_track = b;
+}
+
+void mtrace_lock_trace_set(int b)
+{
+    mtrace_lock_trace = b;
 }
 
 void mtrace_system_enable_set(int b)
@@ -248,7 +255,9 @@ static unsigned long mtrace_get_pc(unsigned long searched_pc)
 static void mtrace_access_dump(mtrace_access_t type, target_ulong host_addr, 
 			       target_ulong guest_addr, 
 			       unsigned long access_count,
-			       void *retaddr)
+			       void *retaddr,
+			       int traffic,
+			       int lock)
 {
     struct mtrace_access_entry entry;
     static int sampler;
@@ -267,6 +276,8 @@ static void mtrace_access_dump(mtrace_access_t type, target_ulong host_addr,
     entry.pc = mtrace_get_pc((unsigned long)retaddr);
     entry.host_addr = host_addr;
     entry.guest_addr = guest_addr;
+    entry.traffic = traffic;
+    entry.lock = lock;
 
     mtrace_log_entry((union mtrace_entry *)&entry);
 }
@@ -314,6 +325,7 @@ static int mtrace_cline_update_st(uint8_t *host_addr, unsigned int cpu)
 void mtrace_st(target_ulong host_addr, target_ulong guest_addr, void *retaddr)
 {
     uint64_t a;
+    int lock;
     int r;
 
     if (!mtrace_system_enable)
@@ -323,8 +335,10 @@ void mtrace_st(target_ulong host_addr, target_ulong guest_addr, void *retaddr)
 
     r = mtrace_cline_update_st((uint8_t *)host_addr, 
 			       cpu_single_env->cpu_index);
-    if (r)
-	mtrace_access_dump(mtrace_access_st, host_addr, guest_addr, a, retaddr);
+    lock = mtrace_lock_active[cpu_single_env->cpu_index];
+    if (r || lock)
+	mtrace_access_dump(mtrace_access_st, host_addr, guest_addr, 
+			   a, retaddr, r, lock);
 }
 
 void mtrace_tcg_st(target_ulong host_addr, target_ulong guest_addr)
@@ -335,6 +349,7 @@ void mtrace_tcg_st(target_ulong host_addr, target_ulong guest_addr)
 void mtrace_ld(target_ulong host_addr, target_ulong guest_addr, void *retaddr)
 {
     uint64_t a;
+    int lock;
     int r;
 
     if (!mtrace_system_enable)
@@ -344,8 +359,10 @@ void mtrace_ld(target_ulong host_addr, target_ulong guest_addr, void *retaddr)
 
     r = mtrace_cline_update_ld((uint8_t *)host_addr, 
 			       cpu_single_env->cpu_index);
-    if (r)
-	mtrace_access_dump(mtrace_access_ld, host_addr, guest_addr, a, retaddr);
+    lock = mtrace_lock_active[cpu_single_env->cpu_index];
+    if (r || lock)
+	mtrace_access_dump(mtrace_access_ld, host_addr, guest_addr, 
+			   a, retaddr, r, lock);
 }
 
 void mtrace_tcg_ld(target_ulong host_addr, target_ulong guest_addr)
@@ -370,16 +387,18 @@ void mtrace_io_write(void *cb, target_phys_addr_t ram_addr,
 	cb == notdirty_mem_writeb)
     {
 	uint64_t a;
+	int lock;
 	int r;
 
 	a = mtrace_access_count++;
 
 	r = mtrace_cline_update_st(qemu_get_ram_ptr(ram_addr),
 				   cpu_single_env->cpu_index);
-	if (r)
+	lock = mtrace_lock_active[cpu_single_env->cpu_index];
+	if (r || lock)
 	    mtrace_access_dump(mtrace_access_iw, 
 			       (unsigned long) qemu_get_ram_ptr(ram_addr), 
-			       guest_addr, a, retaddr);
+			       guest_addr, a, retaddr, r, lock);
     }
 }
 
@@ -409,6 +428,39 @@ void mtrace_exec_stop(CPUX86State *env)
 {
     mtrace_tsc[env->cpu_index].offset += 
 	(cpu_get_tsc(env) - mtrace_tsc[env->cpu_index].start);
+}
+
+void mtrace_lock_start(CPUX86State *env)
+{
+    if (!mtrace_lock_trace)
+	return;
+
+    if (mtrace_lock_active[env->cpu_index]) {
+	/*
+	 * XXX occasionally QEMU re-executes the microp that calls
+	 * gen_helper_lock (which calls this function).  It seems
+	 * harmless to ignore this weirdness for now.
+	 *
+	 * NB the spin_lock in gen_helper_lock is actually a NOP.
+	 */
+#if 0
+	fprintf(stderr, "mtrace_lock_start: already lock start\n");
+	abort();
+#endif
+    }
+    mtrace_lock_active[env->cpu_index] = 1;
+}
+
+void mtrace_lock_stop(CPUX86State *env)
+{
+    if (!mtrace_lock_trace)
+	return;
+
+    if (!mtrace_lock_active[env->cpu_index]) {
+	fprintf(stderr, "mtrace_lock_stop: no lock start\n");
+	abort();
+    }
+    mtrace_lock_active[env->cpu_index] = 0;
 }
 
 static int mtrace_host_addr(target_ulong guest_addr, target_ulong *host_addr)
@@ -597,8 +649,10 @@ static void mtrace_cleanup(void)
 	close(mtrace_file);
 	if (child_pid) {
 	    if (waitpid(child_pid, NULL, 0) < 0) {
-		perror("mtrace_cleanup: waitpid");
-		abort();
+		if (errno != ECHILD) {
+		    perror("mtrace_cleanup: waitpid");
+		    abort();
+		}
 	    }
 	}
     }

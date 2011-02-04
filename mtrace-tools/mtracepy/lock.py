@@ -28,7 +28,6 @@ class MtraceLock:
         self.dataName = dataName
 
         self.name = None
-        self.sections = None
         self.holdTime = None
         self.exclusiveHoldTime = None
         self.readHoldTime = None
@@ -47,7 +46,6 @@ class MtraceLock:
         self.cpus = {}
         self.tids = {}
         self.pcs = {}
-        self.sections = []
         self.holdTime = 0
         self.readHoldTime = 0
         self.exclusiveHoldTime = 0
@@ -68,7 +66,6 @@ class MtraceLock:
                 lockStr = row[7]
             section = MtraceSerialSection(row[0], row[1], row[2], 
                                           row[3], row[4], row[5], row[6])
-            self.sections.append(section)
             holdTime = section.endTs - section.startTs
             self.holdTime += holdTime
             if section.read:
@@ -112,9 +109,6 @@ class MtraceLock:
         return self.labelId
     def get_lock(self):
         return self.lock
-    def get_sections(self):
-        self.__init_state()
-        return self.sections
     def get_hold_time(self):
         self.__init_state()
         return self.holdTime
