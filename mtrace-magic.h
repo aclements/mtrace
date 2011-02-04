@@ -15,6 +15,7 @@ typedef enum {
     mtrace_entry_lock,
     mtrace_entry_task,
     mtrace_entry_sched,
+    mtrace_entry_machine,
 } mtrace_entry_t;
 
 typedef enum {
@@ -188,7 +189,17 @@ struct mtrace_sched_entry {
     struct mtrace_entry_header h;
 
     uint64_t tid;
-};
+} __pack__;;
+
+/*
+ * The QEMU guest machine info
+ */
+struct mtrace_machine_entry {
+    struct mtrace_entry_header h;
+
+    uint16_t num_cpus;
+    uint64_t num_ram;
+} __pack__;
 
 union mtrace_entry {
     struct mtrace_entry_header h;
@@ -202,6 +213,7 @@ union mtrace_entry {
     struct mtrace_lock_entry lock;
     struct mtrace_task_entry task;
     struct mtrace_sched_entry sched;
+    struct mtrace_machine_entry machine;
 }__pack__;
 
 #ifndef QEMU_MTRACE

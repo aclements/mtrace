@@ -193,6 +193,7 @@ static CallIntervalList complete_intervals;
 static TaskTable	task_table;
 
 static struct mtrace_host_entry mtrace_enable;
+static struct mtrace_machine_entry mtrace_machine;
 
 static uint64_t 	current_tid[MAX_CPU];
 
@@ -542,7 +543,10 @@ static void build_summary_db(void *arg, const char *name,
 	exec_stmt_noerr(db, NULL, NULL, "DROP TABLE %s_summary", name);
 	exec_stmt(db, NULL, NULL, CREATE_SUMMARY_TABLE, name);
 	exec_stmt(db, NULL, NULL, INSERT_SUMMARY, name,
-		  start->global_ts, end->global_ts, spin_time, MISS_DELAY);
+		  mtrace_machine.num_cpus, mtrace_machine.num_ram,
+		  start->global_ts, end->global_ts, spin_time, MISS_DELAY,
+		  timekeeper[0].ts_offset, timekeeper[1].ts_offset,
+		  timekeeper[2].ts_offset, timekeeper[3].ts_offset);
 }
 
 static void complete_outstanding_labels(void)
@@ -1036,6 +1040,9 @@ static void handle_ts(union mtrace_entry *entry)
 {
 	int cpu;
 
+	if (entry->h.type == mtrace_entry_machine)
+		return;
+
 	cpu = entry->h.cpu;
 	if (entry->h.type == mtrace_entry_access) {
 		timekeeper[cpu].ts_offset += MISS_DELAY;
@@ -1044,10 +1051,15 @@ static void handle_ts(union mtrace_entry *entry)
 	entry->h.ts += timekeeper[cpu].ts_offset;
 
 	if (timekeeper[cpu].last_ts >= entry->h.ts) {
-		die("process_log: CPU %u backwards ts %lu -> %lu", 
+		die("handle_ts: CPU %u backwards ts %lu -> %lu", 
 		    cpu, timekeeper[cpu].last_ts, entry->h.ts);
 	}
 	timekeeper[cpu].last_ts = entry->h.ts;
+}
+
+static void handle_machine(struct mtrace_machine_entry *machine)
+{
+	mtrace_machine = *machine;
 }
 
 static void process_log(void *arg, gzFile log)
@@ -1064,6 +1076,9 @@ static void process_log(void *arg, gzFile log)
 		handle_ts(entry);
 
 		switch(entry->h.type) {
+		case mtrace_entry_machine:
+			handle_machine(&entry->machine);
+			break;
 		case mtrace_entry_label:
 			handle_label(&entry->label);
 			break;

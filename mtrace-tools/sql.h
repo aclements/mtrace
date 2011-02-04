@@ -154,18 +154,30 @@
 	"VALUES (%lu, \"%s\", "ADDR_FMT", "ADDR_FMT", %u, %lu, %lu, "	\
 	"%lu, %u, %u, %lu)"
 
+#if MAX_CPU > 4
+#error Too many CPUs for summary table schema 
+#endif
+
 /*
  * summary
  */
 #define CREATE_SUMMARY_TABLE						\
     	"CREATE TABLE %s_summary ("					\
+	"num_cpus     		 INTEGER, "				\
+	"num_ram		 INTEGER, "				\
 	"start_ts     		 INTEGER, "				\
 	"end_ts			 INTEGER, " 				\
 	"spin_time		 INTEGER, "				\
-	"miss_delay		 INTEGER" 				\
+	"miss_delay		 INTEGER, " 				\
+	"cpu0_ts_offset		 INTEGER, "				\
+	"cpu1_ts_offset		 INTEGER, "				\
+	"cpu2_ts_offset		 INTEGER, "				\
+	"cpu3_ts_offset		 INTEGER"				\
 	")"
 
 #define INSERT_SUMMARY							\
     	"INSERT INTO %s_summary ("					\
-	"start_ts, end_ts, spin_time, miss_delay) "			\
-	"VALUES (%lu, %lu, %lu, %u)"
+	"num_cpus, num_ram, start_ts, end_ts, spin_time, miss_delay, "	\
+	"cpu0_ts_offset, cpu1_ts_offset, cpu2_ts_offset, "	     	\
+	"cpu3_ts_offset) "		 		 		\
+	"VALUES (%u, %lu, %lu, %lu, %lu, %u, %lu, %lu, %lu, %lu)"

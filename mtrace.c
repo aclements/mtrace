@@ -27,6 +27,7 @@
 #define QEMU_MTRACE
 #include "mtrace-magic.h"
 #include "mtrace.h"
+#include "sysemu.h"
 
 #include <sys/wait.h>
 
@@ -606,10 +607,23 @@ static void mtrace_cleanup(void)
 
 void mtrace_init(void)
 {
+    struct mtrace_machine_entry entry;
+
     if (!mtrace_system_enable)
 	return;
 
     if (mtrace_file == 0)
 	mtrace_log_file_set("mtrace.out");
+
+    entry.h.type = mtrace_entry_machine;
+    entry.h.size = sizeof(entry);
+    entry.h.cpu = 0;
+    entry.h.access_count = mtrace_access_count;
+    entry.h.ts = 0;
+
+    entry.num_cpus = smp_cpus;
+    entry.num_ram = ram_size;
+    mtrace_log_entry((union mtrace_entry *)&entry);
+    
     atexit(mtrace_cleanup);
 }
