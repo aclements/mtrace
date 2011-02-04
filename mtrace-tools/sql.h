@@ -172,12 +172,13 @@
 	"cpu0_ts_offset		 INTEGER, "				\
 	"cpu1_ts_offset		 INTEGER, "				\
 	"cpu2_ts_offset		 INTEGER, "				\
-	"cpu3_ts_offset		 INTEGER"				\
+	"cpu3_ts_offset		 INTEGER, "				\
+	"num_ops		 INTEGER" 				\
 	")"
 
 #define INSERT_SUMMARY							\
     	"INSERT INTO %s_summary ("					\
 	"num_cpus, num_ram, start_ts, end_ts, spin_time, miss_delay, "	\
 	"cpu0_ts_offset, cpu1_ts_offset, cpu2_ts_offset, "	     	\
-	"cpu3_ts_offset) "		 		 		\
-	"VALUES (%u, %lu, %lu, %lu, %lu, %u, %lu, %lu, %lu, %lu)"
+	"cpu3_ts_offset, num_ops) "	 		 		\
+	"VALUES (%u, %lu, %lu, %lu, %lu, %u, %lu, %lu, %lu, %lu, %lu)"

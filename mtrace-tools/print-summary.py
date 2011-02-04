@@ -3,15 +3,15 @@
 import sys
 import mtracepy.summary
 
-def usage():
-    print """Usage: %s DB-file name""",
+def usage(argv):
+    print """Usage: %s DB-file name""" % (argv[0]),
     exit(1)
 
 def main(argv = None):
     if argv is None:
         argv = sys.argv
     if len(argv) != 3:
-        usage()
+        usage(argv)
 
     dbFile = argv[1]
     dataName = argv[2]
