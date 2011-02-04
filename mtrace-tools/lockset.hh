@@ -91,7 +91,7 @@ public:
 
 		if (it == state_.end()) {
 			misses++;
-			if (misses >= 10)
+			if (misses >= 20)
 				die("LockSet: released too many unheld locks\n");
 			return false;
 		}
