@@ -206,6 +206,7 @@ def main(argv = None):
     print 'max amdahl %.2f' % maxAmdahl
     print 'min amdahl %.2f' % minAmdahl
     print '#%s\t%s\t%s' % ('core', 'min', 'max')
+    print '%u\t%f\t%f' % (1, 1.0, 1.0)
     for i in range(2, 49):
         amMax = amdahlScale(1 - maxSerial, i)
         amMin = (float(SUMMARY.minWork) / float(SUMMARY.maxWork)) * amMax
