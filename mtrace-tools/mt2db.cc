@@ -46,6 +46,7 @@ extern "C" {
 #include <mtrace-magic.h>
 #include "util.h"
 #include "sql.h"
+#include "block.h"
 }
 
 #include "calltrace.hh"
@@ -193,8 +194,6 @@ static CallIntervalList complete_intervals;
 static TaskTable	task_table;
 
 static struct mtrace_host_entry mtrace_enable;
-static struct mtrace_machine_entry mtrace_machine;
-static uint64_t num_ops;
 
 static uint64_t 	current_tid[MAX_CPU];
 
@@ -203,7 +202,46 @@ static struct {
 	uint64_t ts_offset;
 } timekeeper[MAX_CPU];
 
-uint64_t spin_time;
+static struct {
+	struct mtrace_machine_entry machine;
+	uint64_t spin_time;
+	uint64_t num_ops;
+} summary;
+
+#if 0
+static inline union mtrace_entry * alloc_entry(void)
+{
+	return (union mtrace_entry *)malloc(sizeof(union mtrace_entry));
+}
+
+static inline void free_entry(void *entry)
+{
+	free(entry);
+}
+
+static inline void init_entry_alloc(void)
+{
+	// nothing
+}
+
+#else
+struct block_pool the_pool;
+static inline union mtrace_entry * alloc_entry(void)
+{
+	return (union mtrace_entry *)balloc(&the_pool);
+}
+
+static inline void free_entry(void *entry)
+{
+	bfree(&the_pool, entry);
+}
+
+static inline void init_entry_alloc(void)
+{
+	balloc_init(sizeof(union mtrace_entry), 1024 * 1024, &the_pool);
+}
+
+#endif
 
 static int should_save_entry(struct mtrace_entry_header *h)
 {
@@ -399,7 +437,7 @@ static void build_task_db(void *arg, const char *name)
 			  task->tid, task->tgid, task->str);
 
 		delete it->second;
-		free(task);
+		free_entry(task);
 		p.tick();
 	}
 	task_table.clear();
@@ -482,7 +520,7 @@ static void build_access_db(void *arg, const char *name)
 			  a.tid_,
 			  a.locked_id_);
 
-		free(a.access_);
+		free_entry(a.access_);
 		accesses.pop_front();
 		p.tick();
 	}
@@ -545,11 +583,11 @@ static void build_summary_db(void *arg, const char *name,
 	exec_stmt_noerr(db, NULL, NULL, "DROP TABLE %s_summary", name);
 	exec_stmt(db, NULL, NULL, CREATE_SUMMARY_TABLE, name);
 	exec_stmt(db, NULL, NULL, INSERT_SUMMARY, name,
-		  mtrace_machine.num_cpus, mtrace_machine.num_ram,
-		  start->global_ts, end->global_ts, spin_time, MISS_DELAY,
+		  summary.machine.num_cpus, summary.machine.num_ram,
+		  start->global_ts, end->global_ts, summary.spin_time, MISS_DELAY,
 		  timekeeper[0].ts_offset, timekeeper[1].ts_offset,
 		  timekeeper[2].ts_offset, timekeeper[3].ts_offset,
-		  num_ops);
+		  summary.num_ops);
 }
 
 static void complete_outstanding_labels(void)
@@ -599,9 +637,12 @@ static void handle_label(struct mtrace_label_entry *l)
 				ObjectLabel ol = it->second;
 				ol.access_count_end_ = l->h.access_count;
 				insert_complete_label(ol);
+			} else {
+				free_entry(it->second.label_);
 			}
 			o->erase(it);
 		}
+		free_entry(l);
 	}
 }
 
@@ -734,7 +775,7 @@ static void handle_call(struct mtrace_call_entry *f)
 		else
 			cs->push(f);
 	} 
-	free(f);
+	free_entry(f);
 }
 
 static int get_object(uint64_t guest_addr, int *label_type, uint64_t *label_id)
@@ -828,7 +869,7 @@ static void handle_host(void *arg, struct mtrace_host_entry *e)
 	if (e->host_type == mtrace_call_clear_cpu ||
 	    e->host_type == mtrace_call_set_cpu) 
 	{
-		free(e);
+		free_entry(e);
 		return;
 	} else if (e->host_type != mtrace_access_all_cpu)
 		die("handle_host: unhandled type %u", e->host_type);
@@ -892,8 +933,7 @@ static void handle_segment(struct mtrace_segment_entry *seg)
 	LabelList::iterator it = percpu_labels.begin();
 	for (; it != percpu_labels.end(); ++it) {
 		struct mtrace_label_entry *offset = *it;
-		struct mtrace_label_entry *l = 
-			(struct mtrace_label_entry *) malloc(sizeof(*l));
+		struct mtrace_label_entry *l = &alloc_entry()->label;
 
 		memcpy(l, offset, sizeof(*l));
 		l->guest_addr = seg->baseaddr + offset->guest_addr;
@@ -922,7 +962,7 @@ static void handle_task(struct mtrace_task_entry *task)
 		if (it != task_table.end()) {
 			if (mtrace_enable.access.value)
 				die("handle_task: Oops, reused TID");
-			free(it->second->entry_);
+			free_entry(it->second->entry_);
 			it->second->entry_ = task;
 		} else {
 			task_table[task->tid] = new TaskState(task);
@@ -936,7 +976,7 @@ static void handle_task(struct mtrace_task_entry *task)
 		cur = task_table[task->tid];
 		// str is the only thing that might change
 		strcpy(cur->entry_->str, task->str);
-		free(task);
+		free_entry(task);
 	} else if (task->task_type == mtrace_task_exit) {
 		TaskTable::iterator it = task_table.find(task->tid);
 		TaskState *ts;
@@ -946,7 +986,7 @@ static void handle_task(struct mtrace_task_entry *task)
 
 		ts = it->second;
 		task_table.erase(it);
-		free(ts->entry_);
+		free_entry(ts->entry_);
 		delete ts;
 	}
 }
@@ -959,7 +999,7 @@ static void handle_sched(struct mtrace_sched_entry *sched)
 		die("handle_task: cpu is too large %u", cpu);
 
 	current_tid[cpu] = sched->tid;
-	free(sched);
+	free_entry(sched);
 }
 
 static void handle_lock(struct mtrace_lock_entry *lock)
@@ -970,8 +1010,8 @@ static void handle_lock(struct mtrace_lock_entry *lock)
 	uint64_t tid;
 
 	if (!should_save_entry(&lock->h)) {
-	    free(lock);
-	    return;
+		free_entry(lock);
+		return;
 	}
 
 	if (cpu >= MAX_CPU)
@@ -982,7 +1022,7 @@ static void handle_lock(struct mtrace_lock_entry *lock)
 		// The kernel acquires locks before mm/mtrace.c
 		// registers its tracers.
 		//die("handle_lock: no TID");
-		free(lock);
+		free_entry(lock);
 		return;
 	}
 
@@ -992,7 +1032,7 @@ static void handle_lock(struct mtrace_lock_entry *lock)
 		// registers its tracers.
 		if (mtrace_enable.access.value)
 			die("handle_lock: no task for TID %lu", tid);
-		free(lock);
+		free_entry(lock);
 		return;
 	}
 
@@ -1011,7 +1051,7 @@ static void handle_lock(struct mtrace_lock_entry *lock)
 			if (cs.start_cpu_ != lock->h.cpu)
 				die("handle_lock: cpu mismatch");
 
-			spin_time += cs.spin_time_;
+			summary.spin_time += cs.spin_time_;
 
 			get_object(lock->lock, &label_type, &label_id);
 			locked_sections.push_back(LockedSection(lock->lock,
@@ -1036,7 +1076,7 @@ static void handle_lock(struct mtrace_lock_entry *lock)
 		die("handle_lock: bad op %u", lock->op);
 	}
 
-	free(lock);
+	free_entry(lock);
 }
 
 static void handle_ts(union mtrace_entry *entry)
@@ -1062,12 +1102,14 @@ static void handle_ts(union mtrace_entry *entry)
 
 static void handle_machine(struct mtrace_machine_entry *machine)
 {
-	mtrace_machine = *machine;
+	summary.machine = *machine;
+	free_entry(machine);
 }
 
 static void handle_appdata(struct mtrace_appdata_entry *appdata)
 {
-	num_ops = appdata->u64;
+	summary.num_ops = appdata->u64;
+	free_entry(appdata);
 }
 
 static void process_log(void *arg, gzFile log)
@@ -1075,8 +1117,7 @@ static void process_log(void *arg, gzFile log)
 	union mtrace_entry *entry;
 	int r;
 
-	// XXX temp fix.
-	entry = (union mtrace_entry *)malloc(sizeof(*entry));
+	entry = alloc_entry();
 
 	printf("Scanning log file ...\n");
 	fflush(0);
@@ -1121,8 +1162,7 @@ static void process_log(void *arg, gzFile log)
 			die("bad type %u", entry->h.type);
 		}
 
-		// XXX temp fix.
-		entry = (union mtrace_entry *)malloc(sizeof(*entry));
+		entry = alloc_entry();
 	}
 	if (r < 0)
 		die("failed to read log file");
@@ -1160,8 +1200,7 @@ static void process_symbols(void *arg, const char *nm_file)
 			       type == 'r' || type == 'R' || // .ro
 			       type == 'A'))  	      	     // absolute
 		{
-			struct mtrace_label_entry *l = 
-				(struct mtrace_label_entry *) malloc(sizeof(*l));
+			struct mtrace_label_entry *l = &alloc_entry()->label;
 
 			l->h.type = mtrace_entry_label;
 			l->h.access_count = 0;
@@ -1218,6 +1257,8 @@ int main(int ac, char **av)
 {
 	void *arg;
         gzFile log;
+
+	init_entry_alloc();
 
 	if (ac != 4)
 		die("usage: %s mtrace-log-file symbol-file database", av[0]);
