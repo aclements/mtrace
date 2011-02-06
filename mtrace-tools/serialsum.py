@@ -126,7 +126,7 @@ def get_col_value(lock, col):
         return str(lock.get_exclusive_hold_time())
 
     def get_percent():
-        return '%.2f' % ((lock.get_exclusive_hold_time() * 100.0) / SUMMARY.work)
+        return '%.2f' % ((lock.get_exclusive_hold_time() * 100.0) / SUMMARY.maxWork)
 
     def get_cpus():
         cpuTable = lock.get_cpus()
@@ -141,7 +141,7 @@ def get_col_value(lock, col):
     def get_tids():
         tids = lock.get_tids()
         tidsPercent = ''
-        totPercent = (lock.get_exclusive_hold_time() * 100.0) / float(SUMMARY.work)
+        totPercent = (lock.get_exclusive_hold_time() * 100.0) / float(SUMMARY.maxWork)
         for tid in tids.keys():
             time = tids[tid]
             tidsPercent += '%lu:%.2f%% ' % (tid, (time * 100.0) / lock.get_exclusive_hold_time())
@@ -158,6 +158,9 @@ def get_col_value(lock, col):
     return colValueFuncs[col]()
     
 
+def amdahlScale(p, n):
+    return (1.0 / ((1.0 - p) + (p / n)))
+
 def main(argv = None):
     if argv is None:
         argv = sys.argv
@@ -170,13 +173,11 @@ def main(argv = None):
 
     global SUMMARY
     SUMMARY = mtracepy.summary.MtraceSummary(dbFile, dataName)
-    duration = SUMMARY.work
     
     tidSet = {}
 
     locks = mtracepy.lock.get_locks(dbFile, dataName)
     locks.extend(mtracepy.harcrit.get_harcrits(dbFile, dataName));
-
     locks = sorted(locks, key=lambda l: l.get_exclusive_hold_time(), reverse=True)
     locks = apply_filters(locks, DEFAULT_FILTERS)
 
@@ -189,11 +190,26 @@ def main(argv = None):
     print headerStr
     print borderStr
 
+    maxHoldTime = 0
     for l in locks:
+        if maxHoldTime < l.get_exclusive_hold_time():
+            maxHoldTime = l.get_exclusive_hold_time()
         valStr = '%-40s  %16lu  %16lx' % (l.get_name(), l.get_label_id(), uhex(l.get_lock()))
         for col in PRINT_COLS:
             valStr += '  %16s' % get_col_value(l, col)
         print valStr
+
+    maxSerial = float(maxHoldTime) / float(SUMMARY.maxWork)
+    maxAmdahl = 1.0 / (float(maxHoldTime) / float(SUMMARY.maxWork))
+    minAmdahl = (float(SUMMARY.minWork) / float(SUMMARY.maxWork)) * maxAmdahl
+    
+    print 'max amdahl %.2f' % maxAmdahl
+    print 'min amdahl %.2f' % minAmdahl
+    print '#%s\t%s\t%s' % ('core', 'min', 'max')
+    for i in range(2, 49):
+        amMax = amdahlScale(1 - maxSerial, i)
+        amMin = (float(SUMMARY.minWork) / float(SUMMARY.maxWork)) * amMax
+        print '%u\t%f\t%f' % (i, amMin, amMax)
 
 if __name__ == "__main__":
     sys.exit(main())

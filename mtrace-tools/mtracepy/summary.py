@@ -9,6 +9,9 @@ class MtraceSummary:
         self.numCpus = None
         self.numRam = None
         self.tsOffset = None
+        self.numOps = None
+        self.minWork = None
+        self.maxWork = None
 
         conn = sqlite3.connect(dbFile)
         c = conn.cursor()
@@ -31,23 +34,27 @@ class MtraceSummary:
         self.numCpus = row[4]
         self.numRam = row[5]
         self.tscOffset = []
+        offsetSum = 0;
         for offset in row[6:10]:
             self.tscOffset.append(offset)
+            offsetSum += offset
         self.numOps = row[10]
 
-        self.work = self.endTs - self.startTs - self.spinTime
+        self.minWork = self.endTs - self.startTs - self.spinTime
+        self.maxWork = self.minWork + offsetSum
 
     def __str__(self):
         s = ''
         s += '  %-16s %lu\n' % ('cycles', self.endTs - self.startTs)
-        s += '  %-16s %lu\n' % ('num ops', self.numOps)
-        s += '  %-16s %lu\n' % ('work', self.work)
         s += '  %-16s %lu\n' % ('spin', self.spinTime)
+        s += '  %-16s %lu\n' % ('min work', self.minWork)
+        s += '  %-16s %lu\n' % ('max work', self.maxWork)
         s += '  %-16s %lu\n' % ('miss delay', self.missDelay)
         i = 0
         for offset in self.tscOffset:
             s += '  %-16s %lu\n' % ('%u tsc offset' % i, offset)
             i += 1
+        s += '  %-16s %lu\n' % ('num ops', self.numOps)
         s += '  %-16s %lu\n' % ('num cpus', self.numCpus)
         s += '  %-16s %lu' % ('num ram', self.numRam)
         return s
