@@ -238,9 +238,8 @@ static inline void free_entry(void *entry)
 
 static inline void init_entry_alloc(void)
 {
-	balloc_init(sizeof(union mtrace_entry), 1024 * 1024, &the_pool);
+	balloc_init(sizeof(union mtrace_entry), 16 * 1024 * 1024, &the_pool);
 }
-
 #endif
 
 static int should_save_entry(struct mtrace_entry_header *h)
