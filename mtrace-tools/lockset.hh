@@ -9,6 +9,8 @@ struct CriticalSection {
 	int 	 read_mode_;
 	int	 start_cpu_;
 	uint64_t id_;
+	uint64_t locked_accesses_;
+	uint64_t traffic_accesses_;
 	char	 str_[32];
 };
 
@@ -16,15 +18,16 @@ class LockSet {
 private:
 	struct LockState {
 		LockState(struct mtrace_lock_entry *l, uint64_t id) {
-			lock_ = l->lock;
-			read_ = l->read;
-			acquire_ts_ = l->h.ts;
+			cs_.spin_time_ = 0;
+			cs_.read_mode_ = l->read;
+			cs_.acquire_ts_ = l->h.ts;
+			cs_.start_cpu_ = l->h.cpu;
+			cs_.pc_ = l->pc;
+			cs_.id_ = id;
+			strcpy(cs_.str_, l->str);
+
 			acquired_ts_ = 0;
-			start_cpu_ = l->h.cpu;
-			pc_ = l->pc;
-			id_ = id;
 			n_ = 0;
-			strcpy(str_, l->str);
 		}
 
 		// Returns 1 if no longer held and fills in cs
@@ -44,40 +47,28 @@ private:
 		}
 
 		void acquired(struct mtrace_lock_entry *l) {
-			if (acquired_ts_ == 0)
+			if (acquired_ts_ == 0) {
 				acquired_ts_ = l->h.ts;
+				cs_.spin_time_ = acquired_ts_ - cs_.acquire_ts_;
+				cs_.acquire_ts_ = acquired_ts_;
+			}
 		}
 
 		void get_critical_section(CriticalSection *cs) {
-			cs->spin_time_ = 0;
-			// The trylock code (e.g. __raw_spin_trylock in spinlock_api_smp.h.)
-			// calls lock_acquire if the lock is successfully acquired and never
-			// calls lock_acquired.
-			//
-			// The mtrace entry should probably include a 'trylock' flag, but
-			// for now this hack is sufficient.
-			cs->acquire_ts_ = acquire_ts_;
-			if (acquired_ts_) {
-				cs->acquire_ts_ = acquired_ts_;
-				cs->spin_time_ = acquired_ts_ - acquire_ts_;
-			}
-
-			cs->read_mode_ = read_;
-			cs->start_cpu_ = start_cpu_;
-			cs->id_ = id_;
-			cs->pc_ = pc_;
-			strcpy(cs->str_, str_);
+			memcpy(cs, &cs_, sizeof(*cs));
 		}
 
-		uint64_t lock_;
-		uint64_t acquire_ts_;
-		uint64_t pc_;
+		void on_access(struct mtrace_access_entry *a) {
+			if (a->traffic)
+				cs_.traffic_accesses_++;
+			else if (a->lock)
+				cs_.locked_accesses_++;
+		}
+
+		struct CriticalSection cs_;
+
 		uint64_t acquired_ts_;
-		uint64_t id_;
-		int start_cpu_;
-		int read_;
 		int n_;
-		char str_[32];
 	};
 
 	typedef hash_map<uint64_t, LockState *> LockStateTable;
@@ -134,6 +125,12 @@ public:
 			return;
 		}
 		it->second->acquired(lock);
+	}
+
+	void on_access(struct mtrace_access_entry *a) {
+		if (stack_.empty())
+			die("top: stack is empty");
+		stack_.front()->on_access(a);
 	}
 
 	bool empty(void) {

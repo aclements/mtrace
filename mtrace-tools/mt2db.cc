@@ -841,6 +841,7 @@ static void handle_access(struct mtrace_access_entry *a)
 
 			if (!ts->lock_set_.empty()) {
 				ts->lock_set_.top(&crit);
+				ts->lock_set_.on_access(a);
 				locked_id = crit.id_;
 			}
 		}
