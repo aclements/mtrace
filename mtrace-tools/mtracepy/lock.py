@@ -1,6 +1,7 @@
 import sqlite3
 from util import uhex
 import model
+import copy
 
 class MtraceSerialSection:
     
@@ -19,6 +20,31 @@ class MtraceSerialSection:
     def get_time(self):
         return self.endTs - self.startTs
 
+class MtraceSerialAggregate:
+    def __init__(self, cycles, lockedAccesses, trafficAccesses, num = 1):
+        self.cycles = cycles
+        self.lockedAccesses = lockedAccesses
+        self.trafficAccesses = trafficAccesses
+        self.num = num
+
+    def add(self, aggregate):
+        self.cycles += aggregate.cycles
+        self.lockedAccesses += aggregate.lockedAccesses
+        self.trafficAccesses += aggregate.trafficAccesses
+        self.num += aggregate.num
+
+    def time(self):
+        return (self.cycles +
+                (self.num * model.LOCK_LATENCY) +
+                (self.lockedAccesses * model.MISS_LATENCY) + 
+                (self.trafficAccesses * model.MISS_LATENCY))
+
+    def copy(self):
+        return copy.copy(self)
+
+    def __str__(self):
+        return '%lu %lu %lu %u' % (self.cycles, self.lockedAccesses, self.trafficAccesses, self.num)
+
 class MtraceLock:
     
     def __init__(self, labelType, labelId, lock, db, dataName):
@@ -28,10 +54,9 @@ class MtraceLock:
         self.db = db
         self.dataName = dataName
 
+        self.exclusive = None
         self.name = None
         self.holdTime = None
-        self.exclusiveHoldTime = None
-        self.readHoldTime = None
         self.tids = None
         self.cpus = None
         self.pcs = None
@@ -48,7 +73,9 @@ class MtraceLock:
         self.tids = {}
         self.pcs = {}
         self.holdTime = 0
-        self.exclusiveHoldTime = 0
+        self.exclusive = MtraceSerialAggregate(0, 0, 0, num = 0)
+
+        self.holdTime = 0
 
         # Sections
         q = '''SELECT id, start_ts, end_ts, start_cpu, read, tid, pc, str, 
@@ -65,28 +92,27 @@ class MtraceLock:
 
             section = MtraceSerialSection(row['id'], row['start_ts'], row['end_ts'], 
                                           row['start_cpu'], row['read'], row['tid'], row['pc'])
-            holdTime = ((section.endTs - section.startTs) + model.LOCK_LATENCY + 
-                        (row['locked_accesses'] * model.MISS_LATENCY) + 
-                        (row['traffic_accesses'] * model.MISS_LATENCY))
-            self.holdTime += holdTime
 
-            self.exclusiveHoldTime += holdTime
-            time = holdTime
+            agg = MtraceSerialAggregate(section.endTs - section.startTs,
+                                        row['locked_accesses'],
+                                        row['traffic_accesses'])
+
+            self.exclusive.add(agg)
+
             if section.tid in self.tids:
-                time += self.tids[section.tid]
-            self.tids[section.tid] = time
+                self.tids[section.tid].add(agg)
+            else:
+                self.tids[section.tid] = agg.copy()
 
-            time = holdTime
             if section.startCpu in self.cpus:
-                time += self.cpus[section.startCpu]
-            self.cpus[section.startCpu] = time
+                self.cpus[section.startCpu].add(agg)
+            else:
+                self.cpus[section.startCpu] = agg.copy()
 
-            entry = [ holdTime, 1]
             if section.pc in self.pcs:
-                old = self.pcs[section.pc]
-                entry = [ old[0] + holdTime,
-                          old[1] + 1 ]
-            self.pcs[section.pc] = entry
+                self.pcs[section.pc].add(agg)
+            else:
+                self.pcs[section.pc] = agg.copy()
 
         # Name (label str and lock str)
         q = '''SELECT str FROM %s_locked_sections WHERE label_id = %lu and lock = %lu LIMIT 1'''
@@ -116,9 +142,9 @@ class MtraceLock:
     def get_hold_time(self):
         self.__init_state()
         return self.holdTime
-    def get_exclusive_hold_time(self):
+    def get_exclusive_stats(self):
         self.__init_state()
-        return self.exclusiveHoldTime
+        return self.exclusive
     def get_name(self):
         self.__init_state()
         return self.name

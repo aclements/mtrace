@@ -3,6 +3,28 @@ import summary
 import lock
 from util import uhex
 import model
+import copy
+
+class MtraceAccessSample:
+    def __init__(self, traffic, locked, num = 1):
+        self.traffic = traffic
+        self.locked = locked
+        self.num = num
+
+    def add(self, aggregate):
+        self.traffic += aggregate.traffic
+        self.locked += aggregate.locked
+        self.num += aggregate.num
+
+    def time(self):
+        return ((self.traffic * model.MISS_LATENCY) + 
+                (self.locked * model.MISS_LATENCY))
+
+    def copy(self):
+        return copy.copy(self)
+
+    def __str__(self):
+        return '%lu %lu %lu %u' % (self.traffic, self.locked, self.num)
 
 class MtraceHarcrit:
 
@@ -15,7 +37,7 @@ class MtraceHarcrit:
 
         self.lock = 0
 
-        self.exclusiveHoldTime = None
+        self.exclusive = None
         self.name = None
         self.tids = None
         self.cpus = None
@@ -27,10 +49,11 @@ class MtraceHarcrit:
             return
 
         c = self.conn.cursor()
-        self.exclusiveHoldTime = 0
+
         self.cpus = {}
         self.tids = {}
         self.pcs = {}
+        self.exclusive = MtraceAccessSample(0, 0, num = 0)
 
         q = 'SELECT access_id, tid, cpu, pc from %s_accesses WHERE label_id = %lu AND locked_id = 0'
         q = q % (self.dataName, self.labelId)
@@ -38,24 +61,25 @@ class MtraceHarcrit:
         for row in c:
             section = lock.MtraceSerialSection(row[0], 0, self.missDelay, 
                                                row[2], 0, row[1], row[3])
-            self.exclusiveHoldTime += self.missDelay
 
-            time = self.missDelay
+            agg = MtraceAccessSample(1, 0)
+
+            self.exclusive.add(agg)
+
             if section.tid in self.tids:
-                time += self.tids[section.tid]
-            self.tids[section.tid] = time
+                self.tids[section.tid].add(agg)
+            else:
+                self.tids[section.tid] = agg.copy()
 
-            time = self.missDelay
             if section.startCpu in self.cpus:
-                time += self.cpus[section.startCpu]
-            self.cpus[section.startCpu] = time
+                self.cpus[section.startCpu].add(agg)
+            else:
+                self.cpus[section.startCpu] = agg.copy()
 
-            entry = [ self.missDelay, 1 ]
             if section.pc in self.pcs:
-                old = self.pcs[section.pc]
-                entry = [ old[0] + self.missDelay, 
-                          old[1] + 1 ]
-            self.pcs[section.pc] = entry
+                self.pcs[section.pc].add(agg)
+            else:
+                self.pcs[section.pc] = agg.copy()
         
         # Name
         q = 'SELECT str FROM %s_labels%u WHERE label_id = %lu'
@@ -70,9 +94,9 @@ class MtraceHarcrit:
 
         self.inited = True
 
-    def get_exclusive_hold_time(self):
+    def get_exclusive_stats(self):
         self.__init_state()
-        return self.exclusiveHoldTime
+        return self.exclusive
     def get_name(self):
         self.__init_state()
         return self.name

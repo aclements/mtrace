@@ -112,7 +112,7 @@ def get_col_value(lock, col):
     def get_pc():
         '''Return the PC of the most costly section'''
         pcs = lock.get_pcs()
-        pc = sorted(pcs.keys(), key=lambda k: pcs[k][0], reverse=True)[0]
+        pc = sorted(pcs.keys(), key=lambda k: pcs[k].time(), reverse=True)[0]
         pc = '%016lx' % uhex(pc)
         if DEFAULT_ADDR2LINE:
             s = '  %s  %-64s  %s' % (pc, 
@@ -123,28 +123,28 @@ def get_col_value(lock, col):
             return pc
        
     def get_length():
-        return str(lock.get_exclusive_hold_time())
+        return str(lock.get_exclusive_stats().time())
 
     def get_percent():
-        return '%.2f' % ((lock.get_exclusive_hold_time() * 100.0) / SUMMARY.maxWork)
+        return '%.2f' % ((lock.get_exclusive_stats().time() * 100.0) / SUMMARY.maxWork)
 
     def get_cpus():
         cpuTable = lock.get_cpus()
         cpus = cpuTable.keys()
         time = cpuTable[cpus[0]]
-        cpuString = '%u:%.2f%%' % (cpus[0], (time * 100.0) / lock.get_exclusive_hold_time())
+        cpuString = '%u:%.2f%%' % (cpus[0], (time * 100.0) / lock.get_exclusive_stats().time())
         for cpu in cpus[1:]:
             time = cpuTable[cpu]
-            cpuString += ' %u:%.2f%%' % (cpu, (time * 100.0) / lock.get_exclusive_hold_time())
+            cpuString += ' %u:%.2f%%' % (cpu, (time * 100.0) / lock.get_exclusive_stats().time())
         return cpuString
 
     def get_tids():
         tids = lock.get_tids()
         tidsPercent = ''
-        totPercent = (lock.get_exclusive_hold_time() * 100.0) / float(SUMMARY.maxWork)
+        totPercent = (lock.get_exclusive_stats().time() * 100.0) / float(SUMMARY.maxWork)
         for tid in tids.keys():
             time = tids[tid]
-            tidsPercent += '%lu:%.2f%% ' % (tid, (time * 100.0) / lock.get_exclusive_hold_time())
+            tidsPercent += '%lu:%.2f%% ' % (tid, (time * 100.0) / lock.get_exclusive_stats().time())
         return tidsPercent
 
     colValueFuncs = {
@@ -178,7 +178,7 @@ def main(argv = None):
 
     locks = mtracepy.lock.get_locks(dbFile, dataName)
     locks.extend(mtracepy.harcrit.get_harcrits(dbFile, dataName));
-    locks = sorted(locks, key=lambda l: l.get_exclusive_hold_time(), reverse=True)
+    locks = sorted(locks, key=lambda l: l.get_exclusive_stats().time(), reverse=True)
     locks = apply_filters(locks, DEFAULT_FILTERS)
 
     headerStr = '%-40s  %16s  %16s' % ('name', 'id', 'lock')
@@ -192,8 +192,8 @@ def main(argv = None):
 
     maxHoldTime = 0
     for l in locks:
-        if maxHoldTime < l.get_exclusive_hold_time():
-            maxHoldTime = l.get_exclusive_hold_time()
+        if maxHoldTime < l.get_exclusive_stats().time():
+            maxHoldTime = l.get_exclusive_stats().time()
         valStr = '%-40s  %16lu  %16lx' % (l.get_name(), l.get_label_id(), uhex(l.get_lock()))
         for col in PRINT_COLS:
             valStr += '  %16s' % get_col_value(l, col)
