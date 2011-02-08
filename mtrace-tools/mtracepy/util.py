@@ -1,4 +1,6 @@
 import sqlite3
+import hashlib
+import sys
 
 mtrace_label_heap       = 1
 mtrace_label_block      = 2
@@ -13,6 +15,21 @@ mtrace_label_str        =  { mtrace_label_heap   : 'heap',
 # XXX there must be a better way..
 def uhex(i):
     return (i & 0xffffffffffffffff)
+
+def checksum(fileName, maxBytes = sys.maxint):
+    f = open(fileName,"rb")
+    m = hashlib.md5()
+    while True:
+        bc = min(maxBytes, 256)
+        bytes = f.read(bc)
+        if bytes == '':
+            break
+        m.update(bytes)
+        maxBytes -= bc
+        if maxBytes == 0:
+            break
+    f.close()
+    return m.digest()
 
 class SelectRow:
     def __init__(cols, row):

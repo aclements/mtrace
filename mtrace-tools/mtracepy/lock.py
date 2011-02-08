@@ -47,11 +47,11 @@ class MtraceSerialAggregate:
 
 class MtraceLock:
     
-    def __init__(self, labelType, labelId, lock, db, dataName):
+    def __init__(self, labelType, labelId, lock, dbFile, dataName):
         self.labelType = labelType
         self.labelId = labelId
         self.lock = lock
-        self.db = db
+        self.dbFile = dbFile
         self.dataName = dataName
 
         self.exclusive = None
@@ -84,7 +84,9 @@ class MtraceLock:
         q = q % (self.dataName,
                  self.labelId,
                  self.lock)
-        c = self.db.cursor()
+        conn = sqlite3.connect(self.dbFile)
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
         c.execute(q)
         for row in c:
             if row[4] >= 1:
@@ -119,7 +121,7 @@ class MtraceLock:
         q = q % (self.dataName,
                  self.labelId,
                  self.lock)
-        c = self.db.cursor()
+        c = conn.cursor()
         c.execute(q)
         lockStr = c.fetchone()['str']
 
@@ -133,6 +135,7 @@ class MtraceLock:
             raise Exception('%s returned %u rows' % (query, len(rs)))
         self.name = rs[0][0] + ':' + lockStr
 
+        conn.close()
         self.inited = True
 
     def get_label_id(self):
@@ -170,5 +173,6 @@ def get_locks(dbFile, dataName):
     for row in c:
         if row[0] == 0:
             continue
-        lst.append(MtraceLock(row[0], row[1], row[2], conn, dataName))
+        lst.append(MtraceLock(row[0], row[1], row[2], dbFile, dataName))
+    conn.close()
     return lst

@@ -3,10 +3,13 @@
 import mtracepy.lock
 import mtracepy.harcrit
 import mtracepy.summary
-from mtracepy.util import uhex
+from mtracepy.util import uhex, checksum
 from mtracepy.addr2line import Addr2Line
 import sqlite3
 import sys
+import pickle
+import os
+import errno
 
 DEFAULT_FILTERS         = []
 DEFAULT_COLS            = ['pc', 'length', 'percent']
@@ -158,6 +161,57 @@ def get_col_value(lock, col):
     return colValueFuncs[col]()
     
 
+class MtraceSerials:
+    def __init__(self, dbFile, dataName):
+        self.dataName = dataName
+        self.dbFile = dbFile
+        self.csum = None
+
+        self.serials = mtracepy.lock.get_locks(dbFile, dataName)
+        self.serials.extend(mtracepy.harcrit.get_harcrits(dbFile, dataName));
+        self.serials = sorted(self.serials, 
+                              key=lambda l: l.get_exclusive_stats().time(), 
+                              reverse=True)
+
+    def close(self, pickleDir):
+        if self.csum == None:
+            self.csum = checksum(self.dbFile)
+
+        base, ext = os.path.splitext(self.dbFile)
+        base = os.path.basename(base)
+        picklePath = pickleDir + '/' + base + '-' + self.dataName + '.pkl'
+       
+        output = open(picklePath, 'wb')
+        pickle.dump(self, output)
+        output.close()
+
+def open_serials(dbFile, dataName, pickleDir):
+    base, ext = os.path.splitext(dbFile)
+    base = os.path.basename(base)
+    picklePath = pickleDir + '/' + base + '-' + dataName + '.pkl'
+
+    serials = None
+    try:
+        pickleFile = open(picklePath, 'r')
+        serials = pickle.load(pickleFile)
+
+        if serials.dataName != dataName:
+            raise Exception('unexpected dataName')
+        if serials.csum != checksum(dbFile):
+            raise Exception('checksum mismatch: stale pickle?')
+
+        # This following members are ephemeral
+        serials.dbFile = dbFile
+
+        pickleFile.close()
+    except IOError, e:
+        if e.errno != errno.ENOENT:
+            raise
+        serials = MtraceSerials(dbFile, dataName)
+
+    return serials
+
+
 def amdahlScale(p, n):
     return (1.0 / ((1.0 - p) + (p / n)))
 
@@ -173,13 +227,8 @@ def main(argv = None):
 
     global SUMMARY
     SUMMARY = mtracepy.summary.MtraceSummary(dbFile, dataName)
-    
-    tidSet = {}
 
-    locks = mtracepy.lock.get_locks(dbFile, dataName)
-    locks.extend(mtracepy.harcrit.get_harcrits(dbFile, dataName));
-    locks = sorted(locks, key=lambda l: l.get_exclusive_stats().time(), reverse=True)
-    locks = apply_filters(locks, DEFAULT_FILTERS)
+    serials = open_serials(dbFile, dataName, '.')
 
     headerStr = '%-40s  %16s  %16s' % ('name', 'id', 'lock')
     borderStr = '%-40s  %16s  %16s' % ('----', '--', '----')
@@ -190,13 +239,16 @@ def main(argv = None):
     print headerStr
     print borderStr
 
+
     maxHoldTime = 0
-    for l in locks:
-        if maxHoldTime < l.get_exclusive_stats().time():
-            maxHoldTime = l.get_exclusive_stats().time()
-        valStr = '%-40s  %16lu  %16lx' % (l.get_name(), l.get_label_id(), uhex(l.get_lock()))
+
+    for s in apply_filters(serials.serials, DEFAULT_FILTERS):
+        if maxHoldTime < s.get_exclusive_stats().time():
+           maxHoldTime = s.get_exclusive_stats().time()
+
+        valStr = '%-40s  %16lu  %16lx' % (s.get_name(), s.get_label_id(), uhex(s.get_lock()))
         for col in PRINT_COLS:
-            valStr += '  %16s' % get_col_value(l, col)
+            valStr += '  %16s' % get_col_value(s, col)
         print valStr
 
     maxSerial = float(maxHoldTime) / float(SUMMARY.maxWork)
@@ -211,6 +263,8 @@ def main(argv = None):
         amMax = amdahlScale(1 - maxSerial, i)
         amMin = (float(SUMMARY.minWork) / float(SUMMARY.maxWork)) * amMax
         print '%u\t%f\t%f' % (i, amMin, amMax)
+
+    serials.close('.')
 
 if __name__ == "__main__":
     sys.exit(main())

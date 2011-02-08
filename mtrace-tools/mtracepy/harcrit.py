@@ -28,10 +28,10 @@ class MtraceAccessSample:
 
 class MtraceHarcrit:
 
-    def __init__(self, labelType, labelId, conn, dataName, missDelay):
+    def __init__(self, labelType, labelId, dbFile, dataName, missDelay):
         self.labelType = labelType
         self.labelId = labelId
-        self.conn = conn
+        self.dbFile = dbFile
         self.dataName = dataName
         self.missDelay = missDelay
 
@@ -48,7 +48,9 @@ class MtraceHarcrit:
         if self.inited:
             return
 
-        c = self.conn.cursor()
+        conn = sqlite3.connect(self.dbFile)
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
 
         self.cpus = {}
         self.tids = {}
@@ -92,6 +94,7 @@ class MtraceHarcrit:
             raise Exception('%s returned %u rows' % (query, len(rs)))
         self.name = rs[0][0]
 
+        conn.close()
         self.inited = True
 
     def get_exclusive_stats(self):
@@ -127,5 +130,6 @@ def get_harcrits(dbFile, dataName):
     for row in c:
         if row[0] == 0:
             continue
-        lst.append(MtraceHarcrit(row[0], row[1], conn, dataName, model.MISS_LATENCY))
+        lst.append(MtraceHarcrit(row[0], row[1], dbFile, dataName, model.MISS_LATENCY))
+    conn.close()
     return lst
