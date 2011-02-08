@@ -1,3 +1,5 @@
+import sqlite3
+
 mtrace_label_heap       = 1
 mtrace_label_block      = 2
 mtrace_label_static     = 3
@@ -17,7 +19,7 @@ class SelectRow:
         pass
 
 class MtraceDB:
-    def __init__(self, dbFile, dataName = None):
+    def __init__(self, dbFile):
         self.dbFile = dbFile
         self.conn = sqlite3.connect(self.dbFile)
         self.dataName = dataName
@@ -31,14 +33,3 @@ class MtraceDB:
         r = rs[0]
         c.close()
         return r
-
-    def select(self, table, cols, where):
-        selectCols = cols[0]
-        for col in cols[1:]:
-            selectCols += ', ' + col
-        q = 'SELECT %s FROM %s_%s WHERE %s' % (selectCols,
-                                               self.dataName,
-                                               self.table,
-                                               where)
-        print q
-        exit(1)

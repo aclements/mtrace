@@ -14,11 +14,14 @@ class MtraceSummary:
         self.maxWork = None
 
         conn = sqlite3.connect(dbFile)
+        conn.row_factory = sqlite3.Row
         c = conn.cursor()
     
-        q = '''SELECT start_ts, end_ts, spin_locked_accesses, spin_locked_accesses, 
-               num_cpus, num_ram, locked_accesses, traffic_accesses, 
-               locked_accesses, traffic_accesses, num_ops, spin_traffic_accesses, spin_cycles, lock_acquires FROM %s_summary'''
+        q = '''SELECT start_ts, end_ts, spin_locked_accesses, 
+               spin_traffic_accesses, spin_cycles,
+               num_cpus, num_ram, locked_accesses, 
+               traffic_accesses, locked_accesses, num_ops, 
+               lock_acquires FROM %s_summary'''
         q = q % (dataName)
         c.execute(q)
 
@@ -26,14 +29,14 @@ class MtraceSummary:
         if len(rs) != 1:
             raise Exception('%s returned %u rows' % (q, len(rs)))
         row = rs[0]
-        
-        self.startTs = row[0]
-        self.endTs = row[1]
-        self.spinTime = row[12] + (row[2] + row[11]) * model.MISS_LATENCY
-        self.numCpus = row[4]
-        self.numRam = row[5]
-        offsetSum = ((row[6] + row[7]) * model.MISS_LATENCY) + (row[11] * model.LOCK_LATENCY)
-        self.numOps = row[10]
+ 
+        self.startTs = row['start_ts']
+        self.endTs = row['end_ts']
+        self.spinTime = row['spin_cycles'] + (row['spin_locked_accesses'] + row['spin_traffic_accesses']) * model.MISS_LATENCY
+        self.numCpus = row['num_cpus']
+        self.numRam = row['num_ram']
+        offsetSum = ((row['traffic_accesses'] + row['locked_accesses']) * model.MISS_LATENCY) + (row['lock_acquires'] * model.LOCK_LATENCY)
+        self.numOps = row['num_ops']
 
         self.minWork = self.endTs - self.startTs - self.spinTime
         self.maxWork = self.minWork + offsetSum
