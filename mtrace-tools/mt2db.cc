@@ -561,6 +561,8 @@ static void build_locked_sections_db(void *arg, const char *name)
 			  ls.end_ts_,
 			  ls.cs_.start_cpu_,
 			  ls.cs_.read_mode_,
+			  ls.cs_.locked_accesses_,
+			  ls.cs_.traffic_accesses_,
 			  ls.tid_);
 
 		locked_sections.pop_front();

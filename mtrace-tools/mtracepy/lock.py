@@ -55,8 +55,8 @@ class MtraceLock:
         c = self.db.cursor()
 
         # Sections
-        q = 'SELECT id, start_ts, end_ts, start_cpu, read, tid, pc, str FROM %s_locked_sections WHERE ' + \
-            'label_id = %lu and lock = %lu'
+        q = '''SELECT id, start_ts, end_ts, start_cpu, read, tid, pc, str 
+               FROM %s_locked_sections WHERE label_id = %lu and lock = %lu'''
         q = q % (self.dataName,
                  self.labelId,
                  self.lock)
