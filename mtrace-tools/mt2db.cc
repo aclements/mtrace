@@ -58,8 +58,6 @@ uint64_t CallTrace::call_interval_count;
 using namespace::std;
 using namespace::__gnu_cxx;
 
-#define MISS_DELAY	200
-#define LOCK_DELAY	500
 #define MAX_CPU		4
 #define ONE_SHOT 	1
 
@@ -199,12 +197,16 @@ static uint64_t 	current_tid[MAX_CPU];
 
 static struct {
 	uint64_t last_ts;
-	uint64_t ts_offset;
 } timekeeper[MAX_CPU];
 
 static struct {
 	struct mtrace_machine_entry machine;
-	uint64_t spin_time;
+	uint64_t spin_locked_accesses;
+	uint64_t spin_traffic_accesses;
+	uint64_t locked_accesses;
+	uint64_t traffic_accesses;
+	uint64_t lock_acquires;
+	uint64_t spin_cycles;
 	uint64_t num_ops;
 } summary;
 
@@ -585,10 +587,10 @@ static void build_summary_db(void *arg, const char *name,
 	exec_stmt(db, NULL, NULL, CREATE_SUMMARY_TABLE, name);
 	exec_stmt(db, NULL, NULL, INSERT_SUMMARY, name,
 		  summary.machine.num_cpus, summary.machine.num_ram,
-		  start->global_ts, end->global_ts, summary.spin_time, MISS_DELAY,
-		  timekeeper[0].ts_offset, timekeeper[1].ts_offset,
-		  timekeeper[2].ts_offset, timekeeper[3].ts_offset,
-		  summary.num_ops);
+		  start->global_ts, end->global_ts, summary.spin_cycles, 
+		  summary.spin_locked_accesses, summary.spin_traffic_accesses,
+		  summary.locked_accesses, summary.traffic_accesses,
+		  summary.lock_acquires, summary.num_ops);
 }
 
 static void complete_outstanding_labels(void)
@@ -832,22 +834,31 @@ static void handle_access(struct mtrace_access_entry *a)
 	if (current_stack[a->h.cpu]) {
 		CallTrace *cs = current_stack[a->h.cpu];
 		call_trace_tag = cs->start_->tag;
-		tid = cs->start_->tid;
+	}
 
+	tid = current_tid[a->h.cpu];
+	if (tid != 0) {
 		TaskTable::iterator it = task_table.find(tid);	
-		if (it != task_table.end()) {
-			CriticalSection crit;
-			TaskState *ts;
+		CriticalSection crit;
+		TaskState *ts;
 
-			ts = it->second;
+		if (it == task_table.end())
+			die("handle_access: missing task");
 
-			if (!ts->lock_set_.empty()) {
-				ts->lock_set_.top(&crit);
-				ts->lock_set_.on_access(a);
-				locked_id = crit.id_;
-			}
+		ts = it->second;
+		if (!ts->lock_set_.empty()) {
+			ts->lock_set_.on_access(a);
+			ts->lock_set_.top(&crit);
+			locked_id = crit.id_;
 		}
 	}
+
+	if (a->traffic)
+		summary.traffic_accesses++;
+	else if (a->lock)
+		summary.locked_accesses++;
+	else
+		die("handle_access: bad access");
 
 	get_object(a->guest_addr, &label_type, &label_id);
 	accesses.push_back(Access(a, call_trace_tag, tid, label_type, label_id, locked_id));
@@ -1053,16 +1064,18 @@ static void handle_lock(struct mtrace_lock_entry *lock)
 			if (cs.start_cpu_ != lock->h.cpu)
 				die("handle_lock: cpu mismatch");
 
-			summary.spin_time += cs.spin_time_;
+			summary.spin_locked_accesses += cs.spin_locked_accesses_;
+			summary.spin_traffic_accesses += cs.spin_traffic_accesses_;
+			summary.spin_cycles += cs.spin_cycles_;
 
 			get_object(lock->lock, &label_type, &label_id);
 			locked_sections.push_back(LockedSection(lock->lock,
 								label_type,
 								label_id,
-								lock->h.ts + LOCK_DELAY,
+								lock->h.ts,
 								tid,
 								&cs));
-			timekeeper[lock->h.cpu].ts_offset += LOCK_DELAY;
+			summary.lock_acquires++;
 		}
 		break;
 	}
@@ -1089,15 +1102,13 @@ static void handle_ts(union mtrace_entry *entry)
 		return;
 
 	cpu = entry->h.cpu;
-	if (entry->h.type == mtrace_entry_access) {
-		timekeeper[cpu].ts_offset += MISS_DELAY;
+	if (entry->h.type == mtrace_entry_access)
 		return;
-	}
-	entry->h.ts += timekeeper[cpu].ts_offset;
 
 	if (timekeeper[cpu].last_ts >= entry->h.ts) {
-		die("handle_ts: CPU %u backwards ts %lu -> %lu", 
-		    cpu, timekeeper[cpu].last_ts, entry->h.ts);
+		printf("handle_ts: CPU %u backwards ts %lu -> %lu\n",
+		       cpu, timekeeper[cpu].last_ts, entry->h.ts);
+		return;
 	}
 	timekeeper[cpu].last_ts = entry->h.ts;
 }

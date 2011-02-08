@@ -4,7 +4,9 @@ using namespace::__gnu_cxx;
 
 struct CriticalSection {
 	uint64_t acquire_ts_;
-	uint64_t spin_time_;
+	uint64_t spin_locked_accesses_;
+	uint64_t spin_traffic_accesses_;
+	uint64_t spin_cycles_;
 	uint64_t pc_;
 	int 	 read_mode_;
 	int	 start_cpu_;
@@ -18,7 +20,8 @@ class LockSet {
 private:
 	struct LockState {
 		LockState(struct mtrace_lock_entry *l, uint64_t id) {
-			cs_.spin_time_ = 0;
+			memset(&cs_, 0, sizeof(cs_));
+
 			cs_.read_mode_ = l->read;
 			cs_.acquire_ts_ = l->h.ts;
 			cs_.start_cpu_ = l->h.cpu;
@@ -49,7 +52,12 @@ private:
 		void acquired(struct mtrace_lock_entry *l) {
 			if (acquired_ts_ == 0) {
 				acquired_ts_ = l->h.ts;
-				cs_.spin_time_ = acquired_ts_ - cs_.acquire_ts_;
+
+				cs_.spin_cycles_ = acquired_ts_ - cs_.acquire_ts_;
+				cs_.spin_locked_accesses_ = cs_.locked_accesses_;
+				cs_.spin_traffic_accesses_ = cs_.traffic_accesses_;
+				cs_.locked_accesses_ = 0;
+				cs_.traffic_accesses_ = 0;
 				cs_.acquire_ts_ = acquired_ts_;
 			}
 		}
@@ -63,6 +71,8 @@ private:
 				cs_.traffic_accesses_++;
 			else if (a->lock)
 				cs_.locked_accesses_++;
+			else
+				die("on_access: bad access");
 		}
 
 		struct CriticalSection cs_;

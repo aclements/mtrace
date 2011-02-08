@@ -2,6 +2,7 @@ import sqlite3
 import summary
 import lock
 from util import uhex
+import model
 
 class MtraceHarcrit:
 
@@ -108,11 +109,9 @@ def get_harcrits(dbFile, dataName):
     q = q % (dataName)
     c.execute(q)
 
-    s = summary.MtraceSummary(dbFile, dataName)
-
     lst = []
     for row in c:
         if row[0] == 0:
             continue
-        lst.append(MtraceHarcrit(row[0], row[1], conn, dataName, s.missDelay))
+        lst.append(MtraceHarcrit(row[0], row[1], conn, dataName, model.MISS_LATENCY))
     return lst

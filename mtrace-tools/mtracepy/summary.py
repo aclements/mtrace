@@ -1,11 +1,11 @@
 import sqlite3
+import model
 
 class MtraceSummary:
 
     def __init__(self, dbFile, dataName):
         self.startTs = None
         self.endTs = None
-        self.missDelay = None
         self.numCpus = None
         self.numRam = None
         self.tsOffset = None
@@ -16,9 +16,9 @@ class MtraceSummary:
         conn = sqlite3.connect(dbFile)
         c = conn.cursor()
     
-        q = '''SELECT start_ts, end_ts, spin_time, miss_delay, 
-               num_cpus, num_ram, cpu0_ts_offset, cpu1_ts_offset, 
-               cpu2_ts_offset, cpu3_ts_offset, num_ops FROM %s_summary'''
+        q = '''SELECT start_ts, end_ts, spin_locked_accesses, spin_locked_accesses, 
+               num_cpus, num_ram, locked_accesses, traffic_accesses, 
+               locked_accesses, traffic_accesses, num_ops, spin_traffic_accesses, spin_cycles, lock_acquires FROM %s_summary'''
         q = q % (dataName)
         c.execute(q)
 
@@ -29,15 +29,10 @@ class MtraceSummary:
         
         self.startTs = row[0]
         self.endTs = row[1]
-        self.spinTime = row[2]
-        self.missDelay = row[3]
+        self.spinTime = row[12] + (row[2] + row[11]) * model.MISS_LATENCY
         self.numCpus = row[4]
         self.numRam = row[5]
-        self.tscOffset = []
-        offsetSum = 0;
-        for offset in row[6:10]:
-            self.tscOffset.append(offset)
-            offsetSum += offset
+        offsetSum = ((row[6] + row[7]) * model.MISS_LATENCY) + (row[11] * model.LOCK_LATENCY)
         self.numOps = row[10]
 
         self.minWork = self.endTs - self.startTs - self.spinTime
@@ -49,11 +44,6 @@ class MtraceSummary:
         s += '  %-16s %lu\n' % ('spin', self.spinTime)
         s += '  %-16s %lu\n' % ('min work', self.minWork)
         s += '  %-16s %lu\n' % ('max work', self.maxWork)
-        s += '  %-16s %lu\n' % ('miss delay', self.missDelay)
-        i = 0
-        for offset in self.tscOffset:
-            s += '  %-16s %lu\n' % ('%u tsc offset' % i, offset)
-            i += 1
         s += '  %-16s %lu\n' % ('num ops', self.numOps)
         s += '  %-16s %lu\n' % ('num cpus', self.numCpus)
         s += '  %-16s %lu' % ('num ram', self.numRam)

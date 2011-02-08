@@ -1,5 +1,6 @@
 import sqlite3
 from util import uhex
+import model
 
 class MtraceSerialSection:
     
@@ -55,7 +56,7 @@ class MtraceLock:
         c = self.db.cursor()
 
         # Sections
-        q = '''SELECT id, start_ts, end_ts, start_cpu, read, tid, pc, str 
+        q = '''SELECT id, start_ts, end_ts, start_cpu, read, tid, pc, str, locked_accesses, traffic_accesses 
                FROM %s_locked_sections WHERE label_id = %lu and lock = %lu'''
         q = q % (self.dataName,
                  self.labelId,
@@ -66,7 +67,7 @@ class MtraceLock:
                 lockStr = row[7]
             section = MtraceSerialSection(row[0], row[1], row[2], 
                                           row[3], row[4], row[5], row[6])
-            holdTime = section.endTs - section.startTs
+            holdTime = (section.endTs - section.startTs) + model.LOCK_LATENCY + (row[8] * model.MISS_LATENCY) + (row[9] * model.MISS_LATENCY)
             self.holdTime += holdTime
             if section.read:
                 self.readHoldTime += holdTime

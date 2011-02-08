@@ -170,18 +170,19 @@
 	"num_ram		 INTEGER, "				\
 	"start_ts     		 INTEGER, "				\
 	"end_ts			 INTEGER, " 				\
-	"spin_time		 INTEGER, "				\
-	"miss_delay		 INTEGER, " 				\
-	"cpu0_ts_offset		 INTEGER, "				\
-	"cpu1_ts_offset		 INTEGER, "				\
-	"cpu2_ts_offset		 INTEGER, "				\
-	"cpu3_ts_offset		 INTEGER, "				\
+	"spin_cycles		 INTEGER, "				\
+	"spin_locked_accesses	 INTEGER, "				\
+	"spin_traffic_accesses	 INTEGER, "				\
+	"locked_accesses	 INTEGER, "				\
+	"traffic_accesses	 INTEGER, "				\
+	"lock_acquires		 INTEGER, "				\
 	"num_ops		 INTEGER" 				\
 	")"
 
 #define INSERT_SUMMARY							\
     	"INSERT INTO %s_summary ("					\
-	"num_cpus, num_ram, start_ts, end_ts, spin_time, miss_delay, "	\
-	"cpu0_ts_offset, cpu1_ts_offset, cpu2_ts_offset, "	     	\
-	"cpu3_ts_offset, num_ops) "	 		 		\
-	"VALUES (%u, %lu, %lu, %lu, %lu, %u, %lu, %lu, %lu, %lu, %lu)"
+	"num_cpus, num_ram, start_ts, end_ts, spin_cycles, "		\
+	"spin_locked_accesses, spin_traffic_accesses, miss_delay, "	\
+	"locked_accesses, traffic_accesses, lock_acquires, num_ops)"  	\
+	"VALUES (%u, %lu, %lu, %lu, %lu, %lu, %lu, %lu, " 		\
+	"%lu, %lu, %lu)"

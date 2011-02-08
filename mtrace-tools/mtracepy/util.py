@@ -12,3 +12,33 @@ mtrace_label_str        =  { mtrace_label_heap   : 'heap',
 def uhex(i):
     return (i & 0xffffffffffffffff)
 
+class SelectRow:
+    def __init__(cols, row):
+        pass
+
+class MtraceDB:
+    def __init__(self, dbFile, dataName = None):
+        self.dbFile = dbFile
+        self.conn = sqlite3.connect(self.dbFile)
+        self.dataName = dataName
+
+    def exec_single(self, query):
+        c = self.conn.cursor()
+        c.execute(query)
+        rs = c.fetchall()
+        if len(rs) != 1:
+            raise Exception('%s returned %u rows' % (query, len(rs)))
+        r = rs[0]
+        c.close()
+        return r
+
+    def select(self, table, cols, where):
+        selectCols = cols[0]
+        for col in cols[1:]:
+            selectCols += ', ' + col
+        q = 'SELECT %s FROM %s_%s WHERE %s' % (selectCols,
+                                               self.dataName,
+                                               self.table,
+                                               where)
+        print q
+        exit(1)
