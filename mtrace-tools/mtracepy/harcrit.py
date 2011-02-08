@@ -57,16 +57,6 @@ class MtraceHarcrit:
                           old[1] + 1 ]
             self.pcs[section.pc] = entry
         
-
-        # exclusive hold time
-#        q = 'SELECT COUNT(access_id) from %s_accesses WHERE label_id = %lu AND locked_id = 0'
-#        q = q % (self.dataName, self.labelId)
-#        c.execute(q)
-#        rs = c.fetchall()
-#        if len(rs) != 1:
-#            raise Exception('%s returned %u rows' % (q, len(rs)))
-#        self.exclusiveHoldTime = rs[0][0]
-
         # Name
         q = 'SELECT str FROM %s_labels%u WHERE label_id = %lu'
         q = q % (self.dataName,

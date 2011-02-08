@@ -48,52 +48,55 @@ class MtraceLock:
         self.tids = {}
         self.pcs = {}
         self.holdTime = 0
-        self.readHoldTime = 0
         self.exclusiveHoldTime = 0
 
-        lockStr = None
-
-        c = self.db.cursor()
-
         # Sections
-        q = '''SELECT id, start_ts, end_ts, start_cpu, read, tid, pc, str, locked_accesses, traffic_accesses 
-               FROM %s_locked_sections WHERE label_id = %lu and lock = %lu'''
+        q = '''SELECT id, start_ts, end_ts, start_cpu, read, tid, pc, str, 
+               locked_accesses, traffic_accesses FROM %s_locked_sections 
+               WHERE label_id = %lu and lock = %lu and read <> 1'''
         q = q % (self.dataName,
                  self.labelId,
                  self.lock)
+        c = self.db.cursor()
         c.execute(q)
         for row in c:
-            if lockStr == None:
-                lockStr = row[7]
-            section = MtraceSerialSection(row[0], row[1], row[2], 
-                                          row[3], row[4], row[5], row[6])
-            holdTime = (section.endTs - section.startTs) + model.LOCK_LATENCY + (row[8] * model.MISS_LATENCY) + (row[9] * model.MISS_LATENCY)
+            if row[4] >= 1:
+                continue
+
+            section = MtraceSerialSection(row['id'], row['start_ts'], row['end_ts'], 
+                                          row['start_cpu'], row['read'], row['tid'], row['pc'])
+            holdTime = ((section.endTs - section.startTs) + model.LOCK_LATENCY + 
+                        (row['locked_accesses'] * model.MISS_LATENCY) + 
+                        (row['traffic_accesses'] * model.MISS_LATENCY))
             self.holdTime += holdTime
-            if section.read:
-                self.readHoldTime += holdTime
-            else:
-                self.exclusiveHoldTime += holdTime
-                #
-                # XXX should track per-tid exclusive AND read
-                #
-                time = holdTime
-                if section.tid in self.tids:
-                    time += self.tids[section.tid]
-                self.tids[section.tid] = time
 
-                time = holdTime
-                if section.startCpu in self.cpus:
-                    time += self.cpus[section.startCpu]
-                self.cpus[section.startCpu] = time
+            self.exclusiveHoldTime += holdTime
+            time = holdTime
+            if section.tid in self.tids:
+                time += self.tids[section.tid]
+            self.tids[section.tid] = time
 
-                entry = [ holdTime, 1]
-                if section.pc in self.pcs:
-                    old = self.pcs[section.pc]
-                    entry = [ old[0] + holdTime,
-                              old[1] + 1 ]
-                self.pcs[section.pc] = entry
+            time = holdTime
+            if section.startCpu in self.cpus:
+                time += self.cpus[section.startCpu]
+            self.cpus[section.startCpu] = time
 
-        # Name
+            entry = [ holdTime, 1]
+            if section.pc in self.pcs:
+                old = self.pcs[section.pc]
+                entry = [ old[0] + holdTime,
+                          old[1] + 1 ]
+            self.pcs[section.pc] = entry
+
+        # Name (label str and lock str)
+        q = '''SELECT str FROM %s_locked_sections WHERE label_id = %lu and lock = %lu LIMIT 1'''
+        q = q % (self.dataName,
+                 self.labelId,
+                 self.lock)
+        c = self.db.cursor()
+        c.execute(q)
+        lockStr = c.fetchone()['str']
+
         q = 'SELECT str FROM %s_labels%u WHERE label_id = %lu'
         q = q % (self.dataName,
                  self.labelType,
@@ -113,9 +116,6 @@ class MtraceLock:
     def get_hold_time(self):
         self.__init_state()
         return self.holdTime
-    def get_read_hold_time(self):
-        self.__init_state()
-        return self.readHoldTime
     def get_exclusive_hold_time(self):
         self.__init_state()
         return self.exclusiveHoldTime
@@ -134,6 +134,7 @@ class MtraceLock:
 
 def get_locks(dbFile, dataName):
     conn = sqlite3.connect(dbFile)
+    conn.row_factory = sqlite3.Row
     c = conn.cursor()
     q = 'SELECT DISTINCT label_type, label_id, lock FROM %s_locked_sections'
     q = q % (dataName)
