@@ -7,7 +7,9 @@ from mtracepy.util import uhex, checksum
 from mtracepy.addr2line import Addr2Line
 import sqlite3
 import sys
+from mtracepy.serial import MtraceSerials
 import pickle
+
 import os
 import errno
 
@@ -33,19 +35,6 @@ class FilterCpuCount:
 
     def filter(self, lock):
         return len(lock.get_cpus()) > self.count
-
-def apply_filters(lst, filters):
-    if len(filters) > 0:
-        lst2 = []
-        for e in lst:
-            lst2.append(e)
-            for f in filters:
-                if f.filter(e) == False:
-                    lst2.pop()
-                    break
-        return lst2
-    else:
-        return lst
 
 def usage(argv):
     print """Usage: serialsum.py DB-file name [ -filter-label filter-label 
@@ -83,64 +72,6 @@ def parse_args(argv):
     for i in range(0, len(args), 2):
         handler[args[i]](args[i + 1])
 
-class MtraceSerials:
-    def __init__(self, dbFile, dataName):
-        self.dataName = dataName
-        self.dbFile = dbFile
-        self.csum = None
-        self.pickleOk = False
-
-        self.serials = mtracepy.lock.get_locks(dbFile, dataName)
-        self.serials.extend(mtracepy.harcrit.get_harcrits(dbFile, dataName));
-
-    def filter(self, filters, persist = False):
-        filtered = apply_filters(self.serials, filters)
-        if persist:
-            self.serials = filtered
-        return filtered
-
-    def close(self, pickleDir):
-        if self.csum == None:
-            self.csum = checksum(self.dbFile)
-        if self.pickleOk:
-            return
-
-        base, ext = os.path.splitext(self.dbFile)
-        base = os.path.basename(base)
-        picklePath = pickleDir + '/' + base + '-' + self.dataName + '.pkl'
-       
-        output = open(picklePath, 'wb')
-        pickle.dump(self, output)
-        output.close()
-
-def open_serials(dbFile, dataName, pickleDir):
-    base, ext = os.path.splitext(dbFile)
-    base = os.path.basename(base)
-    picklePath = pickleDir + '/' + base + '-' + dataName + '.pkl'
-
-    serials = None
-    try:
-        pickleFile = open(picklePath, 'r')
-        serials = pickle.load(pickleFile)
-
-        if serials.dataName != dataName:
-            raise Exception('unexpected dataName')
-        if serials.csum != checksum(dbFile):
-            raise Exception('checksum mismatch: stale pickle?')
-
-        # This following members are ephemeral
-        serials.dbFile = dbFile
-        serials.pickleOk = True
-
-        pickleFile.close()
-    except IOError, e:
-        if e.errno != errno.ENOENT:
-            raise
-        serials = MtraceSerials(dbFile, dataName)
-
-    return serials
-
-
 def amdahlScale(p, n):
     return (1.0 / ((1.0 - p) + (p / n)))
 
@@ -155,24 +86,26 @@ def main(argv = None):
     parse_args(argv)
 
     summary = mtracepy.model.MtraceSummary(dbFile, dataName)
-    serials = open_serials(dbFile, dataName, '.')
+
+    serials = MtraceSerials.open(dbFile, dataName, '.')
     filtered = serials.filter(DEFAULT_FILTERS)
 
-    print '#%s\t%s\t%s\t%s\t%s\t%s' % ('cpu', 'min amdahl', 'max amdahl', 'min scale', 'max scale', 'serial %')
+    print '#%s\t%s\t%s\t%s\t%s\t%s\t%s' % ('cpu', 'min amdahl', 'max amdahl', 'min scale', 'max scale', 'serial %', 'name')
     print '%u\t%f\t%f' % (1, 1.0, 1.0)
 
     for i in range(2, 49):
-        maxHoldTime = 0
+        maxSample = None
         for s in filtered:
-            if maxHoldTime < s.get_exclusive_stats().time(i):
-                maxHoldTime = s.get_exclusive_stats().time(i)
+            if maxSample == None or maxSample.get_exclusive_stats().time(i) < s.get_exclusive_stats().time(i):
+                maxSample = s
 
+        maxHoldTime = maxSample.get_exclusive_stats().time(i)
         maxSerial = float(maxHoldTime) / float(summary.get_max_work(i))
         maxAmdahl = 1.0 / (float(maxHoldTime) / float(summary.get_max_work(i)))
         minAmdahl = (float(summary.get_min_work(i)) / float(summary.get_max_work(i))) * maxAmdahl
         amMax = amdahlScale(1 - maxSerial, i)
         amMin = (float(summary.get_min_work(i)) / float(summary.get_max_work(i))) * amMax
-        print '%u\t%f\t%f\t%f\t%f\t%f' % (i, minAmdahl, maxAmdahl, amMin, amMax, maxSerial)
+        print '%u\t%f\t%f\t%f\t%f\t%f\t%s' % (i, minAmdahl, maxAmdahl, amMin, amMax, maxSerial, maxSample.get_name())
 
     serials.close('.')
 

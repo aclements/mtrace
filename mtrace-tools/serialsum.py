@@ -5,6 +5,7 @@ import mtracepy.harcrit
 import mtracepy.summary
 from mtracepy.util import uhex, checksum
 from mtracepy.addr2line import Addr2Line
+from mtracepy.serial import MtraceSerials
 import sqlite3
 import sys
 import pickle
@@ -16,6 +17,7 @@ DEFAULT_COLS            = ['pc', 'length', 'percent']
 DEFAULT_ADDR2LINE       = None
 PRINT_COLS              = []
 SUMMARY                 = None
+DEFAULT_NUM_CORES       = 2
 
 class FilterLabel:
     def __init__(self, labelName):
@@ -38,23 +40,10 @@ class FilterCpuCount:
     def filter(self, lock):
         return len(lock.get_cpus()) > self.count
 
-def apply_filters(lst, filters):
-    if len(filters) > 0:
-        lst2 = []
-        for e in lst:
-            lst2.append(e)
-            for f in filters:
-                if f.filter(e) == False:
-                    lst2.pop()
-                    break
-        return lst2
-    else:
-        return lst
-
 def usage():
     print """Usage: serialsum.py DB-file name [ -filter-label filter-label 
     -filter-tid-count filter-tid-count -filter-cpu-count filter-cpu-count 
-    -print col -exefile exefile ]
+    -print col -exefile exefile -num-cores num-cores]
 
     'filter-tid-count' is the number of TIDs minus one that must execute
       a serial section
@@ -70,6 +59,8 @@ def usage():
       'tids'    --
 
     'exefile' is the executable for which addresses should be translated
+    
+    'num-cores' is the number of cores to use
 """
     exit(1)
 
@@ -96,12 +87,17 @@ def parse_args(argv):
         global DEFAULT_ADDR2LINE
         DEFAULT_ADDR2LINE = Addr2Line(filepath)
 
+    def num_cores_handler(ncores):
+        global DEFAULT_NUM_CORES
+        DEFAULT_NUM_CORES = int(ncores)
+
     handler = {
-        '-filter-label'  : filter_label_handler,
-        '-filter-tid-count' : filter_tid_count_handler,
-        '-filter-cpu-count' : filter_cpu_count_handler,
-        '-print' : print_handler,
-        '-exefile' : exefile_handler
+        '-filter-label'         : filter_label_handler,
+        '-filter-tid-count'     : filter_tid_count_handler,
+        '-filter-cpu-count'     : filter_cpu_count_handler,
+        '-print'                : print_handler,
+        '-exefile'              : exefile_handler,
+        '-num-cores'            : num_cores_handler
     }
 
     for i in range(0, len(args), 2):
@@ -115,7 +111,7 @@ def get_col_value(lock, col):
     def get_pc():
         '''Return the PC of the most costly section'''
         pcs = lock.get_pcs()
-        pc = sorted(pcs.keys(), key=lambda k: pcs[k].time(), reverse=True)[0]
+        pc = sorted(pcs.keys(), key=lambda k: pcs[k].time(DEFAULT_NUM_CORES), reverse=True)[0]
         pc = '%016lx' % uhex(pc)
         if DEFAULT_ADDR2LINE:
             s = '  %s  %-64s  %s' % (pc, 
@@ -126,95 +122,40 @@ def get_col_value(lock, col):
             return pc
        
     def get_length():
-        return str(lock.get_exclusive_stats().time())
+        return str(lock.get_exclusive_stats().time(DEFAULT_NUM_CORES))
 
     def get_percent():
-        return '%.2f' % ((lock.get_exclusive_stats().time() * 100.0) / SUMMARY.get_max_work())
+        return '%.2f' % ((lock.get_exclusive_stats().time(DEFAULT_NUM_CORES) * 100.0) / SUMMARY.get_max_work(DEFAULT_NUM_CORES))
 
     def get_cpus():
         cpuTable = lock.get_cpus()
         cpus = cpuTable.keys()
         time = cpuTable[cpus[0]]
-        cpuString = '%u:%.2f%%' % (cpus[0], (time * 100.0) / lock.get_exclusive_stats().time())
+        cpuString = '%u:%.2f%%' % (cpus[0], (time * 100.0) / lock.get_exclusive_stats().time(DEFAULT_NUM_CORES))
         for cpu in cpus[1:]:
             time = cpuTable[cpu]
-            cpuString += ' %u:%.2f%%' % (cpu, (time * 100.0) / lock.get_exclusive_stats().time())
+            cpuString += ' %u:%.2f%%' % (cpu, (time * 100.0) / lock.get_exclusive_stats().time(DEFAULT_NUM_CORES))
         return cpuString
 
     def get_tids():
         tids = lock.get_tids()
         tidsPercent = ''
-        totPercent = (lock.get_exclusive_stats().time() * 100.0) / float(SUMMARY.get_max_work())
+        totPercent = (lock.get_exclusive_stats().time(DEFAULT_NUM_CORES) * 100.0) / float(SUMMARY.get_max_work(DEFAULT_NUM_CORES))
         for tid in tids.keys():
             time = tids[tid]
-            tidsPercent += '%lu:%.2f%% ' % (tid, (time * 100.0) / lock.get_exclusive_stats().time())
+            tidsPercent += '%lu:%.2f%% ' % (tid, (time * 100.0) / lock.get_exclusive_stats().time(DEFAULT_NUM_CORES))
         return tidsPercent
 
     colValueFuncs = {
-        'pc' : get_pc,
-        'length' : get_length,
+        'pc'      : get_pc,
+        'length'  : get_length,
         'percent' : get_percent,
-        'cpus' : get_cpus,
-        'tids' : get_tids
+        'cpus'    : get_cpus,
+        'tids'    : get_tids
     }
     
     return colValueFuncs[col]()
     
-
-class MtraceSerials:
-    def __init__(self, dbFile, dataName):
-        self.dataName = dataName
-        self.dbFile = dbFile
-        self.csum = None
-        self.pickeOk = False
-
-        self.serials = mtracepy.lock.get_locks(dbFile, dataName)
-        self.serials.extend(mtracepy.harcrit.get_harcrits(dbFile, dataName));
-        self.serials = sorted(self.serials, 
-                              key=lambda l: l.get_exclusive_stats().time(), 
-                              reverse=True)
-
-    def close(self, pickleDir):
-        if self.csum == None:
-            self.csum = checksum(self.dbFile)
-        if self.pickleOk:
-            return
-
-        base, ext = os.path.splitext(self.dbFile)
-        base = os.path.basename(base)
-        picklePath = pickleDir + '/' + base + '-' + self.dataName + '.pkl'
-       
-        output = open(picklePath, 'wb')
-        pickle.dump(self, output)
-        output.close()
-
-def open_serials(dbFile, dataName, pickleDir):
-    base, ext = os.path.splitext(dbFile)
-    base = os.path.basename(base)
-    picklePath = pickleDir + '/' + base + '-' + dataName + '.pkl'
-
-    serials = None
-    try:
-        pickleFile = open(picklePath, 'r')
-        serials = pickle.load(pickleFile)
-
-        if serials.dataName != dataName:
-            raise Exception('unexpected dataName')
-        if serials.csum != checksum(dbFile):
-            raise Exception('checksum mismatch: stale pickle?')
-
-        # This following members are ephemeral
-        serials.dbFile = dbFile
-        serials.pickleOk = True
-
-        pickleFile.close()
-    except IOError, e:
-        if e.errno != errno.ENOENT:
-            raise
-        serials = MtraceSerials(dbFile, dataName)
-
-    return serials
-
 
 def amdahlScale(p, n):
     return (1.0 / ((1.0 - p) + (p / n)))
@@ -232,7 +173,11 @@ def main(argv = None):
     global SUMMARY
     SUMMARY = mtracepy.model.MtraceSummary(dbFile, dataName)
 
-    serials = open_serials(dbFile, dataName, '.')
+    serials = MtraceSerials.open(dbFile, dataName, '.')
+    filtered = serials.filter(DEFAULT_FILTERS)
+    sortedFiltered = sorted(filtered, 
+                            key=lambda l: l.get_exclusive_stats().time(DEFAULT_NUM_CORES), 
+                            reverse=True)
 
     headerStr = '%-40s  %16s  %16s' % ('name', 'id', 'lock')
     borderStr = '%-40s  %16s  %16s' % ('----', '--', '----')
@@ -243,35 +188,11 @@ def main(argv = None):
     print headerStr
     print borderStr
 
-
-    maxHoldTime = 0
-
-    filtered = apply_filters(serials.serials, DEFAULT_FILTERS)
-
-    for s in filtered:
-        if maxHoldTime < s.get_exclusive_stats().time():
-           maxHoldTime = s.get_exclusive_stats().time()
-
+    for s in sortedFiltered:
         valStr = '%-40s  %16lu  %16lx' % (s.get_name(), s.get_label_id(), uhex(s.get_lock()))
         for col in PRINT_COLS:
             valStr += '  %16s' % get_col_value(s, col)
         print valStr
-
-    print '#%s\t%s\t%s\t%s\t%s\t%s' % ('cpu', 'min amdahl', 'max amdahl', 'min scale', 'max scale', 'serial %')
-    print '%u\t%f\t%f' % (1, 1.0, 1.0)
-
-    for i in range(2, 49):
-        maxHoldTime = 0
-        for s in filtered:
-            if maxHoldTime < s.get_exclusive_stats().time(i):
-                maxHoldTime = s.get_exclusive_stats().time(i)
-
-        maxSerial = float(maxHoldTime) / float(SUMMARY.get_max_work(i))
-        maxAmdahl = 1.0 / (float(maxHoldTime) / float(SUMMARY.get_max_work(i)))
-        minAmdahl = (float(SUMMARY.get_min_work(i)) / float(SUMMARY.get_max_work(i))) * maxAmdahl
-        amMax = amdahlScale(1 - maxSerial, i)
-        amMin = (float(SUMMARY.get_min_work(i)) / float(SUMMARY.get_max_work(i))) * amMax
-        print '%u\t%f\t%f\t%f\t%f\t%f' % (i, minAmdahl, maxAmdahl, amMin, amMax, maxSerial)
 
     serials.close('.')
 

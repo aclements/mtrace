@@ -182,7 +182,7 @@
 #define INSERT_SUMMARY							\
     	"INSERT INTO %s_summary ("					\
 	"num_cpus, num_ram, start_ts, end_ts, spin_cycles, "		\
-	"spin_locked_accesses, spin_traffic_accesses, miss_delay, "	\
+	"spin_locked_accesses, spin_traffic_accesses, "	   		\
 	"locked_accesses, traffic_accesses, lock_acquires, num_ops)"  	\
 	"VALUES (%u, %lu, %lu, %lu, %lu, %lu, %lu, %lu, " 		\
 	"%lu, %lu, %lu)"

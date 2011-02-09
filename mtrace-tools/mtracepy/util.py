@@ -31,9 +31,18 @@ def checksum(fileName, maxBytes = sys.maxint):
     f.close()
     return m.digest()
 
-class SelectRow:
-    def __init__(cols, row):
-        pass
+def apply_filters(lst, filters):
+    if len(filters) > 0:
+        lst2 = []
+        for e in lst:
+            lst2.append(e)
+            for f in filters:
+                if f.filter(e) == False:
+                    lst2.pop()
+                    break
+        return lst2
+    else:
+        return lst
 
 class MtraceDB:
     def __init__(self, dbFile):
