@@ -257,18 +257,8 @@ def main(argv = None):
             valStr += '  %16s' % get_col_value(s, col)
         print valStr
 
-#    maxSerial = float(maxHoldTime) / float(SUMMARY.get_max_work())
-#    maxAmdahl = 1.0 / (float(maxHoldTime) / float(SUMMARY.get_max_work()))
-#    minAmdahl = (float(SUMMARY.minWork) / float(SUMMARY.maxWork)) * maxAmdahl
-    
-#    print 'max amdahl %.2f' % maxAmdahl
-#    print 'min amdahl %.2f' % minAmdahl
-    print '#%s\t%s\t%s' % ('core', 'min', 'max')
+    print '#%s\t%s\t%s\t%s\t%s\t%s' % ('cpu', 'min amdahl', 'max amdahl', 'min scale', 'max scale', 'serial %')
     print '%u\t%f\t%f' % (1, 1.0, 1.0)
-#    for i in range(2, 49):
-#        amMax = amdahlScale(1 - maxSerial, i)
-#        amMin = (float(SUMMARY.minWork) / float(SUMMARY.maxWork)) * amMax
-#        print '%u\t%f\t%f' % (i, amMin, amMax)
 
     for i in range(2, 49):
         maxHoldTime = 0
@@ -276,15 +266,12 @@ def main(argv = None):
             if maxHoldTime < s.get_exclusive_stats().time(i):
                 maxHoldTime = s.get_exclusive_stats().time(i)
 
-#        print maxHoldTime
-
         maxSerial = float(maxHoldTime) / float(SUMMARY.get_max_work(i))
         maxAmdahl = 1.0 / (float(maxHoldTime) / float(SUMMARY.get_max_work(i)))
         minAmdahl = (float(SUMMARY.get_min_work(i)) / float(SUMMARY.get_max_work(i))) * maxAmdahl
-        #print maxSerial, maxAmdahl, minAmdahl
         amMax = amdahlScale(1 - maxSerial, i)
         amMin = (float(SUMMARY.get_min_work(i)) / float(SUMMARY.get_max_work(i))) * amMax
-        print '%u\t%f\t%f' % (i, amMin, amMax)
+        print '%u\t%f\t%f\t%f\t%f\t%f' % (i, minAmdahl, maxAmdahl, amMin, amMax, maxSerial)
 
     serials.close('.')
 
