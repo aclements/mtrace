@@ -55,7 +55,7 @@ class MtraceLockSample(object):
 
     def time(self, numCores = 0):
         return (self.cycles +
-                (self.num * get_lock_latency(numCores)) +
+                #(self.num * get_lock_latency(numCores)) +
                 (self.lockedAccesses * get_locked_latency(numCores)) + 
                 (self.trafficAccesses * get_traffic_latency(numCores)))
 
