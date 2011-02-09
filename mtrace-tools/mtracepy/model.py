@@ -5,16 +5,16 @@ MISS_LATENCY = 200
 LOCK_LATENCY = 500
 ICNT_CONTENTION = 50
 
-def get_traffic_latency(numCores = None):
-    if numCores:
-        return MISS_LATENCY + (numCores * ICNT_CONTENTION)
-    return MISS_LATENCY
+def get_traffic_latency(numCores = 0):
+    return MISS_LATENCY + (numCores * ICNT_CONTENTION)
 
-def get_locked_latency(numCores = None):
+def get_locked_latency(numCores = 0):
     return get_traffic_latency(numCores)
 
-def get_lock_latency(numCores = None):
-    return LOCK_LATENCY
+def get_lock_latency(numCores = 0):
+    if numCores == 0:
+        raise Exception('foo')
+    return LOCK_LATENCY * numCores
 
 class MtraceLockSample(object):
     def __init__(self, cycles, lockedAccesses, trafficAccesses, num = 1):
@@ -29,9 +29,9 @@ class MtraceLockSample(object):
         self.trafficAccesses += aggregate.trafficAccesses
         self.num += aggregate.num
 
-    def time(self, numCores = None):
+    def time(self, numCores = 0):
         return (self.cycles +
-                (self.num * get_lock_latency()) +
+                (self.num * get_lock_latency(numCores)) +
                 (self.lockedAccesses * get_locked_latency(numCores)) + 
                 (self.trafficAccesses * get_traffic_latency(numCores)))
 
@@ -52,7 +52,7 @@ class MtraceAccessSample(object):
         self.locked += aggregate.locked
         self.num += aggregate.num
 
-    def time(self, numCores = None):
+    def time(self, numCores = 0):
         return ((self.traffic * get_traffic_latency(numCores)) + 
                 (self.locked * get_locked_latency(numCores)))
 
@@ -91,13 +91,13 @@ class MtraceSummary(object):
         self.lockedAccesses = row['locked_accesses']
         self.lockAcquires = row['lock_acquires']
 
-    def get_max_work(self, numCores = None):
+    def get_max_work(self, numCores = 0):
         return (self.get_min_work(numCores) + 
                 ((self.trafficAccesses - self.spinTrafficAccesses) * get_traffic_latency(numCores)) + 
                 ((self.lockedAccesses - self.spinLockedAccesses) * get_locked_latency(numCores)) +
                 (self.lockAcquires * get_lock_latency(numCores)))
 
-    def get_min_work(self, numCores = None):
+    def get_min_work(self, numCores = 0):
         return self.endTs - self.startTs - self.spinCycles
 
     def __str__(self):

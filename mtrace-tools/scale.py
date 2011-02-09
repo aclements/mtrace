@@ -92,9 +92,6 @@ class MtraceSerials:
 
         self.serials = mtracepy.lock.get_locks(dbFile, dataName)
         self.serials.extend(mtracepy.harcrit.get_harcrits(dbFile, dataName));
-        self.serials = sorted(self.serials, 
-                              key=lambda l: l.get_exclusive_stats().time(), 
-                              reverse=True)
 
     def filter(self, filters, persist = False):
         filtered = apply_filters(self.serials, filters)
