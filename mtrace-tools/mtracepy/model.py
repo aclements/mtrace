@@ -16,6 +16,30 @@ def get_lock_latency(numCores = 0):
         raise Exception('foo')
     return LOCK_LATENCY * numCores
 
+class MtraceCmpxchgSample(object):
+    def __init__(self, cycles, lockedAccesses, trafficAccesses, num = 1):
+        self.cycles = cycles
+        self.lockedAccesses = lockedAccesses
+        self.trafficAccesses = trafficAccesses
+        self.num = num
+
+    def add(self, aggregate):
+        self.cycles += aggregate.cycles
+        self.lockedAccesses += aggregate.lockedAccesses
+        self.trafficAccesses += aggregate.trafficAccesses
+        self.num += aggregate.num
+
+    def time(self, numCores = 0):
+        return (self.cycles +
+                (self.lockedAccesses * get_locked_latency(numCores)) + 
+                (self.trafficAccesses * get_traffic_latency(numCores)))
+
+    def copy(self):
+        return copy.copy(self)
+
+    def __str__(self):
+        return '%lu %lu %lu %u' % (self.cycles, self.lockedAccesses, self.trafficAccesses, self.num)
+
 class MtraceLockSample(object):
     def __init__(self, cycles, lockedAccesses, trafficAccesses, num = 1):
         self.cycles = cycles

@@ -22,12 +22,13 @@ class MtraceSerialSection:
 
 class MtraceLock:
     
-    def __init__(self, labelType, labelId, lock, dbFile, dataName):
+    def __init__(self, labelType, labelId, lock, dbFile, dataName, sampleClass):
         self.labelType = labelType
         self.labelId = labelId
         self.lock = lock
         self.dbFile = dbFile
         self.dataName = dataName
+        self.sampleClass = sampleClass
 
         self.exclusive = None
         self.name = None
@@ -48,7 +49,7 @@ class MtraceLock:
         self.tids = {}
         self.pcs = {}
         self.holdTime = 0
-        self.exclusive = model.MtraceLockSample(0, 0, 0, num = 0)
+        self.exclusive = self.sampleClass(0, 0, 0, num = 0)
 
         self.holdTime = 0
 
@@ -70,9 +71,9 @@ class MtraceLock:
             section = MtraceSerialSection(row['id'], row['start_ts'], row['end_ts'], 
                                           row['start_cpu'], row['read'], row['tid'], row['pc'])
 
-            agg = model.MtraceLockSample(section.endTs - section.startTs,
-                                         row['locked_accesses'],
-                                         row['traffic_accesses'])
+            agg = self.sampleClass(section.endTs - section.startTs,
+                                   row['locked_accesses'],
+                                   row['traffic_accesses'])
 
             self.exclusive.add(agg)
 
@@ -140,7 +141,7 @@ def get_locks(dbFile, dataName):
     conn = sqlite3.connect(dbFile)
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
-    q = 'SELECT DISTINCT label_type, label_id, lock FROM %s_locked_sections'
+    q = 'SELECT DISTINCT label_type, label_id, lock, str FROM %s_locked_sections'
     q = q % (dataName)
     c.execute(q)
 
@@ -148,6 +149,9 @@ def get_locks(dbFile, dataName):
     for row in c:
         if row[0] == 0:
             continue
-        lst.append(MtraceLock(row[0], row[1], row[2], dbFile, dataName))
+        if row['str'].startswith('d_count'):
+            lst.append(MtraceLock(row[0], row[1], row[2], dbFile, dataName, model.MtraceCmpxchgSample))
+        else:
+            lst.append(MtraceLock(row[0], row[1], row[2], dbFile, dataName, model.MtraceLockSample))
     conn.close()
     return lst
