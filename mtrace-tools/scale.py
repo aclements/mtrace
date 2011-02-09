@@ -75,6 +75,51 @@ def parse_args(argv):
 def amdahlScale(p, n):
     return (1.0 / ((1.0 - p) + (p / n)))
 
+
+def print0(summary, serials):
+    print '#%s\t%s\t%s\t%s\t%s\t%s\t%s' % ('cpu', 'min amdahl', 'max amdahl', 'min scale', 'max scale', 'serial %', 'name')
+    print '%u\t%f\t%f' % (1, 1.0, 1.0)
+
+    maxWork = float(summary.get_max_work(1))
+    minWork = float(summary.get_min_work(1))
+
+    for i in range(2, 49):
+        maxSample = None
+        for s in serials:
+            if maxSample == None or maxSample.get_exclusive_stats().time(i) < s.get_exclusive_stats().time(i):
+                maxSample = s
+
+        maxHoldTime = maxSample.get_exclusive_stats().time(i)
+        maxSerial = float(maxHoldTime) / maxWork
+        maxAmdahl = 1.0 / (float(maxHoldTime) / maxWork)
+        minAmdahl = (minWork / maxWork) * maxAmdahl
+        amMax = amdahlScale(1 - maxSerial, i)
+        amMin = (minWork / maxWork) * amMax
+        print '%u\t%f\t%f\t%f\t%f\t%f\t%s' % (i, minAmdahl, maxAmdahl, amMin, amMax, maxSerial, maxSample.get_name())
+
+def print1(summary, serials):
+    print '#%s\t%s\t%s\t%s\t%s\t%s\t%s' % ('cpu', 'min amdahl', 'max amdahl', 'min scale', 'max scale', 'serial %', 'name')
+    print '%u\t%f\t%f' % (1, 1.0, 1.0)
+
+    maxWork = float(summary.get_max_work(1))
+    minWork = float(summary.get_min_work(1))
+
+    for i in range(2, 49):
+        maxSample = None
+        for s in serials:
+            if maxSample == None or maxSample.get_exclusive_stats().time(i) < s.get_exclusive_stats().time(i):
+                maxSample = s
+
+        maxHoldTime = maxSample.get_exclusive_stats().time(i)
+        maxSerial = float(maxHoldTime) / maxWork
+        maxAmdahl = 1.0 / (float(maxHoldTime) / maxWork)
+        minAmdahl = (minWork / maxWork) * maxAmdahl
+        amMax = amdahlScale(1 - maxSerial, i)
+        #amMin = (minWork / maxWork) * amMax
+        sup = (float(summary.get_min_work(1)) / ((float(summary.get_max_work(i)) - float(maxHoldTime))/ float(i)))
+        amMin = 1 / (maxSerial + ((1 - maxSerial) / sup))
+        print '%u\t%f\t%f\t%f\t%f\t%f\t%s' % (i, minAmdahl, maxAmdahl, amMin, amMax, maxSerial, maxSample.get_name())
+
 def main(argv = None):
     if argv is None:
         argv = sys.argv
@@ -90,23 +135,7 @@ def main(argv = None):
     serials = MtraceSerials.open(dbFile, dataName, '.')
     filtered = serials.filter(DEFAULT_FILTERS)
 
-    print '#%s\t%s\t%s\t%s\t%s\t%s\t%s' % ('cpu', 'min amdahl', 'max amdahl', 'min scale', 'max scale', 'serial %', 'name')
-    print '%u\t%f\t%f' % (1, 1.0, 1.0)
-
-    for i in range(2, 49):
-        maxSample = None
-        for s in filtered:
-            if maxSample == None or maxSample.get_exclusive_stats().time(i) < s.get_exclusive_stats().time(i):
-                maxSample = s
-
-        maxHoldTime = maxSample.get_exclusive_stats().time(i)
-        maxSerial = float(maxHoldTime) / float(summary.get_max_work(i))
-        maxAmdahl = 1.0 / (float(maxHoldTime) / float(summary.get_max_work(i)))
-        minAmdahl = (float(summary.get_min_work(i)) / float(summary.get_max_work(i))) * maxAmdahl
-        amMax = amdahlScale(1 - maxSerial, i)
-        amMin = (float(summary.get_min_work(i)) / float(summary.get_max_work(i))) * amMax
-        print '%u\t%f\t%f\t%f\t%f\t%f\t%s' % (i, minAmdahl, maxAmdahl, amMin, amMax, maxSerial, maxSample.get_name())
-
+    print0(summary, filtered)
     serials.close('.')
 
 if __name__ == "__main__":

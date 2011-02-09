@@ -5,13 +5,13 @@ MISS_LATENCY = 200
 LOCK_LATENCY = 500
 ICNT_CONTENTION = 50
 
-def get_traffic_latency(numCores = 0):
+def get_traffic_latency(numCores):
     return MISS_LATENCY + (numCores * ICNT_CONTENTION)
 
-def get_locked_latency(numCores = 0):
+def get_locked_latency(numCores):
     return get_traffic_latency(numCores)
 
-def get_lock_latency(numCores = 0):
+def get_lock_latency(numCores):
     if numCores == 0:
         raise Exception('foo')
     return LOCK_LATENCY * numCores
