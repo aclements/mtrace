@@ -129,7 +129,7 @@ def get_col_value(lock, col):
         return str(lock.get_exclusive_stats().time())
 
     def get_percent():
-        return '%.2f' % ((lock.get_exclusive_stats().time() * 100.0) / SUMMARY.maxWork)
+        return '%.2f' % ((lock.get_exclusive_stats().time() * 100.0) / SUMMARY.get_max_work())
 
     def get_cpus():
         cpuTable = lock.get_cpus()
@@ -144,7 +144,7 @@ def get_col_value(lock, col):
     def get_tids():
         tids = lock.get_tids()
         tidsPercent = ''
-        totPercent = (lock.get_exclusive_stats().time() * 100.0) / float(SUMMARY.maxWork)
+        totPercent = (lock.get_exclusive_stats().time() * 100.0) / float(SUMMARY.get_max_work())
         for tid in tids.keys():
             time = tids[tid]
             tidsPercent += '%lu:%.2f%% ' % (tid, (time * 100.0) / lock.get_exclusive_stats().time())
@@ -166,6 +166,7 @@ class MtraceSerials:
         self.dataName = dataName
         self.dbFile = dbFile
         self.csum = None
+        self.pickeOk = False
 
         self.serials = mtracepy.lock.get_locks(dbFile, dataName)
         self.serials.extend(mtracepy.harcrit.get_harcrits(dbFile, dataName));
@@ -176,6 +177,8 @@ class MtraceSerials:
     def close(self, pickleDir):
         if self.csum == None:
             self.csum = checksum(self.dbFile)
+        if self.pickleOk:
+            return
 
         base, ext = os.path.splitext(self.dbFile)
         base = os.path.basename(base)
@@ -202,6 +205,7 @@ def open_serials(dbFile, dataName, pickleDir):
 
         # This following members are ephemeral
         serials.dbFile = dbFile
+        serials.pickleOk = True
 
         pickleFile.close()
     except IOError, e:
@@ -226,7 +230,7 @@ def main(argv = None):
     parse_args(argv)
 
     global SUMMARY
-    SUMMARY = mtracepy.summary.MtraceSummary(dbFile, dataName)
+    SUMMARY = mtracepy.model.MtraceSummary(dbFile, dataName)
 
     serials = open_serials(dbFile, dataName, '.')
 
@@ -242,7 +246,9 @@ def main(argv = None):
 
     maxHoldTime = 0
 
-    for s in apply_filters(serials.serials, DEFAULT_FILTERS):
+    filtered = apply_filters(serials.serials, DEFAULT_FILTERS)
+
+    for s in filtered:
         if maxHoldTime < s.get_exclusive_stats().time():
            maxHoldTime = s.get_exclusive_stats().time()
 
@@ -251,17 +257,33 @@ def main(argv = None):
             valStr += '  %16s' % get_col_value(s, col)
         print valStr
 
-    maxSerial = float(maxHoldTime) / float(SUMMARY.maxWork)
-    maxAmdahl = 1.0 / (float(maxHoldTime) / float(SUMMARY.maxWork))
-    minAmdahl = (float(SUMMARY.minWork) / float(SUMMARY.maxWork)) * maxAmdahl
+#    maxSerial = float(maxHoldTime) / float(SUMMARY.get_max_work())
+#    maxAmdahl = 1.0 / (float(maxHoldTime) / float(SUMMARY.get_max_work()))
+#    minAmdahl = (float(SUMMARY.minWork) / float(SUMMARY.maxWork)) * maxAmdahl
     
-    print 'max amdahl %.2f' % maxAmdahl
-    print 'min amdahl %.2f' % minAmdahl
+#    print 'max amdahl %.2f' % maxAmdahl
+#    print 'min amdahl %.2f' % minAmdahl
     print '#%s\t%s\t%s' % ('core', 'min', 'max')
     print '%u\t%f\t%f' % (1, 1.0, 1.0)
+#    for i in range(2, 49):
+#        amMax = amdahlScale(1 - maxSerial, i)
+#        amMin = (float(SUMMARY.minWork) / float(SUMMARY.maxWork)) * amMax
+#        print '%u\t%f\t%f' % (i, amMin, amMax)
+
     for i in range(2, 49):
+        maxHoldTime = 0
+        for s in filtered:
+            if maxHoldTime < s.get_exclusive_stats().time(i):
+                maxHoldTime = s.get_exclusive_stats().time(i)
+
+#        print maxHoldTime
+
+        maxSerial = float(maxHoldTime) / float(SUMMARY.get_max_work(i))
+        maxAmdahl = 1.0 / (float(maxHoldTime) / float(SUMMARY.get_max_work(i)))
+        minAmdahl = (float(SUMMARY.get_min_work(i)) / float(SUMMARY.get_max_work(i))) * maxAmdahl
+        #print maxSerial, maxAmdahl, minAmdahl
         amMax = amdahlScale(1 - maxSerial, i)
-        amMin = (float(SUMMARY.minWork) / float(SUMMARY.maxWork)) * amMax
+        amMin = (float(SUMMARY.get_min_work(i)) / float(SUMMARY.get_max_work(i))) * amMax
         print '%u\t%f\t%f' % (i, amMin, amMax)
 
     serials.close('.')

@@ -5,27 +5,6 @@ from util import uhex
 import model
 import copy
 
-class MtraceAccessSample:
-    def __init__(self, traffic, locked, num = 1):
-        self.traffic = traffic
-        self.locked = locked
-        self.num = num
-
-    def add(self, aggregate):
-        self.traffic += aggregate.traffic
-        self.locked += aggregate.locked
-        self.num += aggregate.num
-
-    def time(self):
-        return ((self.traffic * model.MISS_LATENCY) + 
-                (self.locked * model.MISS_LATENCY))
-
-    def copy(self):
-        return copy.copy(self)
-
-    def __str__(self):
-        return '%lu %lu %lu %u' % (self.traffic, self.locked, self.num)
-
 class MtraceHarcrit:
 
     def __init__(self, labelType, labelId, dbFile, dataName, missDelay):
@@ -55,7 +34,7 @@ class MtraceHarcrit:
         self.cpus = {}
         self.tids = {}
         self.pcs = {}
-        self.exclusive = MtraceAccessSample(0, 0, num = 0)
+        self.exclusive = model.MtraceAccessSample(0, 0, num = 0)
 
         q = 'SELECT access_id, tid, cpu, pc from %s_accesses WHERE label_id = %lu AND locked_id = 0'
         q = q % (self.dataName, self.labelId)
@@ -64,7 +43,7 @@ class MtraceHarcrit:
             section = lock.MtraceSerialSection(row[0], 0, self.missDelay, 
                                                row[2], 0, row[1], row[3])
 
-            agg = MtraceAccessSample(1, 0)
+            agg = model.MtraceAccessSample(1, 0)
 
             self.exclusive.add(agg)
 

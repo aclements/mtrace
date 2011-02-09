@@ -20,31 +20,6 @@ class MtraceSerialSection:
     def get_time(self):
         return self.endTs - self.startTs
 
-class MtraceSerialAggregate:
-    def __init__(self, cycles, lockedAccesses, trafficAccesses, num = 1):
-        self.cycles = cycles
-        self.lockedAccesses = lockedAccesses
-        self.trafficAccesses = trafficAccesses
-        self.num = num
-
-    def add(self, aggregate):
-        self.cycles += aggregate.cycles
-        self.lockedAccesses += aggregate.lockedAccesses
-        self.trafficAccesses += aggregate.trafficAccesses
-        self.num += aggregate.num
-
-    def time(self):
-        return (self.cycles +
-                (self.num * model.LOCK_LATENCY) +
-                (self.lockedAccesses * model.MISS_LATENCY) + 
-                (self.trafficAccesses * model.MISS_LATENCY))
-
-    def copy(self):
-        return copy.copy(self)
-
-    def __str__(self):
-        return '%lu %lu %lu %u' % (self.cycles, self.lockedAccesses, self.trafficAccesses, self.num)
-
 class MtraceLock:
     
     def __init__(self, labelType, labelId, lock, dbFile, dataName):
@@ -73,7 +48,7 @@ class MtraceLock:
         self.tids = {}
         self.pcs = {}
         self.holdTime = 0
-        self.exclusive = MtraceSerialAggregate(0, 0, 0, num = 0)
+        self.exclusive = model.MtraceLockSample(0, 0, 0, num = 0)
 
         self.holdTime = 0
 
@@ -95,9 +70,9 @@ class MtraceLock:
             section = MtraceSerialSection(row['id'], row['start_ts'], row['end_ts'], 
                                           row['start_cpu'], row['read'], row['tid'], row['pc'])
 
-            agg = MtraceSerialAggregate(section.endTs - section.startTs,
-                                        row['locked_accesses'],
-                                        row['traffic_accesses'])
+            agg = model.MtraceLockSample(section.endTs - section.startTs,
+                                         row['locked_accesses'],
+                                         row['traffic_accesses'])
 
             self.exclusive.add(agg)
 
