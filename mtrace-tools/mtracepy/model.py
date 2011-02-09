@@ -2,7 +2,7 @@ import copy
 import sqlite3
 
 MISS_LATENCY = 200
-LOCK_LATENCY = 500
+LOCK_LATENCY = 50
 ICNT_CONTENTION = 50
 
 def get_traffic_latency(numCores):
@@ -14,7 +14,7 @@ def get_locked_latency(numCores):
 def get_lock_latency(numCores):
     if numCores == 0:
         raise Exception('foo')
-    return LOCK_LATENCY * numCores
+    return LOCK_LATENCY * numCores * numCores
 
 class MtraceCmpxchgSample(object):
     def __init__(self, cycles, lockedAccesses, trafficAccesses, num = 1):
@@ -55,6 +55,9 @@ class MtraceLockSample(object):
 
     def time(self, numCores = 0):
         return (self.cycles +
+                #
+                # XXX get_lock_latency should be part of work (not the critical section!)
+                #
                 #(self.num * get_lock_latency(numCores)) +
                 (self.lockedAccesses * get_locked_latency(numCores)) + 
                 (self.trafficAccesses * get_traffic_latency(numCores)))

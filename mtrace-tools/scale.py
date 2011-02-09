@@ -77,7 +77,7 @@ def amdahlScale(p, n):
 
 
 def print0(summary, serials):
-    print '#%s\t%s\t%s\t%s\t%s\t%s\t%s' % ('cpu', 'min amdahl', 'max amdahl', 'min scale', 'max scale', 'serial %', 'name')
+    print '#%s\t%s\t%s\t%s\t%s\t%s\t%s' % ('cpu', 'min scale', 'max scale', 'min amdahl', 'max amdahl', 'serial %', 'name')
     print '%u\t%f\t%f' % (1, 1.0, 1.0)
 
     maxWork = float(summary.get_max_work(1))
@@ -95,10 +95,10 @@ def print0(summary, serials):
         minAmdahl = (minWork / maxWork) * maxAmdahl
         amMax = amdahlScale(1 - maxSerial, i)
         amMin = (minWork / maxWork) * amMax
-        print '%u\t%f\t%f\t%f\t%f\t%f\t%s' % (i, minAmdahl, maxAmdahl, amMin, amMax, maxSerial, maxSample.get_name())
+        print '%u\t%f\t%f\t%f\t%f\t%f\t%s' % (i, amMin, amMax, maxSerial, minAmdahl, maxAmdahl, maxSample.get_name())
 
 def print1(summary, serials):
-    print '#%s\t%s\t%s\t%s\t%s' % ('cpu', 'min scale', 'sup', 'serial %', 'name')
+    print '#%s\t%s\t%s\t%s\t%s\t%s\t%s' % ('cpu', 'min scale', 'max scale', 'min sup', 'max sup', 'serial %', 'name')
     print '%u\t%f\t%f' % (1, 1.0, 1.0)
 
     for i in range(2, 49):
@@ -109,9 +109,18 @@ def print1(summary, serials):
 
         maxHoldTime = maxSample.get_exclusive_stats().time(i)
         maxSerial = float(maxHoldTime) / float(summary.get_max_work(i))
-        sup = (float(summary.get_min_work(1)) / ((float(summary.get_max_work(i)) - float(maxHoldTime))/ float(i)))
-        amMin = 1 / (maxSerial + ((1 - maxSerial) / sup))
-        print '%u\t%f\t%f\t%f\t%f\t%f\t%s' % (i, amMin, sup, maxSerial, maxSample.get_name())
+
+        minSingle = float(summary.get_min_work(1)) - maxSample.get_exclusive_stats().time(1)
+        maxSingle = float(summary.get_max_work(1)) - maxSample.get_exclusive_stats().time(1)
+        maxParallel = ((float(summary.get_max_work(i)) - float(maxHoldTime)) / float(i))
+
+        minSup = (minSingle / maxParallel)
+        maxSup = (maxSingle / maxParallel)
+
+        amMin = 1 / (maxSerial + ((1 - maxSerial) / minSup))
+        amMax = 1 / (maxSerial + ((1 - maxSerial) / maxSup))
+
+        print '%u\t%f\t%f\t%f\t%f\t%f\t%s' % (i, amMin, amMax, minSup, maxSup, maxSerial, maxSample.get_name())
 
 def main(argv = None):
     if argv is None:
