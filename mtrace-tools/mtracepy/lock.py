@@ -149,7 +149,7 @@ def get_locks(dbFile, dataName):
     for row in c:
         if row[0] == 0:
             continue
-        if row['str'].startswith('d_count'):
+        if row['str'].startswith('cmpxchg'):
             lst.append(MtraceLock(row[0], row[1], row[2], dbFile, dataName, model.MtraceCmpxchgSample))
         else:
             lst.append(MtraceLock(row[0], row[1], row[2], dbFile, dataName, model.MtraceLockSample))
