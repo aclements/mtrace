@@ -1,6 +1,8 @@
 #include <algorithm>
+#include <iomanip>
 #include <map>
 #include <set>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -38,11 +40,43 @@ const char *lockStateNames[] = {
 	"Write-locked",
 };
 
+class AccessSource
+{
+public:
+	uint64_t pc;
+
+	AccessSource(uint64_t _pc) : pc(_pc) { }
+
+	string
+	toString(Addr2line *a2l)
+	{
+		char *func, *file;
+		int lineno;
+		ostringstream o;
+		if (a2l->lookup(pc, &func, &file, &lineno) < 0) {
+			func = strdup("???");
+			file = strdup("???");
+			lineno = 0;
+		}
+		o << hex<<setw(16)<<setfill('0')<<pc
+		  << " " << func << " " << file << ":"
+		  << dec<<lineno;
+		free(func);
+		free(file);
+		return o.str();
+	}
+
+	bool operator<(const AccessSource &o) const
+	{
+		return pc < o.pc;
+	}
+};
+
 class OffsetLockSetInfo
 {
 public:
 	int stcount, count;
-	typedef pair<uint64_t, mtrace_access_t> Access;
+	typedef pair<AccessSource, mtrace_access_t> Access;
 	map<Access, int> pcs;
 
 	static bool
@@ -65,19 +99,10 @@ public:
 		partial_sort(vec.begin(), vec.begin() + num, vec.end(),
 			     compare_pc_count);
 		for (unsigned int i = 0; i < num; ++i) {
-			char *func, *file;
-			int lineno;
-			if (a2l->lookup(vec[i].first.first, &func, &file, &lineno) < 0) {
-				func = strdup("???");
-				file = strdup("???");
-				lineno = 0;
-			}
-			printf("    %s %6d %016llx %s %s:%d\n",
+			printf("    %s %6d %s\n",
 			       access_type_to_str[vec[i].first.second],
-			       vec[i].second, vec[i].first.first,
-			       func, file, lineno);
-			free(func);
-			free(file);
+			       vec[i].second,
+			       vec[i].first.first.toString(a2l).c_str());
 		}
 		if (num < pcs.size())
 			printf("    (+ %d more)\n", pcs.size() - num);
@@ -130,10 +155,10 @@ public:
 	// Dynamic allocations
 	LabelClass(string _name) : varid(-1), name(_name) {}
 
-	bool operator==(LabelClass o) const {
+	bool operator==(const LabelClass &o) const {
 		return o.varid == varid && o.name == name;
 	}
-	bool operator<(LabelClass o) const {
+	bool operator<(const LabelClass &o) const {
 		if (o.varid != varid)
 			return o.varid < varid;
 		return o.name < name;
@@ -400,7 +425,7 @@ main(int argc, char **argv)
 	int vmlinuxfd;
 	struct obj_info *vmlinux;
 	union mtrace_entry entry;
-	int count = 0, limit = 0; //1000000;
+	int count = 0, limit = 1000000;
 	int r;
 
 	if (argc != 4)
