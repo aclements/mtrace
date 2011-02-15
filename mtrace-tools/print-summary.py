@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 import sys
-import mtracepy.summary
+import mtracepy.model
 
 def usage(argv):
     print """Usage: %s DB-file name""" % (argv[0]),
@@ -15,7 +15,7 @@ def main(argv = None):
 
     dbFile = argv[1]
     dataName = argv[2]
-    print mtracepy.summary.MtraceSummary(dbFile, dataName)
+    print mtracepy.model.MtraceSummary(dbFile, dataName)
 
 if __name__ == "__main__":
     sys.exit(main())

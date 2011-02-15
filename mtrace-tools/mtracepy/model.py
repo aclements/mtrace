@@ -117,6 +117,8 @@ class MtraceSummary(object):
         self.trafficAccesses = row['traffic_accesses']
         self.lockedAccesses = row['locked_accesses']
         self.lockAcquires = row['lock_acquires']
+        self.numCpus = row['num_cpus']
+        self.numRam = row['num_ram']
 
     def get_max_work(self, numCores = 0):
         return (self.get_min_work(numCores) + 
@@ -130,10 +132,12 @@ class MtraceSummary(object):
     def __str__(self):
         s = ''
         s += '  %-16s %lu\n' % ('cycles', self.endTs - self.startTs)
-        s += '  %-16s %lu\n' % ('spin', self.spinTime)
-        s += '  %-16s %lu\n' % ('min work', self.minWork)
-        s += '  %-16s %lu\n' % ('max work', self.maxWork)
-        s += '  %-16s %lu\n' % ('num ops', self.numOps)
+        s += '  %-16s %lu\n' % ('spin cycles', self.spinCycles)
+        s += '  %-16s %lu\n' % ('spin t. accesses', self.spinTrafficAccesses)
+        s += '  %-16s %lu\n' % ('spin l. accesses', self.spinLockedAccesses)
+        s += '  %-16s %lu\n' % ('t. accesses', self.trafficAccesses)
+        s += '  %-16s %lu\n' % ('l. accesses', self.lockedAccesses)
+        s += '  %-16s %lu\n' % ('acquires', self.lockAcquires)
         s += '  %-16s %lu\n' % ('num cpus', self.numCpus)
         s += '  %-16s %lu' % ('num ram', self.numRam)
         return s
