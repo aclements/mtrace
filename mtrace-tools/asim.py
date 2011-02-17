@@ -68,7 +68,8 @@ class Timeline:
             s += ' ' + section.__str__()
         return s
 
-TIMELINE = [ Section(1, False, 900), Section(2, True, 10) ]
+#TIMELINE = [ Section(1, False, 300), Section(2, False, 300), Section(3, False, 300), Section(4, True, 10) ]
+TIMELINE = []
 PERCORE_TIMELINE = None
 
 def do_one(numCores):
@@ -80,25 +81,33 @@ def do_one(numCores):
         PERCORE_TIMELINE.append(timeline)
 
     time = 0
-    while True:
+    waiting = 0
+
+    endTime = PERCORE_TIMELINE[0].work
+    work = 0
+
+    for x in range(0, endTime):
         allDone = True
         keys = {}
         
         for timeline in PERCORE_TIMELINE:
-            if timeline.empty() == False:
+            if not timeline.empty():
                 allDone = False
                 section = timeline.get_random_section()
                 if section.key in keys:
                     timeline.set_next_section(section)
                 else:
-                    timeline.subtract_section(section, 1)
+                    work += 1
                     if section.critical:
                         keys[section.key] = 1
+                    timeline.subtract_section(section, 1)
+                    if section.length:
+                        timeline.set_next_section(section)
         if allDone:
             break
         time += 1
 
-    return float(time) / numCores
+    return work / float(time)
     
 
 def usage():
@@ -111,13 +120,18 @@ def main(argv = None):
     if len(argv) < 3:
         usage()
 
+    # Create 90 par sections, each 10 cycles
+    for i in range (0, 999):
+        TIMELINE.append(Section(i, False, 1))
+    TIMELINE.append(Section(999, True, 100))
+
         
     oneTp = do_one(1)
     #print '%u\t%.2f\t%.2f' % (1, oneTp, oneTp / oneTp)
     print '%u\t%.2f' % (1, oneTp / oneTp)
     for n in range(2, 50):
         tp = do_one(n)
-        speedUp = oneTp / tp
+        speedUp = tp / oneTp
         print '%u\t%.2f' % (n, speedUp)
         #print '%u\t%.2f\t%.2f' % (n, tp, speedUp)
 
