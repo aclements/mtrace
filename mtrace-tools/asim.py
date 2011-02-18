@@ -47,6 +47,8 @@ class Timeline:
             print ''
 
         r = random.randint(0, self.work - 1)        
+        #r = random.randint(0, len(self.timeline) - 1)
+        #return self.timeline[r]
         for section in self.timeline:
             if r < section.length:
                 return section
@@ -108,19 +110,11 @@ def do_one(numCores):
         time += 1
 
     return work / float(time)
-    
-
-def usage():
-    print """Usage: asim.py DB-file name"""
-    exit(1)
 
 def main(argv = None):
     if argv is None:
         argv = sys.argv
-    if len(argv) < 3:
-        usage()
 
-    # Create 90 par sections, each 10 cycles
     for i in range (0, 999):
         TIMELINE.append(Section(i, False, 1))
     TIMELINE.append(Section(999, True, 100))
