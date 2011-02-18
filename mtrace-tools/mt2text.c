@@ -12,10 +12,11 @@ static void print_entry(union mtrace_entry *entry)
 	
 	switch(entry->h.type) {
 	case mtrace_entry_label:
-		printf("%-3s [%-3u  %16s  %016lx  %016lx  %016lx  %016lx]\n",
+		printf("%-3s [%-3u  %16s  %016lx  %016lx  %016lx  %016lx  %016lx]\n",
 		       "T",
 		       entry->label.label_type,
 		       entry->label.str,
+                       entry->label.pc,
 		       entry->label.host_addr,
 		       entry->label.guest_addr,
 		       entry->label.bytes,
@@ -30,9 +31,9 @@ static void print_entry(union mtrace_entry *entry)
 		       entry->access.host_addr,
 		       entry->access.guest_addr);
 		break;
-	case mtrace_entry_enable:
+	case mtrace_entry_host:
 		printf("%-3s [%u]\n", 
-		       "E", entry->enable.enable);
+		       "E", entry->host.access.value);
 		break;
 	case mtrace_entry_fcall:
 		printf("%-3s [%-3u  %16lu  %16lu  %016lx"
@@ -62,6 +63,21 @@ static void print_entry(union mtrace_entry *entry)
 		       entry->h.access_count,
 		       entry->call.target_pc,
 		       entry->call.return_pc);
+		break;
+	case mtrace_entry_lock:
+		printf("%-3s [%-3u  pc %16lx  lock %16lx  %s]\n",
+		       entry->lock.op == mtrace_lockop_release ? "r" 
+		       		      : (entry->lock.read ? "ar" : "aw"),
+		       entry->h.cpu,
+		       entry->lock.pc,
+		       entry->lock.lock,
+		       entry->lock.str);
+		break;
+        case mtrace_entry_sched:
+		printf("%-3s [%-3u  pid %5u]\n",
+		       "sch",
+		       entry->h.cpu,
+		       entry->sched.tid);
 		break;
 	default:
 		fprintf(stderr, "print_entry: bad type %u\n", entry->h.type);

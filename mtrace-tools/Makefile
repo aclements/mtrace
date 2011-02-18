@@ -14,17 +14,25 @@ CWARNS	= -Wformat=2 -Wextra -Wmissing-noreturn -Wwrite-strings -Wshadow \
 CFLAGS  = -Wall -Werror $(CWARNS) -I$(QEMUDIR) -g -O2
 LDFLAGS = -lsqlite3 -lz
 
-HDRS	= $(QEMUDIR)/mtrace-magic.h syms.hh calltrace.hh util.h
+HDRS	= $(QEMUDIR)/mtrace-magic.h syms.hh calltrace.hh util.h objinfo.h
 
 all: mt2db mt2text
 
-mt2db: mt2db.cc $(HDRS)
+mt2db: mt2db.cc $(HDRS) sql.h lockset.hh block.h
 	@echo "CXX	$@"
 	$(Q)$(CXX) -o $@ $< $(CFLAGS) $(LDFLAGS)
 
 mt2text: mt2text.c $(HDRS)
 	@echo "CC	$@"
 	$(Q)$(CC) -o $@ $< $(CFLAGS) $(LDFLAGS)
+
+objinfo: objinfo.cc $(HDRS)
+	@echo "CXX	$@"
+	$(Q)$(CXX) -DTEST -o $@ $< $(CFLAGS) $(LDFLAGS) -ldwarf -lelf
+
+lockinfer: lockinfer.cc objinfo.cc addr2line.cc $(HDRS) addr2line.hh
+	@echo "CXX	$@"
+	$(Q)$(CXX) -o $@ lockinfer.cc objinfo.cc addr2line.cc $(CFLAGS) $(LDFLAGS) -ldwarf -lelf
 
 install: mt2db mt2text
 	@echo "INSTALL  $(INSTDIR)"

@@ -984,4 +984,11 @@ void mtrace_inst_exec(target_ulong a0, target_ulong a1,
 void mtrace_inst_call(target_ulong target_pc, target_ulong return_pc,
 		      int ret);
 
+void mtrace_exec_start(CPUState *env);
+void mtrace_exec_stop(CPUState *env);
+/* atomic instructions (e.g. lock; inc) */
+void mtrace_lock_start(CPUState *env);
+void mtrace_lock_stop(CPUState *env);
+
+
 #endif /* CPU_ALL_H */

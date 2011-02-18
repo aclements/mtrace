@@ -112,10 +112,12 @@ static spinlock_t global_cpu_lock = SPIN_LOCK_UNLOCKED;
 void helper_lock(void)
 {
     spin_lock(&global_cpu_lock);
+    mtrace_lock_start(env);
 }
 
 void helper_unlock(void)
 {
+    mtrace_lock_stop(env);
     spin_unlock(&global_cpu_lock);
 }
 

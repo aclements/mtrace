@@ -2,17 +2,21 @@
 #define _MTRACE_MAGIC_H_
 
 enum {
-    MTRACE_ENABLE_SET = 1,
-    MTRACE_ENTRY_REGISTER,
+    MTRACE_ENTRY_REGISTER = 1,
 };
 
 typedef enum {
     mtrace_entry_label = 1,
     mtrace_entry_access,
-    mtrace_entry_enable,
+    mtrace_entry_host,
     mtrace_entry_fcall,
     mtrace_entry_segment,
     mtrace_entry_call,
+    mtrace_entry_lock,
+    mtrace_entry_task,
+    mtrace_entry_sched,
+    mtrace_entry_machine,
+    mtrace_entry_appdata,
 } mtrace_entry_t;
 
 typedef enum {
@@ -24,6 +28,15 @@ typedef enum {
     mtrace_label_end
 } mtrace_label_t;
 
+typedef enum {
+    mtrace_access_clear_cpu = 1,
+    mtrace_access_set_cpu,
+    mtrace_access_all_cpu,
+    
+    mtrace_call_clear_cpu,
+    mtrace_call_set_cpu,
+} mtrace_host_t;
+
 #define __pack__ __attribute__((__packed__))
 
 /*
@@ -34,6 +47,7 @@ struct mtrace_entry_header {
     uint16_t size;
     uint16_t cpu;
     uint64_t access_count;
+    uint64_t ts;		/* per-core time stamp */
 } __pack__;
 
 /*
@@ -44,6 +58,7 @@ struct mtrace_segment_entry {
 
     uint64_t baseaddr;
     uint64_t endaddr;
+    uint16_t cpu;
     mtrace_label_t object_type;
 } __pack__;
 
@@ -76,13 +91,25 @@ struct mtrace_call_entry {
 } __pack__;
 
 /*
- * The guest enabled/disabled mtrace and specified an optional string
+ * The guest sent a message to the host (QEMU)
  */
-struct mtrace_enable_entry {
+struct mtrace_host_entry {
     struct mtrace_entry_header h;
+    mtrace_host_t host_type;
+    uint64_t global_ts;		/* global time stamp */
+    
+    union {
+	/* Enable/disable access tracing */
+	struct {
+	    uint64_t value;
+	    char str[32];
+	} access;
 
-    uint8_t enable;
-    char str[32];
+	/* Enable/disable call/ret tracing */
+	struct {
+	    uint64_t cpu;
+	} call;
+    };
 } __pack__;
 
 /* 
@@ -114,20 +141,95 @@ struct mtrace_access_entry {
     struct mtrace_entry_header h;
 
     mtrace_access_t access_type;
+    uint8_t traffic:1;
+    uint8_t lock:1;
     uint64_t pc;
     uint64_t host_addr;
     uint64_t guest_addr;
 }__pack__;
+
+/*
+ * A guest lock acquire/release
+ */
+typedef enum {
+    mtrace_lockop_acquire = 1,
+    mtrace_lockop_acquired,
+    mtrace_lockop_release,
+} mtrace_lockop_t;
+
+struct mtrace_lock_entry {
+    struct mtrace_entry_header h;
+
+    uint64_t pc;
+    uint64_t lock;
+    char str[32];
+    mtrace_lockop_t op;
+    uint8_t read;
+} __pack__;
+
+/*
+ * A guest task create
+ */
+typedef enum {
+    mtrace_task_init = 1,
+    mtrace_task_update,
+    mtrace_task_exit,	/* IO Write, which is actually to RAM */
+} mtrace_task_t;
+
+struct mtrace_task_entry {
+    struct mtrace_entry_header h;
+
+    uint64_t tid;	       /* Thread ID */
+    uint64_t tgid;	       /* Thread Group ID */
+    mtrace_task_t task_type;
+    char str[32];
+} __pack__;
+
+/*
+ * A task switch in the guest
+ */
+struct mtrace_sched_entry {
+    struct mtrace_entry_header h;
+
+    uint64_t tid;
+} __pack__;;
+
+/*
+ * The QEMU guest machine info
+ */
+struct mtrace_machine_entry {
+    struct mtrace_entry_header h;
+
+    uint16_t num_cpus;
+    uint64_t num_ram;
+} __pack__;
+
+/*
+ * Application defined data
+ */
+struct mtrace_appdata_entry {
+    struct mtrace_entry_header h;
+    
+    uint16_t appdata_type;
+    union {
+	uint64_t u64;
+    };
+};
 
 union mtrace_entry {
     struct mtrace_entry_header h;
 
     struct mtrace_access_entry access;
     struct mtrace_label_entry label;
-    struct mtrace_enable_entry enable;
+    struct mtrace_host_entry host;
     struct mtrace_fcall_entry fcall;
     struct mtrace_segment_entry seg;
     struct mtrace_call_entry call;
+    struct mtrace_lock_entry lock;
+    struct mtrace_task_entry task;
+    struct mtrace_sched_entry sched;
+    struct mtrace_machine_entry machine;
+    struct mtrace_appdata_entry appdata;
 }__pack__;
 
 #ifndef QEMU_MTRACE
@@ -146,10 +248,28 @@ static inline void mtrace_magic(unsigned long ax, unsigned long bx,
 		       "S" (si), "D" (di));
 }
 
-static inline void mtrace_enable_set(unsigned long b, const char *str, 
-				     unsigned long n)
+static inline void mtrace_enable_set(unsigned long b, const char *str)
 {
-    mtrace_magic(MTRACE_ENABLE_SET, b, (unsigned long)str, n, 0, 0);
+    volatile struct mtrace_host_entry entry;
+
+    entry.host_type = mtrace_access_all_cpu;
+    entry.access.value = b ? ~0UL : 0;
+    strncpy((char*)entry.access.str, str, sizeof(entry.access.str));
+    entry.access.str[sizeof(entry.access.str) - 1] = 0;
+
+    mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&entry,
+		 mtrace_entry_host, sizeof(entry), ~0, 0);
+}
+
+static inline void mtrace_call_set(unsigned long b, int cpu)
+{
+    volatile struct mtrace_host_entry entry;
+
+    entry.host_type = b ? mtrace_call_set_cpu : mtrace_call_clear_cpu;
+    entry.call.cpu = cpu;
+
+    mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&entry,
+		 mtrace_entry_host, sizeof(entry), ~0, 0);
 }
 
 static inline void mtrace_label_register(mtrace_label_t type,
@@ -172,7 +292,7 @@ static inline void mtrace_label_register(mtrace_label_t type,
     label.pc = call_site;
 
     mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&label,
-		 mtrace_entry_label, sizeof(label), 0, 0);
+		 mtrace_entry_label, sizeof(label), ~0, 0);
 }
 
 static inline void mtrace_segment_register(unsigned long baseaddr,
@@ -184,8 +304,9 @@ static inline void mtrace_segment_register(unsigned long baseaddr,
     entry.baseaddr = baseaddr;
     entry.endaddr = endaddr;
     entry.object_type = type;
+    entry.cpu = cpu;
     mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&entry,
-		 mtrace_entry_segment, sizeof(entry), cpu, 0);
+		 mtrace_entry_segment, sizeof(entry), ~0, 0);
 }
 
 static inline void mtrace_fcall_register(unsigned long tid,
@@ -202,6 +323,59 @@ static inline void mtrace_fcall_register(unsigned long tid,
     entry.state = state;
     mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&entry,
 		 mtrace_entry_fcall, sizeof(entry), ~0, 0);
+}
+
+static inline void mtrace_lock_register(unsigned long pc,
+                                        void *lock,
+					const char *str,
+					mtrace_lockop_t op,
+					unsigned long is_read)
+{
+    volatile struct mtrace_lock_entry entry;
+    entry.pc = pc;
+    entry.lock = (unsigned long)lock;
+    strncpy((char*)entry.str, str, sizeof(entry.str));
+    entry.str[sizeof(entry.str)-1] = 0;
+    entry.op = op;
+    entry.read = is_read;
+
+    mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&entry,
+		 mtrace_entry_lock, sizeof(entry), ~0, 0);
+}
+
+static inline void mtrace_task_register(unsigned long tid,
+					unsigned long tgid,
+					mtrace_task_t type,
+					const char *str)
+{
+    volatile struct mtrace_task_entry entry;
+    entry.tid = tid;
+    entry.tgid = tgid;
+    entry.task_type = type;
+    strncpy((char*)entry.str, str, sizeof(entry.str));
+    entry.str[sizeof(entry.str) - 1] = 0;
+
+    mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&entry,
+		 mtrace_entry_task, sizeof(entry), ~0, 0);
+}
+
+static inline void mtrace_sched_record(unsigned long tid)
+{
+    volatile struct mtrace_sched_entry entry;
+    entry.tid = tid;
+
+    mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&entry,
+                 mtrace_entry_sched, sizeof(entry), ~0, 0);
+}
+
+static inline void mtrace_appdata_register(struct mtrace_appdata_entry *appdata)
+{
+    volatile struct mtrace_appdata_entry entry;
+    memcpy((void *)&entry, appdata, sizeof(entry));
+
+    mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&entry,
+                 mtrace_entry_appdata, sizeof(entry), ~0, 0);
+
 }
 
 #endif /* QEMU_MTRACE */

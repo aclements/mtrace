@@ -14,7 +14,7 @@ import traceback
 default_img_size = '300M'
 default_includes = 'python,makedev'
 
-mosbench_includes = 'make,rsync,dropbear,libpcre3,numactl,procps,sudo,ifupdown,netbase'
+mosbench_includes = 'make,rsync,libpcre3,numactl,procps,sudo,ifupdown,netbase'
 
 # colors differentiate subprocess output from make-img.py
 text_log_color   = '\033[95m'       # purplish

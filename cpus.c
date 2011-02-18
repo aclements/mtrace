@@ -38,6 +38,8 @@
 #include <sys/prctl.h>
 #endif
 
+#include "mtrace.h"
+
 #ifdef SIGRTMIN
 #define SIG_IPI (SIGRTMIN+4)
 #else
@@ -884,11 +886,14 @@ static int qemu_cpu_exec(CPUState *env)
 #endif
     if (use_icount) {
         int64_t count;
+	int max_count;
         int decr;
         qemu_icount -= (env->icount_decr.u16.low + env->icount_extra);
         env->icount_decr.u16.low = 0;
         env->icount_extra = 0;
         count = qemu_icount_round (qemu_next_deadline());
+	if (mtrace_enable_get() && (max_count = mtrace_quantum_get()))
+	    count = count > max_count ? max_count : count;
         qemu_icount += count;
         decr = (count > 0xffff) ? 0xffff : count;
         count -= decr;
@@ -912,6 +917,7 @@ static int qemu_cpu_exec(CPUState *env)
 
 bool cpu_exec_all(void)
 {
+    int r;
     if (next_cpu == NULL)
         next_cpu = first_cpu;
     for (; next_cpu != NULL && !exit_request; next_cpu = next_cpu->next_cpu) {
@@ -923,7 +929,10 @@ bool cpu_exec_all(void)
         if (qemu_alarm_pending())
             break;
         if (cpu_can_run(env)) {
-            if (qemu_cpu_exec(env) == EXCP_DEBUG) {
+	    mtrace_exec_start(env);
+	    r = qemu_cpu_exec(env);
+	    mtrace_exec_stop(env);
+            if (r == EXCP_DEBUG) {
                 break;
             }
         } else if (env->stop) {
@@ -972,7 +981,7 @@ int64_t cpu_get_icount(void)
 
     icount = qemu_icount;
     if (env) {
-        if (!can_do_io(env)) {
+        if (!can_do_io(env) && !mtrace_system_enable_get()) {
             fprintf(stderr, "Bad clock read\n");
         }
         icount -= (env->icount_decr.u16.low + env->icount_extra);
