@@ -18,6 +18,7 @@ DEFAULT_ADDR2LINE       = None
 PRINT_COLS              = []
 SUMMARY                 = None
 DEFAULT_NUM_CORES       = 2
+PRINT_LATEX             = False
 
 class FilterLabel:
     def __init__(self, labelName):
@@ -43,7 +44,7 @@ class FilterCpuCount:
 def usage():
     print """Usage: serialsum.py DB-file name [ -filter-label filter-label 
     -filter-tid-count filter-tid-count -filter-cpu-count filter-cpu-count 
-    -print col -exefile exefile -num-cores num-cores]
+    -print col -exefile exefile -num-cores num-cores -latex latex]
 
     'filter-tid-count' is the number of TIDs minus one that must execute
       a serial section
@@ -52,15 +53,17 @@ def usage():
       a serial section
 
     'col' is the name of a column.  Valid values are:
-      'pc'      --
-      'length'  --
-      'percent' --
-      'cpus'    --
-      'tids'    --
+      'pc'      --  print the most popular PC
+      'length'  --  print the length (in instructions)
+      'percent' --  print the percent of total
+      'cpus'    --  print CPUs 
+      'tids'    --  print task IDs
 
     'exefile' is the executable for which addresses should be translated
     
     'num-cores' is the number of cores to use
+
+    'latex' is True to print latex
 """
     exit(1)
 
@@ -91,6 +94,10 @@ def parse_args(argv):
         global DEFAULT_NUM_CORES
         DEFAULT_NUM_CORES = int(ncores)
 
+    def latex_handler(latex):
+        global PRINT_LATEX
+        PRINT_LATEX = bool(latex)
+
     handler = {
         '-filter-label'         : filter_label_handler,
         '-filter-tid-count'     : filter_tid_count_handler,
@@ -98,6 +105,7 @@ def parse_args(argv):
         '-print'                : print_handler,
         '-exefile'              : exefile_handler,
         '-num-cores'            : num_cores_handler
+        '-latex'                : latex_handler,
     }
 
     for i in range(0, len(args), 2):
