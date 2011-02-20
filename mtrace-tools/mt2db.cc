@@ -842,14 +842,15 @@ static void handle_access(struct mtrace_access_entry *a)
 		CriticalSection crit;
 		TaskState *ts;
 
-		if (it == task_table.end())
-			die("handle_access: missing task");
-
-		ts = it->second;
-		if (!ts->lock_set_.empty()) {
+		if (it != task_table.end()) {
+		    ts = it->second;
+		    if (!ts->lock_set_.empty()) {
 			ts->lock_set_.on_access(a);
 			ts->lock_set_.top(&crit);
 			locked_id = crit.id_;
+		    }
+		} else {
+			printf("handle_access: missing task\n");
 		}
 	}
 
