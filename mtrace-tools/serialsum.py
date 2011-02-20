@@ -207,15 +207,21 @@ def print_header():
         print headerStr
         print borderStr
 
+def latex_sanitize(val):
+    val = val.replace('%', '\%')
+    val = val.replace('_', '\_')
+    val = val.replace('&', '\&')
+    return val
+
 def print_serial(s):
     if PRINT_LATEX:
         vals = []
         vals.extend([s.get_name(), str(s.get_label_id()), '%016lx' % uhex(s.get_lock())])
         for col in PRINT_COLS:
             vals.append(get_col_value(s, col))
-        print '\\serialsec{%s}' % vals[0]
+        print '\\serialsec{%s}' % latex_sanitize(vals[0])
         for v in vals[1:]:
-            print '{%s}' % v
+            print '{%s}' % latex_sanitize(v)
         print ''
     else:
         valStr = '%-40s  %16lu  %16lx' % (s.get_name(), s.get_label_id(), uhex(s.get_lock()))
