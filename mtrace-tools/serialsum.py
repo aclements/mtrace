@@ -23,8 +23,8 @@ class FilterLabel(object):
     def __init__(self, labelName):
         self.labelName = labelName
 
-    def filter(self, summaryObject):
-        return self.labelName != summaryObject.name
+    def filter(self, lock):
+        return self.labelName != lock.get_name()
 
 class FilterTidCount(object):
     def __init__(self, count):
