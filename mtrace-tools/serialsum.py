@@ -19,26 +19,40 @@ PRINT_COLS              = []
 SUMMARY                 = None
 DEFAULT_NUM_CORES       = 2
 
-class FilterLabel:
+class FilterLabel(object):
     def __init__(self, labelName):
         self.labelName = labelName
 
     def filter(self, summaryObject):
         return self.labelName != summaryObject.name
 
-class FilterTidCount:
+class FilterTidCount(object):
     def __init__(self, count):
         self.count = count
 
     def filter(self, lock):
         return len(lock.get_tids()) > self.count
 
-class FilterCpuCount:
+class FilterCpuCount(object):
     def __init__(self, count):
         self.count = count
 
     def filter(self, lock):
         return len(lock.get_cpus()) > self.count
+
+class FilterCpuPercent(object):
+    def __init__(self, percent):
+        self.percent = percent
+
+    def filter(self, lock):
+        cpuTable = lock.get_cpus()
+        cpus = cpuTable.keys()
+        for cpu in cpus:
+            time = cpuTable[cpu].time(DEFAULT_NUM_CORES)
+            percent = (time * 100.0) / lock.get_exclusive_stats().time(DEFAULT_NUM_CORES)
+            if percent > self.percent:
+                return False
+        return True
 
 def usage():
     print """Usage: serialsum.py DB-file name [ -filter-label filter-label 
@@ -50,6 +64,8 @@ def usage():
 
     'filter-cpu-count' is the number of CPUs minus one that must execute
       a serial section
+
+    'filter-cpu-percent'
 
     'col' is the name of a column.  Valid values are:
       'pc'      --
@@ -79,6 +95,10 @@ def parse_args(argv):
         global DEFAULT_FILTERS
         DEFAULT_FILTERS.append(FilterCpuCount(int(count)))
 
+    def filter_cpu_percent_handler(percent):
+        global DEFAULT_FILTERS
+        DEFAULT_FILTERS.append(FilterCpuPercent(float(percent)))
+
     def print_handler(col):
         global PRINT_COLS
         PRINT_COLS.append(col)
@@ -95,6 +115,7 @@ def parse_args(argv):
         '-filter-label'         : filter_label_handler,
         '-filter-tid-count'     : filter_tid_count_handler,
         '-filter-cpu-count'     : filter_cpu_count_handler,
+        '-filter-cpu-percent'   : filter_cpu_percent_handler,
         '-print'                : print_handler,
         '-exefile'              : exefile_handler,
         '-num-cores'            : num_cores_handler
@@ -130,10 +151,10 @@ def get_col_value(lock, col):
     def get_cpus():
         cpuTable = lock.get_cpus()
         cpus = cpuTable.keys()
-        time = cpuTable[cpus[0]]
+        time = cpuTable[cpus[0]].time(DEFAULT_NUM_CORES)
         cpuString = '%u:%.2f%%' % (cpus[0], (time * 100.0) / lock.get_exclusive_stats().time(DEFAULT_NUM_CORES))
         for cpu in cpus[1:]:
-            time = cpuTable[cpu]
+            time = cpuTable[cpu].time(DEFAULT_NUM_CORES)
             cpuString += ' %u:%.2f%%' % (cpu, (time * 100.0) / lock.get_exclusive_stats().time(DEFAULT_NUM_CORES))
         return cpuString
 
