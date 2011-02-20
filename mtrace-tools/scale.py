@@ -36,6 +36,20 @@ class FilterCpuCount:
     def filter(self, lock):
         return len(lock.get_cpus()) > self.count
 
+class FilterCpuPercent(object):
+    def __init__(self, percent):
+        self.percent = percent
+
+    def filter(self, lock):
+        cpuTable = lock.get_cpus()
+        cpus = cpuTable.keys()
+        for cpu in cpus:
+            time = cpuTable[cpu].time(1)
+            percent = (time * 100.0) / lock.get_exclusive_stats().time(1)
+            if percent > self.percent:
+                return False
+        return True
+
 def usage(argv):
     print """Usage: serialsum.py DB-file name [ -filter-label filter-label 
     -filter-tid-count filter-tid-count -filter-cpu-count filter-cpu-count ]
@@ -63,10 +77,15 @@ def parse_args(argv):
         global DEFAULT_FILTERS
         DEFAULT_FILTERS.append(FilterCpuCount(int(count)))
 
+    def filter_cpu_percent_handler(percent):
+        global DEFAULT_FILTERS
+        DEFAULT_FILTERS.append(FilterCpuPercent(float(percent)))
+
     handler = {
         '-filter-label'  : filter_label_handler,
         '-filter-tid-count' : filter_tid_count_handler,
         '-filter-cpu-count' : filter_cpu_count_handler,
+        '-filter-cpu-percent'   : filter_cpu_percent_handler
     }
 
     for i in range(0, len(args), 2):
