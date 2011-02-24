@@ -388,9 +388,9 @@ static void build_call_trace_db(void *arg, const char *name)
 		"CREATE INDEX %s_idx_calls%u ON %s_call_traces"
 		"(cpu, call_trace_tag)",
 		"CREATE INDEX %s_idx_calls%u ON %s_call_traces"
-		"(call_trace_tag, pc)" 
+		"(call_trace_tag, pc)",
 		"CREATE INDEX %s_idx_calls%u ON %s_call_traces"
-		"(pc)" 
+		"(pc)",
 	};
 		
 
@@ -500,6 +500,8 @@ static void build_access_db(void *arg, const char *name)
 		"(call_trace_tag)",
 		"CREATE INDEX %s_idx_accesses%u ON %s_accesses"
 		"(guest_addr)",
+		"CREATE INDEX %s_idx_accesses%u ON %s_accesses"
+		"(call_trace_tag, traffic)",
 	};
 
 	sqlite3 *db = (sqlite3 *) arg;
@@ -525,7 +527,9 @@ static void build_access_db(void *arg, const char *name)
 			  a.label_type_,
 			  a.call_trace_tag_,
 			  a.tid_,
-			  a.locked_id_);
+			  a.locked_id_,
+			  a.access_->traffic,
+			  a.access_->lock);
 
 		free_entry(a.access_);
 		accesses.pop_front();
