@@ -1,5 +1,6 @@
 from columns import *
 from util import uhex
+import util
 import sqlite3
 
 class MtraceCallInterval:
@@ -11,7 +12,7 @@ class MtraceCallInterval:
 
 class MtraceBacktracer:
     def __init__(self, dbFile, dataName, accessId):
-        self.mtraceDB = MtraceDB(dbFile)
+        self.mtraceDB = util.MtraceDB(dbFile)
         self.dataName = dataName
         self.accessId = accessId
 
@@ -113,7 +114,7 @@ class MtraceAccess:
         q = 'SELECT ' + select + ' FROM %s_accesses WHERE access_id = %lu;'
         q = q % (self.dataName,
                  self.accessId)
-        row = MtraceDB(self.dbFile).exec_single(q)
+        row = util.MtraceDB(self.dbFile).exec_single(q)
         self.values = create_column_objects(MtraceAccess.columns, row)
 
     def __str__(self):
@@ -134,18 +135,13 @@ class MtraceAccess:
         return get_column_object(self.get_values(), column)
 
 class MtraceInstanceDetail:
-    def __init__(self, dbFile, dataName, labelId):
-        self.dbFile = dbFile
-        self.dataName = dataName
-        self.labelId = labelId
-        self.accesses = None
-        self.__inited = False;
 
-    def __init__(self, dbFile, dataName, labelType, labelId):
+    def __init__(self, dbFile, dataName, labelType, labelId, onlyTraffic = True):
         self.dbFile = dbFile
         self.dataName = dataName
         self.labelType = labelType
-        self.labelId = labelId;
+        self.labelId = labelId
+        self.onlyTraffic = onlyTraffic
 
         self.__inited = False;
         self.labelStr = None
@@ -160,9 +156,16 @@ class MtraceInstanceDetail:
         c = conn.cursor()
 
         # Access
-        q = 'SELECT access_id FROM %s_accesses WHERE label_id = %lu;'
-        q = q % (self.dataName,
-                 self.labelId)
+        q = ''
+        if self.onlyTraffic:
+            q = 'SELECT access_id FROM %s_accesses WHERE label_id = %lu and traffic = 1;'
+            q = q % (self.dataName,
+                     self.labelId)
+        else:
+            q = 'SELECT access_id FROM %s_accesses WHERE label_id = %lu;'
+            q = q % (self.dataName,
+                     self.labelId)
+            
         c.execute(q)
         self.accesses = []
         for row in c:

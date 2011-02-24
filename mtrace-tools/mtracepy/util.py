@@ -48,7 +48,6 @@ class MtraceDB:
     def __init__(self, dbFile):
         self.dbFile = dbFile
         self.conn = sqlite3.connect(self.dbFile)
-        self.dataName = dataName
 
     def exec_single(self, query):
         c = self.conn.cursor()

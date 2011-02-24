@@ -151,7 +151,7 @@ class CallSummary:
             line = 0
             call = 0
             for row in c:
-                q = 'SELECT COUNT(DISTINCT guest_addr) FROM %s_accesses WHERE call_trace_tag = %lu'
+                q = 'SELECT COUNT(DISTINCT guest_addr) FROM %s_accesses WHERE call_trace_tag = %lu and traffic = 1'
                 tag = row[0]
                 q = q % (self.name, tag)
                 c2 = self.get_conn().cursor()
