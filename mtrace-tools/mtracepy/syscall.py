@@ -3,14 +3,6 @@ import sqlite3
 from util import *
 from mtrace import MtraceInstanceDetail
 
-class XXXInstanceSummary:
-    def __init__(self, name, allocPc, count, tids, labelId):
-        self.name = name
-        self.allocPc = allocPc
-        self.count = count
-        self.tids = tids
-        self.labelId = labelId
-
 class InstanceSummary:
     def __init__(self, dbFile, dataName, labelType, labelId, count, tids):
         self.d = MtraceInstanceDetail(dbFile,
@@ -38,6 +30,9 @@ class CallSummary:
         self.sysName = None
         self.count = None
         self.uniqueCline = None
+        self.allCline = None
+        self.perCallCline = None
+        self.callCount = None
         self.uniqueObj = {}
         self.topObjs = {}
         self.uniqueType = {}
@@ -126,6 +121,49 @@ class CallSummary:
             self.uniqueCline = rs[0][0]
         
         return self.uniqueCline
+
+    def get_all_cline(self):
+        if self.allCline == None:
+            q = 'SELECT COUNT(guest_addr) FROM %s_accesses WHERE EXISTS ' + \
+                '(SELECT * FROM %s_call_traces WHERE ' + \
+                '%s_call_traces.cpu = %s_accesses.cpu ' + \
+                'AND %s_call_traces.call_trace_tag = %s_accesses.call_trace_tag ' + \
+                'AND %s_call_traces.pc = %ld)'
+
+            q = q % (self.name, self.name,
+                     self.name, self.name,
+                     self.name, self.name,
+                     self.name, self.pc)
+            c = self.get_conn().cursor()
+            c.execute(q)    
+            rs = c.fetchall()
+            if len(rs) != 1:
+                raise Exception('unexpected result')
+            self.allCline = rs[0][0]
+        return self.allCline
+
+    def get_per_call_cline(self):
+        if self.perCallCline == None:
+            q = 'SELECT DISTINCT call_trace_tag FROM %s_call_traces where pc = %ld'
+            q = q % (self.name, self.pc)
+            c = self.get_conn().cursor()
+            c.execute(q)    
+            line = 0
+            call = 0
+            for row in c:
+                q = 'SELECT COUNT(DISTINCT guest_addr) FROM %s_accesses WHERE call_trace_tag = %lu'
+                tag = row[0]
+                q = q % (self.name, tag)
+                c2 = self.get_conn().cursor()
+                c2.execute(q)
+                rs = c2.fetchall()
+                if len(rs) != 1:
+                    raise Exception('unexpected result')
+                line += rs[0][0]
+                call += 1
+            self.perCallCline = line
+            self.callCount = call
+        return float(self.perCallCline) / float(self.callCount)
 
     def get_total_unique_obj(self):
         s = 0
@@ -246,8 +284,10 @@ class CallSummary:
             'percpu-type' : lambda: self.get_unique_type(mtrace_label_percpu),
             'sum-type'    : lambda: self.get_total_unique_type(),
 
-            'clines'      : lambda: self.get_unique_cline(),
-            'call-count'  : lambda: self.get_call_count()
+            'unique-clines': lambda: self.get_unique_cline(),
+            'all-clines'   : lambda: self.get_all_cline(),
+            'per-call-clines': lambda: self.get_per_call_cline(),
+            'call-count'   : lambda: self.get_call_count()
         }
 
         return colValueFuncs[col]()

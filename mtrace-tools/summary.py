@@ -13,7 +13,7 @@ import hashlib
 
 default_sort            = 'sum-inst'
 default_print           = [ 'sum-inst', 'sum-type', 'clines' ]
-default_pickledir       = '.'
+default_pickledir       = 'summary-pkl'
 default_type_print      = 5
 default_inst_print      = 5
 default_filters         = [ ]
@@ -360,7 +360,9 @@ def usage():
       'static-type'  -- statically allocated object types
       'percpu-type'  -- per-cpu object types
       'sum-type'     -- the sum of heap-type, static-type, and percpu-type
-      'clines'       -- unique cache lines
+      'unique-clines' -- unique cache lines
+      'all-clines'   -- all cache lines
+      'per-call-clines' -- average per call cache lines
       'call-count'   -- the syscall invocation count
 
     'pickledir' is the name of a directory to read and write pickled 
