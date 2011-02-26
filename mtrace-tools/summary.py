@@ -12,7 +12,7 @@ import errno
 import hashlib
 
 default_sort            = 'sum-inst'
-default_print           = [ 'sum-inst', 'sum-type', 'clines' ]
+default_print           = [ 'sum-inst', 'sum-type', 'unique-clines' ]
 default_pickledir       = 'summary-pkl'
 default_type_print      = 5
 default_inst_print      = 5
