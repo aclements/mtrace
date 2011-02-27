@@ -277,10 +277,18 @@ def summarize_all(stats):
     if default_type_print != 0:
         stats.print_top_types(default_type_print)
 
+def summarize_brief(stats):
+    printCols = the_print_columns
+    if len(printCols) == 0:
+        printCols = default_print
+
+    stats.print_summary(printCols)
+
 default_summarize = summarize_all
 
 summarize_types = {
     'types' : summarize_types,
+    'brief' : summarize_brief,
     'all'   : summarize_all
 }
 
@@ -379,6 +387,7 @@ def usage():
 
     'summarize' is the type of summary to print.  Valid value are:
       'types'        -- print a type summary
+      'brief'        -- print kernel call summary
       'all'          -- the default
 
     'divisor' is an integer to divide sums by
