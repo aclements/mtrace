@@ -19,6 +19,7 @@ PRINT_COLS              = []
 SUMMARY                 = None
 DEFAULT_NUM_CORES       = 2
 PRINT_LATEX             = False
+DEFAULT_PICKLEDIR       = 'serialsum-pkl'
 
 class FilterLabel(object):
     def __init__(self, labelName):
@@ -242,7 +243,7 @@ def main(argv = None):
     global SUMMARY
     SUMMARY = mtracepy.model.MtraceSummary(dbFile, dataName)
 
-    serials = MtraceSerials.open(dbFile, dataName, '.')
+    serials = MtraceSerials.open(dbFile, dataName, DEFAULT_PICKLEDIR)
     filtered = serials.filter(DEFAULT_FILTERS)
     sortedFiltered = sorted(filtered, 
                             key=lambda l: l.get_exclusive_stats().time(DEFAULT_NUM_CORES), 
@@ -253,7 +254,7 @@ def main(argv = None):
     for s in sortedFiltered:
         print_serial(s)
 
-    serials.close('.')
+    serials.close(DEFAULT_PICKLEDIR)
 
 if __name__ == "__main__":
     sys.exit(main())
