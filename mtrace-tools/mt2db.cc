@@ -575,6 +575,7 @@ static void build_locked_sections_db(void *arg, const char *name)
 			  ls.cs_.read_mode_,
 			  ls.cs_.locked_accesses_,
 			  ls.cs_.traffic_accesses_,
+			  ls.cs_.call_trace_tag_,
 			  ls.tid_);
 
 		locked_sections.pop_front();
@@ -1029,6 +1030,7 @@ static void handle_sched(struct mtrace_sched_entry *sched)
 static void handle_lock(struct mtrace_lock_entry *lock)
 {
 	static uint64_t lock_count;
+	uint64_t call_trace_tag = 0;
 	TaskState *ts;
 	int cpu = lock->h.cpu;
 	uint64_t tid;
@@ -1040,6 +1042,11 @@ static void handle_lock(struct mtrace_lock_entry *lock)
 
 	if (cpu >= MAX_CPU)
 		die("handle_lock: cpu is too large %u", cpu);
+
+	if (current_stack[cpu]) {
+		CallTrace *cs = current_stack[cpu];
+		call_trace_tag = cs->start_->tag;
+	}
 
 	tid = current_tid[cpu];
 	if (tid == 0) {
@@ -1092,7 +1099,7 @@ static void handle_lock(struct mtrace_lock_entry *lock)
 	}
 	case mtrace_lockop_acquire: {
 		uint64_t id = ++lock_count;
-		ts->lock_set_.acquire(lock, id);
+		ts->lock_set_.acquire(lock, id, call_trace_tag);
 		break;
 	}
 	case mtrace_lockop_acquired:

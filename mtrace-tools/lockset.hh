@@ -13,13 +13,14 @@ struct CriticalSection {
 	uint64_t id_;
 	uint64_t locked_accesses_;
 	uint64_t traffic_accesses_;
+	uint64_t call_trace_tag_;
 	char	 str_[32];
 };
 
 class LockSet {
 private:
 	struct LockState {
-		LockState(struct mtrace_lock_entry *l, uint64_t id) {
+		LockState(struct mtrace_lock_entry *l, uint64_t id, uint64_t call_trace_tag) {
 			memset(&cs_, 0, sizeof(cs_));
 
 			cs_.read_mode_ = l->read;
@@ -27,6 +28,7 @@ private:
 			cs_.start_cpu_ = l->h.cpu;
 			cs_.pc_ = l->pc;
 			cs_.id_ = id;
+			cs_.call_trace_tag_ = call_trace_tag;
 			strcpy(cs_.str_, l->str);
 
 			acquired_ts_ = 0;
@@ -107,12 +109,12 @@ public:
 		return false;
 	}
 
-	void acquire(struct mtrace_lock_entry *lock, uint64_t id) {
+	void acquire(struct mtrace_lock_entry *lock, uint64_t id, uint64_t call_trace_tag) {
 		LockStateTable::iterator it = state_.find(lock->lock);		
 
 		if (it == state_.end()) {
 			pair<LockStateTable::iterator, bool> r;
-			LockState *ls = new LockState(lock, id);
+			LockState *ls = new LockState(lock, id, call_trace_tag);
 			r = state_.insert(pair<uint64_t, LockState *>(lock->lock, ls));
 			if (!r.second)
 				die("on_lock: insert failed");

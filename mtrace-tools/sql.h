@@ -147,6 +147,7 @@
 	"start_cpu		  INTEGER, "				\
 	"read			  INTEGER, "				\
 	"tid			  INTEGER, " 				\
+	"call_trace_tag		  INTEGER, "				\
 	"locked_accesses	  INTEGER, "				\
 	"traffic_accesses	  INTEGER" 				\
 	")"
@@ -155,9 +156,9 @@
 	"INSERT INTO %s_locked_sections ("				\
 	"id, str, lock, pc, label_type, label_id, start_ts, "		\
 	"end_ts, start_cpu, read, locked_accesses, traffic_accesses, "	\
-	"tid) "								\
+	"call_trace_tag, tid) "						\
 	"VALUES (%lu, \"%s\", "ADDR_FMT", "ADDR_FMT", %u, %lu, %lu, "	\
-	"%lu, %u, %u, %lu, %lu, %lu)"
+	"%lu, %u, %u, %lu, %lu, %lu, %lu)"
 
 #if MAX_CPU > 4
 #error Too many CPUs for summary table schema 

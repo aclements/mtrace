@@ -97,7 +97,9 @@ def sim(numCores):
 START_CORE = 1
 STOP_CORE  = 128
 SIM_CYCLES = 10000
-WORKLOAD   = [ Work(False, 90), Work(True, 10) ]
+#WORKLOAD   = [ Work(False, 90), Work(True, 10) ]
+#WORKLOAD   = [ Work(False, 50), Work(True, 10), Work(True, 10), Work(True, 10), Work(True, 10), Work(True, 10) ]
+WORKLOAD   = [ Work(False, 50), Work(True, 50) ]
 
 for i in range(START_CORE, STOP_CORE + 1):
     tp = sim(i)
