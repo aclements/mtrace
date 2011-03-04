@@ -17,6 +17,7 @@ class MtraceHarcrit:
         self.lock = 0
 
         self.exclusive = None
+        self.kerncalls = None
         self.name = None
         self.tids = None
         self.cpus = None
@@ -34,15 +35,15 @@ class MtraceHarcrit:
         self.cpus = {}
         self.tids = {}
         self.pcs = {}
+        self.kerncalls = {}
         self.exclusive = model.MtraceAccessSample(0, 0, num = 0)
 
-        q = 'SELECT access_id, tid, cpu, pc from %s_accesses WHERE label_id = %lu AND locked_id = 0'
+        q = 'SELECT access_id, tid, cpu, pc, call_trace_tag from %s_accesses WHERE label_id = %lu AND locked_id = 0'
         q = q % (self.dataName, self.labelId)
         c.execute(q)
         for row in c:
             section = lock.MtraceSerialSection(row[0], 0, self.missDelay, 
                                                row[2], 0, row[1], row[3])
-
             agg = model.MtraceAccessSample(1, 0)
 
             self.exclusive.add(agg)
@@ -61,6 +62,11 @@ class MtraceHarcrit:
                 self.pcs[section.pc].add(agg)
             else:
                 self.pcs[section.pc] = agg.copy()
+
+            if row['call_trace_tag'] in self.kerncalls:
+                self.kerncalls[row['call_trace_tag']].add(agg)
+            else:
+                self.kerncalls[row['call_trace_tag']] = agg.copy()
         
         # Name
         q = 'SELECT str FROM %s_labels%u WHERE label_id = %lu'
@@ -96,6 +102,9 @@ class MtraceHarcrit:
     def get_pcs(self):
         self.__init_state()
         return self.pcs
+    def get_kerncalls(self):
+        self.__init_state()
+        return self.kerncalls
 
 def get_harcrits(dbFile, dataName):
     conn = sqlite3.connect(dbFile)

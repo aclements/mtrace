@@ -31,6 +31,7 @@ class MtraceLock:
         self.sampleClass = sampleClass
 
         self.exclusive = None
+        self.kerncalls = None
         self.name = None
         self.holdTime = None
         self.tids = None
@@ -48,6 +49,7 @@ class MtraceLock:
         self.cpus = {}
         self.tids = {}
         self.pcs = {}
+        self.kerncalls = {}
         self.holdTime = 0
         self.exclusive = self.sampleClass(0, 0, 0, num = 0)
 
@@ -55,7 +57,7 @@ class MtraceLock:
 
         # Sections
         q = '''SELECT id, start_ts, end_ts, start_cpu, read, tid, pc, str, 
-               locked_accesses, traffic_accesses FROM %s_locked_sections 
+               locked_accesses, traffic_accesses, call_trace_tag FROM %s_locked_sections 
                WHERE label_id = %lu and lock = %lu and read <> 1'''
         q = q % (self.dataName,
                  self.labelId,
@@ -91,6 +93,11 @@ class MtraceLock:
                 self.pcs[section.pc].add(agg)
             else:
                 self.pcs[section.pc] = agg.copy()
+
+            if row['call_trace_tag'] in self.kerncalls:
+                self.kerncalls[row['call_trace_tag']].add(agg)
+            else:
+                self.kerncalls[row['call_trace_tag']] = agg.copy()
 
         # Name (label str and lock str)
         q = '''SELECT str FROM %s_locked_sections WHERE label_id = %lu and lock = %lu LIMIT 1'''
@@ -136,6 +143,9 @@ class MtraceLock:
     def get_pcs(self):
         self.__init_state()
         return self.pcs
+    def get_kerncalls(self):
+        self.__init_state()
+        return self.kerncalls
 
 def get_locks(dbFile, dataName):
     conn = sqlite3.connect(dbFile)
