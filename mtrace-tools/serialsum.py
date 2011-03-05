@@ -23,6 +23,7 @@ DEFAULT_PICKLEDIR       = 'serialsum-pkl'
 
 DB_FILE                 = ''
 DATA_NAME               = ''
+PRINT_MAX               = True
 
 class FilterLabel(object):
     def __init__(self, labelName):
@@ -292,8 +293,12 @@ def main(argv = None):
     
     print_header()
 
+    printedMax = {}
     for s in sortedFiltered:
-        print_serial(s)
+        if not s.get_name() in printedMax:
+            print_serial(s)
+        if PRINT_MAX:
+            printedMax[s.get_name()] = 1
 
     serials.close(DEFAULT_PICKLEDIR)
 
