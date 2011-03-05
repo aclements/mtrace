@@ -21,6 +21,9 @@ DEFAULT_NUM_CORES       = 2
 PRINT_LATEX             = False
 DEFAULT_PICKLEDIR       = 'serialsum-pkl'
 
+DB_FILE                 = ''
+DATA_NAME               = ''
+
 class FilterLabel(object):
     def __init__(self, labelName):
         self.labelName = labelName
@@ -177,12 +180,45 @@ def get_col_value(lock, col):
             tidsPercent += '%lu:%.2f%% ' % (tid, (time * 100.0) / lock.get_exclusive_stats().time(DEFAULT_NUM_CORES))
         return tidsPercent
 
+    def get_calls():
+        conn = sqlite3.connect(DB_FILE)
+
+        strs = {}
+        calls = lock.get_kerncalls()
+        for key in calls.keys():
+            q = 'SELECT DISTINCT name FROM %s_call_traces where call_trace_tag = %lu'
+            q = q % (DATA_NAME, key)
+            
+            c = conn.cursor()
+            c.execute(q)            
+            rs = c.fetchall()
+            if len(rs) == 0:
+                continue
+            if len(rs) != 1:
+                print key
+                print rs
+                raise Exception('unexpected result')
+            name = rs[0][0]
+
+            if name in strs:
+                strs[name] += 1
+            else:
+                strs[name] = 1
+
+        conn.close()
+
+        callsStr = ''
+        for call in strs.keys():
+            callsStr += ' ' + call
+        return callsStr
+
     colValueFuncs = {
         'pc'      : get_pc,
         'length'  : get_length,
         'percent' : get_percent,
         'cpus'    : get_cpus,
-        'tids'    : get_tids
+        'tids'    : get_tids,
+        'calls'   : get_calls
     }
     
     return colValueFuncs[col]()
@@ -242,6 +278,11 @@ def main(argv = None):
 
     global SUMMARY
     SUMMARY = mtracepy.model.MtraceSummary(dbFile, dataName)
+
+    global DB_FILE
+    global DATA_NAME
+    DB_FILE = dbFile
+    DATA_NAME = dataName
 
     serials = MtraceSerials.open(dbFile, dataName, DEFAULT_PICKLEDIR)
     filtered = serials.filter(DEFAULT_FILTERS)

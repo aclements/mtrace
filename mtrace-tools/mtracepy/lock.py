@@ -94,10 +94,12 @@ class MtraceLock:
             else:
                 self.pcs[section.pc] = agg.copy()
 
-            if row['call_trace_tag'] in self.kerncalls:
-                self.kerncalls[row['call_trace_tag']].add(agg)
-            else:
-                self.kerncalls[row['call_trace_tag']] = agg.copy()
+            callTraceTag = row['call_trace_tag']
+            if callTraceTag:
+                if callTraceTag in self.kerncalls:
+                    self.kerncalls[callTraceTag].add(agg)
+                else:
+                    self.kerncalls[callTraceTag] = agg.copy()
 
         # Name (label str and lock str)
         q = '''SELECT str FROM %s_locked_sections WHERE label_id = %lu and lock = %lu LIMIT 1'''

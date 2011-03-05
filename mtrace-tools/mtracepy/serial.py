@@ -3,7 +3,7 @@ import errno
 import lock
 import harcrit
 import util
-import pickle
+import cPickle
 
 class MtraceSerials(object):
     def __init__(self, dbFile, dataName):
@@ -32,7 +32,7 @@ class MtraceSerials(object):
         picklePath = pickleDir + '/' + base + '-' + self.dataName + '.pkl'
        
         output = open(picklePath, 'wb')
-        pickle.dump(self, output)
+        cPickle.dump(self, output)
         output.close()
 
     @staticmethod
@@ -44,7 +44,7 @@ class MtraceSerials(object):
         serials = None
         try:
             pickleFile = open(picklePath, 'r')
-            serials = pickle.load(pickleFile)
+            serials = cPickle.load(pickleFile)
 
             if serials.dataName != dataName:
                 raise Exception('unexpected dataName')
