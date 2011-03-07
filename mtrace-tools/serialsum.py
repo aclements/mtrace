@@ -3,6 +3,7 @@
 import mtracepy.lock
 import mtracepy.harcrit
 import mtracepy.summary
+from mtracepy.serialnames import pretty_name
 from mtracepy.util import uhex, checksum
 from mtracepy.addr2line import Addr2Line
 from mtracepy.serial import MtraceSerials
@@ -254,7 +255,9 @@ def latex_sanitize(val):
 def print_serial(s):
     if PRINT_LATEX:
         vals = []
-        vals.extend([s.get_name(), str(s.get_label_id()), '%016lx' % uhex(s.get_lock())])
+        vals.extend([pretty_name(s.get_name()), 
+                     str(s.get_label_id()), 
+                     '%016lx' % uhex(s.get_lock())])
         for col in PRINT_COLS:
             vals.append(get_col_value(s, col))
         print '\\serialsec{%s}' % latex_sanitize(vals[0])
