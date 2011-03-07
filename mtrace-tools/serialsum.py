@@ -146,6 +146,9 @@ def get_col_value(lock, col):
     def get_pc():
         '''Return the PC of the most costly section'''
         pcs = lock.get_pcs()
+        if len(pcs) == 0:
+            return ''
+
         pc = sorted(pcs.keys(), key=lambda k: pcs[k].time(DEFAULT_NUM_CORES), reverse=True)[0]
         pc = '%016lx' % uhex(pc)
         if DEFAULT_ADDR2LINE:
@@ -164,6 +167,8 @@ def get_col_value(lock, col):
 
     def get_cpus():
         cpuTable = lock.get_cpus()
+        if len(cpuTable) == 0:
+            return ''
         cpus = cpuTable.keys()
         time = cpuTable[cpus[0]].time(DEFAULT_NUM_CORES)
         cpuString = '%u:%.2f%%' % (cpus[0], (time * 100.0) / lock.get_exclusive_stats().time(DEFAULT_NUM_CORES))
