@@ -162,7 +162,11 @@ class MtraceSummary:
         for cs in self.call_summary:
             s += '  %-24s' % cs.get_str_name()
             for col in printCols:
-                s += ' %16lu' % cs.get_col_value(col)
+                f = cs.get_col_value(col)
+                if round(f) == f:
+                    s += ' %16lu' % f
+                else:
+                    s += ' %16.2f' % f
             s += '\n'
 
         print s
@@ -240,9 +244,9 @@ class MtraceSummary:
                 top = cs.get_top_objs(labelType)
                 for higher in top:
                     count = higher.count
-                    if higher.name in tmpDict:
-                        count += tmpDict[higher.name]
-                    tmpDict[higher.name] = count
+                    if higher.d.get_label_str() in tmpDict:
+                        count += tmpDict[higher.d.get_label_str()]
+                    tmpDict[higher.d.get_label_str()] = count
 
         typeNames = tmpDict.keys()
 

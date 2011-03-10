@@ -165,6 +165,11 @@ class CallSummary:
             self.callCount = call
         return float(self.perCallCline) / float(self.callCount)
 
+    def get_precise_call_count(self):
+        if self.callCount == None:
+            self.get_per_call_cline()
+        return self.callCount
+
     def get_total_unique_obj(self):
         s = 0
         for labelType in range(mtrace_label_heap, mtrace_label_percpu + 1):
@@ -287,7 +292,8 @@ class CallSummary:
             'unique-clines': lambda: self.get_unique_cline(),
             'all-clines'   : lambda: self.get_all_cline(),
             'per-call-clines': lambda: self.get_per_call_cline(),
-            'call-count'   : lambda: self.get_call_count()
+            'call-count'   : lambda: self.get_call_count(),
+            'precise-call-count'   : lambda: self.get_precise_call_count()
         }
 
         return colValueFuncs[col]()
