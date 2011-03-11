@@ -208,8 +208,13 @@ void target_disas(FILE *out, target_ulong code, target_ulong size, int flags)
     disasm_info.mach = bfd_mach_alpha;
     print_insn = print_insn_alpha;
 #elif defined(TARGET_CRIS)
-    disasm_info.mach = bfd_mach_cris_v32;
-    print_insn = print_insn_crisv32;
+    if (flags != 32) {
+        disasm_info.mach = bfd_mach_cris_v0_v10;
+        print_insn = print_insn_crisv10;
+    } else {
+        disasm_info.mach = bfd_mach_cris_v32;
+        print_insn = print_insn_crisv32;
+    }
 #elif defined(TARGET_MICROBLAZE)
     disasm_info.mach = bfd_arch_microblaze;
     print_insn = print_insn_microblaze;
@@ -302,11 +307,6 @@ void disas(FILE *out, void *code, unsigned long size)
 #endif
     for (pc = (unsigned long)code; size > 0; pc += count, size -= count) {
 	fprintf(out, "0x%08lx:  ", pc);
-#ifdef __arm__
-        /* since data is included in the code, it is better to
-           display code data too */
-        fprintf(out, "%08x  ", (int)bfd_getl32((const bfd_byte *)pc));
-#endif
 	count = print_insn(pc, &disasm_info);
 	fprintf(out, "\n");
 	if (count < 0)

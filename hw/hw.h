@@ -587,6 +587,16 @@ extern const VMStateDescription vmstate_i2c_slave;
     .offset     = vmstate_offset_value(_state, _field, i2c_slave),   \
 }
 
+extern const VMStateDescription vmstate_usb_device;
+
+#define VMSTATE_USB_DEVICE(_field, _state) {                         \
+    .name       = (stringify(_field)),                               \
+    .size       = sizeof(USBDevice),                                 \
+    .vmsd       = &vmstate_usb_device,                               \
+    .flags      = VMS_STRUCT,                                        \
+    .offset     = vmstate_offset_value(_state, _field, USBDevice),   \
+}
+
 #define vmstate_offset_macaddr(_state, _field)                       \
     vmstate_offset_array(_state, _field.a, uint8_t,                \
                          sizeof(typeof_field(_state, _field)))
@@ -799,17 +809,16 @@ extern const VMStateDescription vmstate_i2c_slave;
 #define VMSTATE_END_OF_LIST()                                         \
     {}
 
-extern int vmstate_load_state(QEMUFile *f, const VMStateDescription *vmsd,
-                              void *opaque, int version_id);
-extern void vmstate_save_state(QEMUFile *f, const VMStateDescription *vmsd,
-                               void *opaque);
-extern int vmstate_register(DeviceState *dev, int instance_id,
-                            const VMStateDescription *vmsd, void *base);
-extern int vmstate_register_with_alias_id(DeviceState *dev,
-                                          int instance_id,
-                                          const VMStateDescription *vmsd,
-                                          void *base, int alias_id,
-                                          int required_for_version);
+int vmstate_load_state(QEMUFile *f, const VMStateDescription *vmsd,
+                       void *opaque, int version_id);
+void vmstate_save_state(QEMUFile *f, const VMStateDescription *vmsd,
+                        void *opaque);
+int vmstate_register(DeviceState *dev, int instance_id,
+                     const VMStateDescription *vmsd, void *base);
+int vmstate_register_with_alias_id(DeviceState *dev, int instance_id,
+                                   const VMStateDescription *vmsd,
+                                   void *base, int alias_id,
+                                   int required_for_version);
 void vmstate_unregister(DeviceState *dev, const VMStateDescription *vmsd,
                         void *opaque);
 #endif

@@ -128,48 +128,11 @@ uint32_t helper_cmpu(uint32_t a, uint32_t b)
     return t;
 }
 
-uint32_t helper_addkc(uint32_t a, uint32_t b, uint32_t k, uint32_t c)
+uint32_t helper_carry(uint32_t a, uint32_t b, uint32_t cf)
 {
-    uint32_t d, cf = 0, ncf;
-
-    if (c)
-        cf = env->sregs[SR_MSR] >> 31;
-    assert(cf == 0 || cf == 1);
-    d = a + b + cf;
-
-    if (!k) {
-        ncf = compute_carry(a, b, cf);
-        assert(ncf == 0 || ncf == 1);
-        if (ncf)
-            env->sregs[SR_MSR] |= MSR_C | MSR_CC;
-        else
-            env->sregs[SR_MSR] &= ~(MSR_C | MSR_CC);
-    }
-    D(qemu_log("%x = %x + %x cf=%d ncf=%d k=%d c=%d\n",
-               d, a, b, cf, ncf, k, c));
-    return d;
-}
-
-uint32_t helper_subkc(uint32_t a, uint32_t b, uint32_t k, uint32_t c)
-{
-    uint32_t d, cf = 1, ncf;
-
-    if (c)
-        cf = env->sregs[SR_MSR] >> 31; 
-    assert(cf == 0 || cf == 1);
-    d = b + ~a + cf;
-
-    if (!k) {
-        ncf = compute_carry(b, ~a, cf);
-        assert(ncf == 0 || ncf == 1);
-        if (ncf)
-            env->sregs[SR_MSR] |= MSR_C | MSR_CC;
-        else
-            env->sregs[SR_MSR] &= ~(MSR_C | MSR_CC);
-    }
-    D(qemu_log("%x = %x + %x cf=%d ncf=%d k=%d c=%d\n",
-               d, a, b, cf, ncf, k, c));
-    return d;
+    uint32_t ncf;
+    ncf = compute_carry(a, b, cf);
+    return ncf;
 }
 
 static inline int div_prepare(uint32_t a, uint32_t b)
@@ -308,7 +271,7 @@ uint32_t helper_fcmp_un(uint32_t a, uint32_t b)
         r = 1;
     }
 
-    if (float32_is_nan(fa.f) || float32_is_nan(fb.f)) {
+    if (float32_is_quiet_nan(fa.f) || float32_is_quiet_nan(fb.f)) {
         r = 1;
     }
 

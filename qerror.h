@@ -90,6 +90,9 @@ QError *qobject_to_qerror(const QObject *obj);
 #define QERR_DEVICE_NO_BUS \
     "{ 'class': 'DeviceNoBus', 'data': { 'device': %s } }"
 
+#define QERR_DEVICE_NO_HOTPLUG \
+    "{ 'class': 'DeviceNoHotplug', 'data': { 'device': %s } }"
+
 #define QERR_DUPLICATE_ID \
     "{ 'class': 'DuplicateId', 'data': { 'id': %s, 'object': %s } }"
 
@@ -161,6 +164,9 @@ QError *qobject_to_qerror(const QObject *obj);
 
 #define QERR_UNDEFINED_ERROR \
     "{ 'class': 'UndefinedError', 'data': {} }"
+
+#define QERR_UNKNOWN_BLOCK_FORMAT_FEATURE \
+    "{ 'class': 'UnknownBlockFormatFeature', 'data': { 'device': %s, 'format': %s, 'feature': %s } }"
 
 #define QERR_VNC_SERVER_FAILED \
     "{ 'class': 'VNCServerFailed', 'data': { 'target': %s } }"

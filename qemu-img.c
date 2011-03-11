@@ -213,8 +213,9 @@ static BlockDriverState *bdrv_new_open(const char *filename,
     BlockDriverState *bs;
     BlockDriver *drv;
     char password[256];
+    int ret;
 
-    bs = bdrv_new("");
+    bs = bdrv_new("image");
 
     if (fmt) {
         drv = bdrv_find_format(fmt);
@@ -225,10 +226,13 @@ static BlockDriverState *bdrv_new_open(const char *filename,
     } else {
         drv = NULL;
     }
-    if (bdrv_open(bs, filename, flags, drv) < 0) {
-        error_report("Could not open '%s'", filename);
+
+    ret = bdrv_open(bs, filename, flags, drv);
+    if (ret < 0) {
+        error_report("Could not open '%s': %s", filename, strerror(-ret));
         goto fail;
     }
+
     if (bdrv_is_encrypted(bs)) {
         printf("Disk image '%s' is encrypted.\n", filename);
         if (read_password(password, sizeof(password)) < 0) {
@@ -320,7 +324,7 @@ static int img_create(int argc, char **argv)
 
     /* Get image size, if specified */
     if (optind < argc) {
-        ssize_t sval;
+        int64_t sval;
         sval = strtosz_suffix(argv[optind++], NULL, STRTOSZ_DEFSUFFIX_B);
         if (sval < 0) {
             error_report("Invalid image size specified! You may use k, M, G or "
@@ -1068,7 +1072,7 @@ static int img_snapshot(int argc, char **argv)
     int action = 0;
     qemu_timeval tv;
 
-    bdrv_oflags = BDRV_O_RDWR;
+    bdrv_oflags = BDRV_O_FLAGS | BDRV_O_RDWR;
     /* Parse commandline parameters */
     for(;;) {
         c = getopt(argc, argv, "la:c:d:h");

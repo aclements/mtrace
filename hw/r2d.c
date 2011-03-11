@@ -23,13 +23,13 @@
  * THE SOFTWARE.
  */
 
+#include "sysbus.h"
 #include "hw.h"
 #include "sh.h"
 #include "devices.h"
 #include "sysemu.h"
 #include "boards.h"
 #include "pci.h"
-#include "sh_pci.h"
 #include "net.h"
 #include "sh7750_regs.h"
 #include "ide.h"
@@ -195,17 +195,18 @@ static qemu_irq *r2d_fpga_init(target_phys_addr_t base, qemu_irq irl)
     return qemu_allocate_irqs(r2d_fpga_irq_set, s, NR_IRQS);
 }
 
-static void r2d_pci_set_irq(void *opaque, int n, int l)
-{
-    qemu_irq *p = opaque;
+typedef struct ResetData {
+    CPUState *env;
+    uint32_t vector;
+} ResetData;
 
-    qemu_set_irq(p[n], l);
-}
-
-static int r2d_pci_map_irq(PCIDevice *d, int irq_num)
+static void main_cpu_reset(void *opaque)
 {
-    const int intx[] = { PCI_INTA, PCI_INTB, PCI_INTC, PCI_INTD };
-    return intx[d->devfn >> 3];
+    ResetData *s = (ResetData *)opaque;
+    CPUState *env = s->env;
+
+    cpu_reset(env);
+    env->pc = s->vector;
 }
 
 static struct __attribute__((__packed__))
@@ -228,6 +229,7 @@ static void r2d_init(ram_addr_t ram_size,
 	      const char *initrd_filename, const char *cpu_model)
 {
     CPUState *env;
+    ResetData *reset_info;
     struct SH7750State *s;
     ram_addr_t sdram_addr;
     qemu_irq *irq;
@@ -242,6 +244,10 @@ static void r2d_init(ram_addr_t ram_size,
         fprintf(stderr, "Unable to find CPU definition\n");
         exit(1);
     }
+    reset_info = qemu_mallocz(sizeof(ResetData));
+    reset_info->env = env;
+    reset_info->vector = env->pc;
+    qemu_register_reset(main_cpu_reset, reset_info);
 
     /* Allocate memory space */
     sdram_addr = qemu_ram_alloc(NULL, "r2d.sdram", SDRAM_SIZE);
@@ -249,7 +255,8 @@ static void r2d_init(ram_addr_t ram_size,
     /* Register peripherals */
     s = sh7750_init(env);
     irq = r2d_fpga_init(0x04000000, sh7750_irl(s));
-    sh_pci_register_bus(r2d_pci_set_irq, r2d_pci_map_irq, irq, 0, 4);
+    sysbus_create_varargs("sh_pci", 0x1e200000, irq[PCI_INTA], irq[PCI_INTB],
+                          irq[PCI_INTC], irq[PCI_INTD], NULL);
 
     sm501_init(0x10000000, SM501_VRAM_SIZE, irq[SM501], serial_hds[2]);
 
@@ -290,7 +297,7 @@ static void r2d_init(ram_addr_t ram_size,
         /* initialization which should be done by firmware */
         stl_phys(SH7750_BCR1, 1<<3); /* cs3 SDRAM */
         stw_phys(SH7750_BCR2, 3<<(3*2)); /* cs3 32bit */
-        env->pc = (SDRAM_BASE + LINUX_LOAD_OFFSET) | 0xa0000000; /* Start from P2 area */
+        reset_info->vector = (SDRAM_BASE + LINUX_LOAD_OFFSET) | 0xa0000000; /* Start from P2 area */
     }
 
     if (initrd_filename) {

@@ -58,7 +58,7 @@ int kvm_check_extension(KVMState *s, unsigned int extension)
     return 0;
 }
 
-int kvm_init(int smp_cpus)
+int kvm_init(void)
 {
     return -ENOSYS;
 }
@@ -95,6 +95,11 @@ int kvm_has_vcpu_events(void)
 }
 
 int kvm_has_robust_singlestep(void)
+{
+    return 0;
+}
+
+int kvm_has_many_ioeventfds(void)
 {
     return 0;
 }

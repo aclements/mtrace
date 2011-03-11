@@ -137,7 +137,19 @@ static void pci_update_irq_status(PCIDevice *dev)
     }
 }
 
-static void pci_device_reset(PCIDevice *dev)
+void pci_device_deassert_intx(PCIDevice *dev)
+{
+    int i;
+    for (i = 0; i < PCI_NUM_PINS; ++i) {
+        qemu_set_irq(dev->irq[i], 0);
+    }
+}
+
+/*
+ * This function is called on #RST and FLR.
+ * FLR if PCI_EXP_DEVCTL_BCR_FLR is set
+ */
+void pci_device_reset(PCIDevice *dev)
 {
     int r;
     /* TODO: call the below unconditionally once all pci devices
@@ -148,6 +160,7 @@ static void pci_device_reset(PCIDevice *dev)
 
     dev->irq_state = 0;
     pci_update_irq_status(dev);
+    pci_device_deassert_intx(dev);
     /* Clear all writeable bits */
     pci_word_test_and_clear_mask(dev->config + PCI_COMMAND,
                                  pci_get_word(dev->wmask + PCI_COMMAND) |
@@ -628,7 +641,6 @@ static void pci_init_wmask_bridge(PCIDevice *d)
                  PCI_BRIDGE_CTL_FAST_BACK |
                  PCI_BRIDGE_CTL_DISCARD |
                  PCI_BRIDGE_CTL_SEC_DISCARD |
-                 PCI_BRIDGE_CTL_DISCARD_STATUS |
                  PCI_BRIDGE_CTL_DISCARD_SERR);
     /* Below does not do anything as we never set this bit, put here for
      * completeness. */
@@ -820,6 +832,7 @@ static int pci_unregister_device(DeviceState *dev)
 
     pci_unregister_io_regions(pci_dev);
     pci_del_option_rom(pci_dev);
+    qemu_free(pci_dev->romfile);
     do_pci_unregister_device(pci_dev);
     return 0;
 }
@@ -1620,6 +1633,11 @@ static int pci_qdev_init(DeviceState *qdev, DeviceInfo *base)
                                      info->is_bridge);
     if (pci_dev == NULL)
         return -1;
+    if (qdev->hotplugged && info->no_hotplug) {
+        qerror_report(QERR_DEVICE_NO_HOTPLUG, info->qdev.name);
+        do_pci_unregister_device(pci_dev);
+        return -1;
+    }
     rc = info->init(pci_dev);
     if (rc != 0) {
         do_pci_unregister_device(pci_dev);
@@ -1652,7 +1670,12 @@ static int pci_qdev_init(DeviceState *qdev, DeviceInfo *base)
 static int pci_unplug_device(DeviceState *qdev)
 {
     PCIDevice *dev = DO_UPCAST(PCIDevice, qdev, qdev);
+    PCIDeviceInfo *info = container_of(qdev->info, PCIDeviceInfo, qdev);
 
+    if (info->no_hotplug) {
+        qerror_report(QERR_DEVICE_NO_HOTPLUG, info->qdev.name);
+        return -1;
+    }
     return dev->bus->hotplug(dev->bus->hotplug_qdev, dev,
                              PCI_HOTPLUG_DISABLED);
 }
@@ -2010,13 +2033,85 @@ static char *pcibus_get_fw_dev_path(DeviceState *dev)
 
 static char *pcibus_get_dev_path(DeviceState *dev)
 {
-    PCIDevice *d = (PCIDevice *)dev;
-    char path[16];
+    PCIDevice *d = container_of(dev, PCIDevice, qdev);
+    PCIDevice *t;
+    int slot_depth;
+    /* Path format: Domain:00:Slot.Function:Slot.Function....:Slot.Function.
+     * 00 is added here to make this format compatible with
+     * domain:Bus:Slot.Func for systems without nested PCI bridges.
+     * Slot.Function list specifies the slot and function numbers for all
+     * devices on the path from root to the specific device. */
+    char domain[] = "DDDD:00";
+    char slot[] = ":SS.F";
+    int domain_len = sizeof domain - 1 /* For '\0' */;
+    int slot_len = sizeof slot - 1 /* For '\0' */;
+    int path_len;
+    char *path, *p;
+    int s;
 
-    snprintf(path, sizeof(path), "%04x:%02x:%02x.%x",
-             pci_find_domain(d->bus), d->config[PCI_SECONDARY_BUS],
-             PCI_SLOT(d->devfn), PCI_FUNC(d->devfn));
+    /* Calculate # of slots on path between device and root. */;
+    slot_depth = 0;
+    for (t = d; t; t = t->bus->parent_dev) {
+        ++slot_depth;
+    }
 
-    return strdup(path);
+    path_len = domain_len + slot_len * slot_depth;
+
+    /* Allocate memory, fill in the terminating null byte. */
+    path = qemu_malloc(path_len + 1 /* For '\0' */);
+    path[path_len] = '\0';
+
+    /* First field is the domain. */
+    s = snprintf(domain, sizeof domain, "%04x:00", pci_find_domain(d->bus));
+    assert(s == domain_len);
+    memcpy(path, domain, domain_len);
+
+    /* Fill in slot numbers. We walk up from device to root, so need to print
+     * them in the reverse order, last to first. */
+    p = path + path_len;
+    for (t = d; t; t = t->bus->parent_dev) {
+        p -= slot_len;
+        s = snprintf(slot, sizeof slot, ":%02x.%x",
+                     PCI_SLOT(t->devfn), PCI_FUNC(t->devfn));
+        assert(s == slot_len);
+        memcpy(p, slot, slot_len);
+    }
+
+    return path;
 }
 
+static int pci_qdev_find_recursive(PCIBus *bus,
+                                   const char *id, PCIDevice **pdev)
+{
+    DeviceState *qdev = qdev_find_recursive(&bus->qbus, id);
+    if (!qdev) {
+        return -ENODEV;
+    }
+
+    /* roughly check if given qdev is pci device */
+    if (qdev->info->init == &pci_qdev_init &&
+        qdev->parent_bus->info == &pci_bus_info) {
+        *pdev = DO_UPCAST(PCIDevice, qdev, qdev);
+        return 0;
+    }
+    return -EINVAL;
+}
+
+int pci_qdev_find_device(const char *id, PCIDevice **pdev)
+{
+    struct PCIHostBus *host;
+    int rc = -ENODEV;
+
+    QLIST_FOREACH(host, &host_buses, next) {
+        int tmp = pci_qdev_find_recursive(host->bus, id, pdev);
+        if (!tmp) {
+            rc = 0;
+            break;
+        }
+        if (tmp != -ENODEV) {
+            rc = tmp;
+        }
+    }
+
+    return rc;
+}

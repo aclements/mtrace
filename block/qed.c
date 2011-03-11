@@ -14,6 +14,7 @@
 
 #include "trace.h"
 #include "qed.h"
+#include "qerror.h"
 
 static void qed_aio_cancel(BlockDriverAIOCB *blockacb)
 {
@@ -311,7 +312,13 @@ static int bdrv_qed_open(BlockDriverState *bs, int flags)
         return -EINVAL;
     }
     if (s->header.features & ~QED_FEATURE_MASK) {
-        return -ENOTSUP; /* image uses unsupported feature bits */
+        /* image uses unsupported feature bits */
+        char buf[64];
+        snprintf(buf, sizeof(buf), "%" PRIx64,
+            s->header.features & ~QED_FEATURE_MASK);
+        qerror_report(QERR_UNKNOWN_BLOCK_FORMAT_FEATURE,
+            bs->device_name, "QED", buf);
+        return -ENOTSUP;
     }
     if (!qed_is_cluster_size_valid(s->header.cluster_size)) {
         return -EINVAL;
@@ -467,6 +474,12 @@ static int qed_create(const char *filename, uint32_t cluster_size,
     ret = bdrv_file_open(&bs, filename, BDRV_O_RDWR | BDRV_O_CACHE_WB);
     if (ret < 0) {
         return ret;
+    }
+
+    /* File must start empty and grow, check truncate is supported */
+    ret = bdrv_truncate(bs, 0);
+    if (ret < 0) {
+        goto out;
     }
 
     if (backing_file) {
@@ -971,6 +984,19 @@ static void qed_aio_write_prefill(void *opaque, int ret)
 }
 
 /**
+ * Check if the QED_F_NEED_CHECK bit should be set during allocating write
+ */
+static bool qed_should_set_need_check(BDRVQEDState *s)
+{
+    /* The flush before L2 update path ensures consistency */
+    if (s->bs->backing_hd) {
+        return false;
+    }
+
+    return !(s->header.features & QED_F_NEED_CHECK);
+}
+
+/**
  * Write new data cluster
  *
  * @acb:        Write request
@@ -995,15 +1021,12 @@ static void qed_aio_write_alloc(QEDAIOCB *acb, size_t len)
     acb->cur_cluster = qed_alloc_clusters(s, acb->cur_nclusters);
     qemu_iovec_copy(&acb->cur_qiov, acb->qiov, acb->qiov_offset, len);
 
-    /* Write new cluster if the image is already marked dirty */
-    if (s->header.features & QED_F_NEED_CHECK) {
+    if (qed_should_set_need_check(s)) {
+        s->header.features |= QED_F_NEED_CHECK;
+        qed_write_header(s, qed_aio_write_prefill, acb);
+    } else {
         qed_aio_write_prefill(acb, 0);
-        return;
     }
-
-    /* Mark the image dirty before writing the new cluster */
-    s->header.features |= QED_F_NEED_CHECK;
-    qed_write_header(s, qed_aio_write_prefill, acb);
 }
 
 /**

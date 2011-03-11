@@ -237,6 +237,9 @@ void cpu_reset(CPUARMState *env)
     env->vfp.xregs[ARM_VFP_FPEXC] = 0;
     env->cp15.c2_base_mask = 0xffffc000u;
 #endif
+    set_flush_to_zero(1, &env->vfp.standard_fp_status);
+    set_flush_inputs_to_zero(1, &env->vfp.standard_fp_status);
+    set_default_nan_mode(1, &env->vfp.standard_fp_status);
     tlb_flush(env, 1);
 }
 
@@ -1846,12 +1849,20 @@ bad_reg:
 
 void HELPER(set_r13_banked)(CPUState *env, uint32_t mode, uint32_t val)
 {
-    env->banked_r13[bank_number(mode)] = val;
+    if ((env->uncached_cpsr & CPSR_M) == mode) {
+        env->regs[13] = val;
+    } else {
+        env->banked_r13[bank_number(mode)] = val;
+    }
 }
 
 uint32_t HELPER(get_r13_banked)(CPUState *env, uint32_t mode)
 {
-    return env->banked_r13[bank_number(mode)];
+    if ((env->uncached_cpsr & CPSR_M) == mode) {
+        return env->regs[13];
+    } else {
+        return env->banked_r13[bank_number(mode)];
+    }
 }
 
 uint32_t HELPER(v7m_mrs)(CPUState *env, uint32_t reg)
@@ -2242,6 +2253,8 @@ static inline int vfp_exceptbits_from_host(int host_bits)
         target_bits |= 8;
     if (host_bits & float_flag_inexact)
         target_bits |= 0x10;
+    if (host_bits & float_flag_input_denormal)
+        target_bits |= 0x80;
     return target_bits;
 }
 
@@ -2254,6 +2267,7 @@ uint32_t HELPER(vfp_get_fpscr)(CPUState *env)
             | (env->vfp.vec_len << 16)
             | (env->vfp.vec_stride << 20);
     i = get_float_exception_flags(&env->vfp.fp_status);
+    i |= get_float_exception_flags(&env->vfp.standard_fp_status);
     fpscr |= vfp_exceptbits_from_host(i);
     return fpscr;
 }
@@ -2278,6 +2292,8 @@ static inline int vfp_exceptbits_to_host(int target_bits)
         host_bits |= float_flag_underflow;
     if (target_bits & 0x10)
         host_bits |= float_flag_inexact;
+    if (target_bits & 0x80)
+        host_bits |= float_flag_input_denormal;
     return host_bits;
 }
 
@@ -2310,13 +2326,16 @@ void HELPER(vfp_set_fpscr)(CPUState *env, uint32_t val)
         }
         set_float_rounding_mode(i, &env->vfp.fp_status);
     }
-    if (changed & (1 << 24))
+    if (changed & (1 << 24)) {
         set_flush_to_zero((val & (1 << 24)) != 0, &env->vfp.fp_status);
+        set_flush_inputs_to_zero((val & (1 << 24)) != 0, &env->vfp.fp_status);
+    }
     if (changed & (1 << 25))
         set_default_nan_mode((val & (1 << 25)) != 0, &env->vfp.fp_status);
 
-    i = vfp_exceptbits_to_host((val >> 8) & 0x1f);
+    i = vfp_exceptbits_to_host(val);
     set_float_exception_flags(i, &env->vfp.fp_status);
+    set_float_exception_flags(0, &env->vfp.standard_fp_status);
 }
 
 void vfp_set_fpscr(CPUState *env, uint32_t val)
@@ -2605,9 +2624,17 @@ float32 HELPER(recps_f32)(float32 a, float32 b, CPUState *env)
 
 float32 HELPER(rsqrts_f32)(float32 a, float32 b, CPUState *env)
 {
-    float_status *s = &env->vfp.fp_status;
+    float_status *s = &env->vfp.standard_fp_status;
+    float32 two = int32_to_float32(2, s);
     float32 three = int32_to_float32(3, s);
-    return float32_sub(three, float32_mul(a, b, s), s);
+    float32 product;
+    if ((float32_is_infinity(a) && float32_is_zero_or_denormal(b)) ||
+        (float32_is_infinity(b) && float32_is_zero_or_denormal(a))) {
+        product = float32_zero;
+    } else {
+        product = float32_mul(a, b, s);
+    }
+    return float32_div(float32_sub(three, product, s), two, s);
 }
 
 /* NEON helpers.  */

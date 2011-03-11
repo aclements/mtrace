@@ -18,6 +18,7 @@
  */
 #include "hw.h"
 #include "apic.h"
+#include "ioapic.h"
 #include "qemu-timer.h"
 #include "host-utils.h"
 #include "sysbus.h"
@@ -57,7 +58,8 @@
 
 #define ESR_ILLEGAL_ADDRESS (1 << 7)
 
-#define APIC_SV_ENABLE (1 << 8)
+#define APIC_SV_DIRECTED_IO             (1<<12)
+#define APIC_SV_ENABLE                  (1<<8)
 
 #define MAX_APICS 255
 #define MAX_APIC_WORDS 8
@@ -370,19 +372,36 @@ static int apic_get_arb_pri(APICState *s)
     return 0;
 }
 
+
+/*
+ * <0 - low prio interrupt,
+ * 0  - no interrupt,
+ * >0 - interrupt number
+ */
+static int apic_irq_pending(APICState *s)
+{
+    int irrv, ppr;
+    irrv = get_highest_priority_int(s->irr);
+    if (irrv < 0) {
+        return 0;
+    }
+    ppr = apic_get_ppr(s);
+    if (ppr && (irrv & 0xf0) <= (ppr & 0xf0)) {
+        return -1;
+    }
+
+    return irrv;
+}
+
 /* signal the CPU if an irq is pending */
 static void apic_update_irq(APICState *s)
 {
-    int irrv, ppr;
-    if (!(s->spurious_vec & APIC_SV_ENABLE))
+    if (!(s->spurious_vec & APIC_SV_ENABLE)) {
         return;
-    irrv = get_highest_priority_int(s->irr);
-    if (irrv < 0)
-        return;
-    ppr = apic_get_ppr(s);
-    if (ppr && (irrv & 0xf0) <= (ppr & 0xf0))
-        return;
-    cpu_interrupt(s->cpu_env, CPU_INTERRUPT_HARD);
+    }
+    if (apic_irq_pending(s) > 0) {
+        cpu_interrupt(s->cpu_env, CPU_INTERRUPT_HARD);
+    }
 }
 
 void apic_reset_irq_delivered(void)
@@ -420,8 +439,9 @@ static void apic_eoi(APICState *s)
     if (isrv < 0)
         return;
     reset_bit(s->isr, isrv);
-    /* XXX: send the EOI packet to the APIC bus to allow the I/O APIC to
-            set the remote IRR bit for level triggered interrupts. */
+    if (!(s->spurious_vec & APIC_SV_DIRECTED_IO) && get_bit(s->tmr, isrv)) {
+        ioapic_eoi_broadcast(isrv);
+    }
     apic_update_irq(s);
 }
 
@@ -587,12 +607,13 @@ int apic_get_interrupt(DeviceState *d)
     if (!(s->spurious_vec & APIC_SV_ENABLE))
         return -1;
 
-    /* XXX: spurious IRQ handling */
-    intno = get_highest_priority_int(s->irr);
-    if (intno < 0)
+    intno = apic_irq_pending(s);
+
+    if (intno == 0) {
         return -1;
-    if (s->tpr && intno <= s->tpr)
+    } else if (intno < 0) {
         return s->spurious_vec & 0xff;
+    }
     reset_bit(s->irr, intno);
     set_bit(s->isr, intno);
     apic_update_irq(s);
