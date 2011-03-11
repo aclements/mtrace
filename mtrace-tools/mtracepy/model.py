@@ -2,7 +2,7 @@ import copy
 import sqlite3
 
 MISS_LATENCY = 200
-LOCK_LATENCY = 200
+LOCK_LATENCY = 5000
 ICNT_CONTENTION = 50
 
 def get_traffic_latency(numCores):
