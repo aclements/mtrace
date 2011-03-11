@@ -15,8 +15,8 @@ class MtraceSerials(object):
         self.serials = lock.get_locks(dbFile, dataName)
         self.serials.extend(harcrit.get_harcrits(dbFile, dataName));
 
-    def filter(self, filters, persist = False):
-        filtered = util.apply_filters(self.serials, filters)
+    def filter(self, filters, persist=False, removed=None):
+        filtered = util.apply_filters(self.serials, filters, removed=removed)
         if persist:
             self.serials = filtered
         return filtered

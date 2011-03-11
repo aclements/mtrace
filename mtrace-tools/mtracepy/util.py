@@ -31,13 +31,15 @@ def checksum(fileName, maxBytes = sys.maxint):
     f.close()
     return m.digest()
 
-def apply_filters(lst, filters):
+def apply_filters(lst, filters, removed=None):
     if len(filters) > 0:
         lst2 = []
         for e in lst:
             lst2.append(e)
             for f in filters:
                 if f.filter(e) == False:
+                    if removed != None:
+                        removed.append(e)
                     lst2.pop()
                     break
         return lst2

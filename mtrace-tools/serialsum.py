@@ -294,7 +294,16 @@ def main(argv = None):
     DATA_NAME = dataName
 
     serials = MtraceSerials.open(dbFile, dataName, DEFAULT_PICKLEDIR)
-    filtered = serials.filter(DEFAULT_FILTERS)
+    removed = []
+    filtered = serials.filter(DEFAULT_FILTERS, removed=removed)
+
+    removedLocks = 0
+    for r in removed:
+        if isinstance(r, mtracepy.lock.MtraceLock):
+            removedLocks += 1
+    SUMMARY.lockAdjust = removedLocks
+    print SUMMARY
+
     sortedFiltered = sorted(filtered, 
                             key=lambda l: l.get_exclusive_stats().time(DEFAULT_NUM_CORES), 
                             reverse=True)
