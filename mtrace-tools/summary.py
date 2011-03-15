@@ -237,8 +237,12 @@ class MtraceSummary:
         print 'miss-per-type summary'
         print '---------------------'
 
+        xxxHack = [ 'smp_apic_timer_interrupt' ]
+
         for cs in self.call_summary:
             if cs.get_total_unique_type() == 0:
+                continue
+            if xxxHack.count(cs.get_str_name()) == 0:
                 continue
 
             print '  name=%s ' % ( cs.get_str_name() )
