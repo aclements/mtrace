@@ -3,6 +3,40 @@ import sqlite3
 from util import *
 from mtrace import MtraceInstanceDetail
 
+def get_miss_count(conn, dataName, syscallName, labelId):
+    '''Returns how many unique cache lines form labelId 
+    syscall named syscallName misses on'''
+
+    q = '''SELECT DISTINCT call_trace_tag, guest_addr from %s_accesses WHERE label_id = %lu
+AND EXISTS (SELECT * FROM %s_call_traces WHERE
+     %s_call_traces.cpu = %s_accesses.cpu
+     AND %s_call_traces.call_trace_tag = %s_accesses.call_trace_tag
+     AND %s_call_traces.name = "%s")
+'''
+    q = q % (dataName, labelId,
+             dataName, 
+             dataName, dataName,
+             dataName, dataName,
+             dataName, syscallName)
+    c = conn.cursor()
+    c.execute(q)
+
+    tagDict = {}
+    for row in c:
+        tag = row['call_trace_tag']
+        guestAddr = row['guest_addr']
+        if tag in tagDict:
+            tagDict[tag] = tagDict[tag] + 1
+        else:
+            tagDict[tag] = 1
+    
+    total = 0
+    vals = tagDict.values()
+    for count in vals:
+        total += count
+
+    return float(total)
+
 class InstanceSummary:
     def __init__(self, dbFile, dataName, labelType, labelId, count, tids):
         self.d = MtraceInstanceDetail(dbFile,
@@ -36,6 +70,7 @@ class CallSummary:
         self.uniqueObj = {}
         self.topObjs = {}
         self.uniqueType = {}
+        self.missPerType = {}
 
     def __getstate__(self):
         odict = self.__dict__.copy()
@@ -68,6 +103,7 @@ class CallSummary:
     def get_conn(self):
         if self.conn == None:
             self.conn = sqlite3.connect(self.dbFile)
+            self.conn.row_factory = sqlite3.Row
         return self.conn
 
     def get_call_count(self):
@@ -169,6 +205,20 @@ class CallSummary:
         if self.callCount == None:
             self.get_per_call_cline()
         return self.callCount
+
+    def miss_per_type(self, labelType, labelName):
+        if not labelName in self.missPerType:
+            q = 'SELECT DISTINCT label_id FROM %s_labels%u WHERE str = \"%s\"'
+            q = q % (self.name, labelType, labelName)
+            c = self.get_conn().cursor()
+            c.execute(q)
+            total = 0
+            for row in c:
+                labelId = row[0]
+                total += get_miss_count(self.conn, self.name, self.get_sys_name(), labelId)
+            self.missPerType[labelName] = float(total)
+
+        return self.missPerType[labelName] / float(self.get_precise_call_count())
 
     def get_total_unique_obj(self):
         s = 0

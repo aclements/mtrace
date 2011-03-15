@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 from mtracepy.mtrace import MtraceInstanceDetail
+import mtracepy.util
 import sqlite3
 import sys
 
@@ -58,10 +59,10 @@ AND EXISTS (SELECT * FROM %s_call_traces WHERE
         tag = row['call_trace_tag']
         guestAddr = row['guest_addr']
         if tag in tagDict:
-            tagDict[tag] += tagDict[tag] + 1
+            tagDict[tag] = tagDict[tag] + 1
         else:
             tagDict[tag] = 1
-    
+
     total = 0
     vals = tagDict.values()
     for count in vals:

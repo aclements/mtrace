@@ -233,6 +233,35 @@ class MtraceSummary:
                                                      higher.instanceNum)
                 print ''
 
+    def print_miss_per_types(self, numPrint):
+        print 'miss-per-type summary'
+        print '---------------------'
+
+        for cs in self.call_summary:
+            if cs.get_total_unique_type() == 0:
+                continue
+
+            print '  name=%s ' % ( cs.get_str_name() )
+            print '  ----'
+
+            for labelType in range(mtrace_label_heap, mtrace_label_percpu + 1):
+                if labelType == mtrace_label_block:
+                    continue
+                if cs.get_unique_type(labelType) == 0:
+                    continue
+
+                print '    type=%s' % ( mtrace_label_str[labelType] )
+                print '    ----'
+
+                print '      %-20s %16s' % ('name', 'miss-per-type')
+                print '      %-20s %16s' % ('----', '-------------')
+
+                top = cs.get_top_types(labelType)
+                for higher in top[0:numPrint]:
+                    print '      %-20s %13.2f' % (higher.name, 
+                                                  cs.miss_per_type(labelType, higher.name))
+                print ''
+
     def print_all_types(self, divisor = 1):
         tmpDict = {}
         numCols = 1
@@ -288,10 +317,14 @@ def summarize_brief(stats):
 
     stats.print_summary(printCols)
 
+def summarize_miss_per_types(stats):
+    stats.print_miss_per_types(default_type_print)
+
 default_summarize = summarize_all
 
 summarize_types = {
     'types' : summarize_types,
+    'miss-per-types' : summarize_miss_per_types,
     'brief' : summarize_brief,
     'all'   : summarize_all
 }
