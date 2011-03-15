@@ -122,6 +122,11 @@ class MtraceSummary:
                           key=lambda callSum: callSum.get_call_count(), 
                           reverse=True)
 
+        def precise_call_count_handler():
+            return sorted(self.call_summary, 
+                          key=lambda callSum: callSum.get_precise_call_count(), 
+                          reverse=True)
+
         def inst_handler():
             return sorted(self.call_summary, 
                           key=lambda callSum: callSum.get_total_unique_obj(), 
@@ -133,6 +138,7 @@ class MtraceSummary:
                           reverse=True)
 
         sortFuncs = {
+            'precise-call-count' : precise_call_count_handler,
             'call-count' : call_count_handler,
             'sum-inst'   : inst_handler,
             'sum-type'   : type_handler
@@ -237,7 +243,7 @@ class MtraceSummary:
         print 'miss-per-type summary'
         print '---------------------'
 
-        xxxHack = [ 'smp_apic_timer_interrupt' ]
+        xxxHack = [ 'stub_clone', 'sys_exit_group', 'sys_wait4', 'sys_read' ]
 
         for cs in self.call_summary:
             if cs.get_total_unique_type() == 0:
