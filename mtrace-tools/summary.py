@@ -267,9 +267,13 @@ class MtraceSummary:
                 print '      %-20s %16s' % ('----', '-------------')
 
                 top = cs.get_top_types(labelType)
+                toSort = []
                 for higher in top[0:numPrint]:
-                    print '      %-20s %13.2f' % (higher.name, 
-                                                  cs.miss_per_type(labelType, higher.name))
+                    toSort.append([higher.name, cs.miss_per_type(labelType, higher.name)])
+
+                toSort = sorted(toSort, key=lambda e: e[1], reverse=True)
+                for e in toSort:
+                    print '      %-20s %13.2f' % (e[0], e[1])
                 print ''
 
     def print_all_types(self, divisor = 1):
