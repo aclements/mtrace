@@ -225,7 +225,7 @@ class CallSummary:
                 c2.execute(q)
                 guestClineSet = set()
                 for guestAddr in c2:
-                    guestCline = get_cline(guestAddr)
+                    guestCline = get_cline(guestAddr['guest_addr'])
                     if not guestCline in guestClineSet:
                         guestClineSet.add(guestCline)
                         line += 1
