@@ -243,7 +243,7 @@ class MtraceSummary:
         print 'miss-per-type summary'
         print '---------------------'
 
-        xxxHack = [ 'stub_clone', 'sys_exit_group', 'sys_wait4', 'sys_read' ]
+        xxxHack = [ 'stub_clone', 'sys_exit_group', 'sys_wait4', 'sys_read', 'sys_open' ]
 
         for cs in self.call_summary:
             if cs.get_total_unique_type() == 0:
@@ -269,7 +269,8 @@ class MtraceSummary:
                 top = cs.get_top_types(labelType)
                 toSort = []
                 for higher in top[0:numPrint]:
-                    toSort.append([higher.name, cs.miss_per_type(labelType, higher.name)])
+                    toSort.append([higher.name, cs.miss_per_type(labelType, higher.name), 
+                                   cs.locked_section_per_type(labelType, higher.name)])
 
                 toSort = sorted(toSort, key=lambda e: e[1], reverse=True)
                 for e in toSort:

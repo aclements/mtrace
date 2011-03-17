@@ -3,11 +3,11 @@ import sqlite3
 from util import *
 from mtrace import MtraceInstanceDetail
 
-def get_miss_count(conn, dataName, syscallName, labelId):
+def get_miss_count(conn, dataName, syscallName, labelId, lockedDict):
     '''Returns how many unique cache lines form labelId 
     syscall named syscallName misses on'''
 
-    q = '''SELECT DISTINCT call_trace_tag, guest_addr from %s_accesses WHERE label_id = %lu
+    q = '''SELECT DISTINCT call_trace_tag, guest_addr, locked_id from %s_accesses WHERE label_id = %lu
 AND EXISTS (SELECT * FROM %s_call_traces WHERE
      %s_call_traces.cpu = %s_accesses.cpu
      AND %s_call_traces.call_trace_tag = %s_accesses.call_trace_tag
@@ -25,11 +25,26 @@ AND EXISTS (SELECT * FROM %s_call_traces WHERE
     for row in c:
         tag = row['call_trace_tag']
         guestAddr = row['guest_addr']
+        lockedId = row['locked_id']
         if tag in tagDict:
             tagDict[tag] = tagDict[tag] + 1
         else:
             tagDict[tag] = 1
-    
+        if lockedId != 0:
+            c2 = conn.cursor()
+            q = 'SELECT str FROM %s_locked_sections WHERE id = %lu LIMIT 1' % (dataName, lockedId)
+            c2.execute(q)
+            nameList = c2.fetchall()
+            if len(nameList) == 1:
+                lockedName = nameList[0][0]
+                if lockedName in lockedDict:
+                    lockedDict[lockedName] = lockedDict[lockedName] + 1
+                else:
+                    lockedDict[lockedName] = 1
+            else:
+                print >> sys.stderr, 'oops: ' + nameList.__str__()             
+            c2.close()
+
     total = 0
     vals = tagDict.values()
     for count in vals:
@@ -213,12 +228,19 @@ class CallSummary:
             c = self.get_conn().cursor()
             c.execute(q)
             total = 0
+            lockedDict = {}
             for row in c:
                 labelId = row[0]
-                total += get_miss_count(self.conn, self.name, self.get_sys_name(), labelId)
-            self.missPerType[labelName] = float(total)
+                total += get_miss_count(self.conn, self.name, 
+                                        self.get_sys_name(), 
+                                        labelId, lockedDict)
+            self.missPerType[labelName] = (float(total), lockedDict)
 
-        return self.missPerType[labelName] / float(self.get_precise_call_count())
+        return self.missPerType[labelName][0] / float(self.get_precise_call_count())
+
+    def locked_section_per_type(self, labelType, labelName):
+        self.miss_per_type(labelType, labelName)
+        return self.missPerType[labelName][1]
 
     def get_total_unique_obj(self):
         s = 0
