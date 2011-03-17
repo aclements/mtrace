@@ -4,7 +4,7 @@ from util import *
 from mtrace import MtraceInstanceDetail
 
 def get_cline(addr):
-    return util.uhex(addr) & (~63)
+    return uhex(addr) & (~63)
 
 def get_miss_count(conn, dataName, syscallName, labelId, lockedDict):
     '''Returns how many unique cache lines form labelId 
