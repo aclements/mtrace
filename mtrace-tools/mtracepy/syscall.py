@@ -3,6 +3,9 @@ import sqlite3
 from util import *
 from mtrace import MtraceInstanceDetail
 
+def get_cline(addr):
+    return util.uhex(addr) & (~63)
+
 def get_miss_count(conn, dataName, syscallName, labelId, lockedDict):
     '''Returns how many unique cache lines form labelId 
     syscall named syscallName misses on'''
@@ -22,14 +25,22 @@ AND EXISTS (SELECT * FROM %s_call_traces WHERE
     c.execute(q)
 
     tagDict = {}
+    guestClineSet = {}
     for row in c:
         tag = row['call_trace_tag']
-        guestAddr = row['guest_addr']
+        guestCline = get_cline(row['guest_addr'])
         lockedId = row['locked_id']
-        if tag in tagDict:
-            tagDict[tag] = tagDict[tag] + 1
-        else:
-            tagDict[tag] = 1
+
+        if not tag in guestClineSet:
+            guestClineSet[tag] = set()
+
+        if not guestCline in guestClineSet[tag]:
+            guestClineSet[tag].add(guestCline)
+            if tag in tagDict:
+                tagDict[tag] = tagDict[tag] + 1
+            else:
+                tagDict[tag] = 1
+
         if lockedId != 0:
             c2 = conn.cursor()
             q = 'SELECT str FROM %s_locked_sections WHERE id = %lu LIMIT 1' % (dataName, lockedId)
@@ -44,6 +55,11 @@ AND EXISTS (SELECT * FROM %s_call_traces WHERE
             else:
                 print >> sys.stderr, 'oops: ' + nameList.__str__()             
             c2.close()
+        else:
+            if '0' in lockedDict:
+                lockedDict['0'] = lockedDict['0'] + 1
+            else:
+                lockedDict['0'] = 1
 
     total = 0
     vals = tagDict.values()
@@ -202,16 +218,19 @@ class CallSummary:
             line = 0
             call = 0
             for row in c:
-                q = 'SELECT COUNT(DISTINCT guest_addr) FROM %s_accesses WHERE call_trace_tag = %lu and traffic = 1'
+                q = 'SELECT DISTINCT guest_addr FROM %s_accesses WHERE call_trace_tag = %lu and traffic = 1'
                 tag = row[0]
                 q = q % (self.name, tag)
                 c2 = self.get_conn().cursor()
                 c2.execute(q)
-                rs = c2.fetchall()
-                if len(rs) != 1:
-                    raise Exception('unexpected result')
-                line += rs[0][0]
+                guestClineSet = set()
+                for guestAddr in c2:
+                    guestCline = get_cline(guestAddr)
+                    if not guestCline in guestClineSet:
+                        guestClineSet.add(guestCline)
+                        line += 1
                 call += 1
+
             self.perCallCline = line
             self.callCount = call
         return float(self.perCallCline) / float(self.callCount)
