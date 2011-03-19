@@ -554,7 +554,8 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
 	    mtrace_call_stack_active[entry.host.call.cpu] = 0;
 	    break;
 	case mtrace_call_set_cpu:
-	    mtrace_call_stack_active[entry.host.call.cpu] = 1;
+	    /* Only enable call traces when mtrace_enable */
+	    mtrace_call_stack_active[entry.host.call.cpu] = mtrace_enable;
 	    break;
 	default:
 	    fprintf(stderr, "bad mtrace_entry_host type %u\n", 
