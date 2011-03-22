@@ -16,7 +16,11 @@ LDFLAGS = -lsqlite3 -lz
 
 HDRS	= $(QEMUDIR)/mtrace-magic.h syms.hh calltrace.hh util.h objinfo.h
 
-all: mt2db mt2text
+all: mt2db mt2text mscan
+
+mscan: mscan.cc $(HDRS)
+	@echo "CXX	$@"
+	$(Q)$(CXX) -o $@ $< $(CFLAGS) $(LDFLAGS)
 
 mt2db: mt2db.cc $(HDRS) sql.h lockset.hh block.h
 	@echo "CXX	$@"
