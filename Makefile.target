@@ -1,6 +1,7 @@
 # -*- Mode: makefile -*-
 
 GENERATED_HEADERS = config-target.h
+CONFIG_NO_PCI = $(if $(subst n,,$(CONFIG_PCI)),n,y)
 CONFIG_NO_KVM = $(if $(subst n,,$(CONFIG_KVM)),n,y)
 
 include ../config-host.mak
@@ -51,7 +52,7 @@ TARGET_TYPE=system
 endif
 
 $(QEMU_PROG).stp:
-	$(call quiet-command,sh $(SRC_PATH)/tracetool \
+	$(call quiet-command,sh $(SRC_PATH)/scripts/tracetool \
 		--$(TRACE_BACKEND) \
 		--binary $(bindir)/$(QEMU_PROG) \
 		--target-arch $(TARGET_ARCH) \
@@ -188,6 +189,7 @@ ifdef CONFIG_SOFTMMU
 obj-y = arch_init.o cpus.o monitor.o machine.o gdbstub.o balloon.o
 # virtio has to be here due to weird dependency between PCI and virtio-net.
 # need to fix this properly
+obj-$(CONFIG_NO_PCI) += pci-stub.o
 obj-$(CONFIG_VIRTIO) += virtio-blk.o virtio-balloon.o virtio-net.o virtio-serial-bus.o
 obj-$(CONFIG_VIRTIO_PCI) += virtio-pci.o
 obj-y += vhost_net.o
@@ -284,7 +286,10 @@ obj-sparc-y += cirrus_vga.o
 else
 obj-sparc-y = sun4m.o lance.o tcx.o sun4m_iommu.o slavio_intctl.o
 obj-sparc-y += slavio_timer.o slavio_misc.o sparc32_dma.o
-obj-sparc-y += cs4231.o eccmemctl.o sbi.o sun4c_intctl.o
+obj-sparc-y += cs4231.o eccmemctl.o sbi.o sun4c_intctl.o leon3.o
+
+# GRLIB
+obj-sparc-y += grlib_gptimer.o grlib_irqmp.o grlib_apbuart.o
 endif
 
 obj-arm-y = integratorcp.o versatilepb.o arm_pic.o arm_timer.o
@@ -342,14 +347,14 @@ $(QEMU_PROG): $(obj-y) $(obj-$(TARGET_BASE_ARCH)-y)
 	$(call LINK,$(obj-y) $(obj-$(TARGET_BASE_ARCH)-y))
 
 
-gdbstub-xml.c: $(TARGET_XML_FILES) $(SRC_PATH)/feature_to_c.sh
-	$(call quiet-command,rm -f $@ && $(SHELL) $(SRC_PATH)/feature_to_c.sh $@ $(TARGET_XML_FILES),"  GEN   $(TARGET_DIR)$@")
+gdbstub-xml.c: $(TARGET_XML_FILES) $(SRC_PATH)/scripts/feature_to_c.sh
+	$(call quiet-command,rm -f $@ && $(SHELL) $(SRC_PATH)/scripts/feature_to_c.sh $@ $(TARGET_XML_FILES),"  GEN   $(TARGET_DIR)$@")
 
 hmp-commands.h: $(SRC_PATH)/hmp-commands.hx
-	$(call quiet-command,sh $(SRC_PATH)/hxtool -h < $< > $@,"  GEN   $(TARGET_DIR)$@")
+	$(call quiet-command,sh $(SRC_PATH)/scripts/hxtool -h < $< > $@,"  GEN   $(TARGET_DIR)$@")
 
 qmp-commands.h: $(SRC_PATH)/qmp-commands.hx
-	$(call quiet-command,sh $(SRC_PATH)/hxtool -h < $< > $@,"  GEN   $(TARGET_DIR)$@")
+	$(call quiet-command,sh $(SRC_PATH)/scripts/hxtool -h < $< > $@,"  GEN   $(TARGET_DIR)$@")
 
 clean:
 	rm -f *.o *.a *~ $(PROGS) nwfpe/*.o fpu/*.o

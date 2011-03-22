@@ -101,6 +101,10 @@ static const QErrorStringTable qerror_table[] = {
         .desc      = "Device '%(device)' has no child bus",
     },
     {
+        .error_fmt = QERR_DEVICE_NO_HOTPLUG,
+        .desc      = "Device '%(device)' does not support hotplugging",
+    },
+    {
         .error_fmt = QERR_DUPLICATE_ID,
         .desc      = "Duplicate ID '%(id)' for %(object)",
     },
@@ -195,6 +199,11 @@ static const QErrorStringTable qerror_table[] = {
     {
         .error_fmt = QERR_UNDEFINED_ERROR,
         .desc      = "An undefined error has ocurred",
+    },
+    {
+        .error_fmt = QERR_UNKNOWN_BLOCK_FORMAT_FEATURE,
+        .desc      = "'%(device)' uses a %(format) feature which is not "
+                     "supported by this qemu version: %(feature)",
     },
     {
         .error_fmt = QERR_VNC_SERVER_FAILED,

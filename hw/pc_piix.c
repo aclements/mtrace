@@ -34,6 +34,7 @@
 #include "kvm.h"
 #include "sysemu.h"
 #include "sysbus.h"
+#include "arch_init.h"
 #include "blockdev.h"
 
 #define MAX_IDE_BUS 2
@@ -148,7 +149,7 @@ static void pc_init1(ram_addr_t ram_size,
         }
     }
 
-    pc_audio_init(pci_enabled ? pci_bus : NULL, isa_irq);
+    audio_init(isa_irq, pci_enabled ? pci_bus : NULL);
 
     pc_cmos_init(below_4g_mem_size, above_4g_mem_size, boot_device,
                  idebus[0], idebus[1], floppy_controller, rtc_state);
@@ -217,14 +218,6 @@ static QEMUMachine pc_machine = {
     .desc = "Standard PC",
     .init = pc_init_pci,
     .max_cpus = 255,
-    .compat_props = (GlobalProperty[]) {
-        {
-            .driver   = "PCI",
-            .property = "command_serr_enable",
-            .value    = "off",
-        },
-        { /* end of list */ }
-    },
     .is_default = 1,
 };
 
@@ -246,6 +239,10 @@ static QEMUMachine pc_machine_v0_13 = {
             .driver   = "vmware-svga",
             .property = "rombar",
             .value    = stringify(0),
+        },{
+            .driver   = "PCI",
+            .property = "command_serr_enable",
+            .value    = "off",
         },
         { /* end of list */ }
     },

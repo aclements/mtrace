@@ -503,6 +503,41 @@ EQMP
     },
 
 SQMP
+client_migrate_info
+------------------
+
+Set the spice/vnc connection info for the migration target.  The spice/vnc
+server will ask the spice/vnc client to automatically reconnect using the
+new parameters (if specified) once the vm migration finished successfully.
+
+Arguments:
+
+- "protocol":     protocol: "spice" or "vnc" (json-string)
+- "hostname":     migration target hostname (json-string)
+- "port":         spice/vnc tcp port for plaintext channels (json-int, optional)
+- "tls-port":     spice tcp port for tls-secured channels (json-int, optional)
+- "cert-subject": server certificate subject (json-string, optional)
+
+Example:
+
+-> { "execute": "client_migrate_info",
+     "arguments": { "protocol": "spice",
+                    "hostname": "virt42.lab.kraxel.org",
+                    "port": 1234 } }
+<- { "return": {} }
+
+EQMP
+
+    {
+        .name       = "client_migrate_info",
+        .args_type  = "protocol:s,hostname:s,port:i?,tls-port:i?,cert-subject:s?",
+        .params     = "protocol hostname port tls-port cert-subject",
+        .help       = "send migration info to spice/vnc client",
+        .user_print = monitor_user_noop,
+        .mhandler.cmd_new = client_migrate_info,
+    },
+
+SQMP
 migrate_set_speed
 -----------------
 
@@ -599,6 +634,34 @@ Arguments:
 Example:
 
 -> { "execute": "netdev_del", "arguments": { "id": "netdev1" } }
+<- { "return": {} }
+
+
+EQMP
+
+    {
+        .name       = "block_resize",
+        .args_type  = "device:B,size:o",
+        .params     = "device size",
+        .help       = "resize a block image",
+        .user_print = monitor_user_noop,
+        .mhandler.cmd_new = do_block_resize,
+    },
+
+SQMP
+block_resize
+------------
+
+Resize a block image while a guest is running.
+
+Arguments:
+
+- "device": the device's ID, must be unique (json-string)
+- "size": new size
+
+Example:
+
+-> { "execute": "block_resize", "arguments": { "device": "scratch", "size": 1073741824 } }
 <- { "return": {} }
 
 EQMP

@@ -78,7 +78,6 @@
 #include "sysemu.h"
 #include "qemu-timer.h"
 #include "qemu-char.h"
-#include "blockdev.h"
 #include "audio/audio.h"
 #include "migration.h"
 #include "qemu_socket.h"
@@ -1401,19 +1400,13 @@ static int vmstate_load(QEMUFile *f, SaveStateEntry *se, int version_id)
     return vmstate_load_state(f, se->vmsd, se->opaque, version_id);
 }
 
-static int vmstate_save(QEMUFile *f, SaveStateEntry *se)
+static void vmstate_save(QEMUFile *f, SaveStateEntry *se)
 {
-    if (se->no_migrate) {
-        return -1;
-    }
-
     if (!se->vmsd) {         /* Old style */
         se->save_state(f, se->opaque);
-        return 0;
+        return;
     }
     vmstate_save_state(f,se->vmsd, se->opaque);
-
-    return 0;
 }
 
 #define QEMU_VM_FILE_MAGIC           0x5145564d
@@ -1426,6 +1419,20 @@ static int vmstate_save(QEMUFile *f, SaveStateEntry *se)
 #define QEMU_VM_SECTION_END          0x03
 #define QEMU_VM_SECTION_FULL         0x04
 #define QEMU_VM_SUBSECTION           0x05
+
+bool qemu_savevm_state_blocked(Monitor *mon)
+{
+    SaveStateEntry *se;
+
+    QTAILQ_FOREACH(se, &savevm_handlers, entry) {
+        if (se->no_migrate) {
+            monitor_printf(mon, "state blocked by non-migratable device '%s'\n",
+                           se->idstr);
+            return true;
+        }
+    }
+    return false;
+}
 
 int qemu_savevm_state_begin(Monitor *mon, QEMUFile *f, int blk_enable,
                             int shared)
@@ -1508,7 +1515,6 @@ int qemu_savevm_state_iterate(Monitor *mon, QEMUFile *f)
 int qemu_savevm_state_complete(Monitor *mon, QEMUFile *f)
 {
     SaveStateEntry *se;
-    int r;
 
     cpu_synchronize_all_states();
 
@@ -1541,11 +1547,7 @@ int qemu_savevm_state_complete(Monitor *mon, QEMUFile *f)
         qemu_put_be32(f, se->instance_id);
         qemu_put_be32(f, se->version_id);
 
-        r = vmstate_save(f, se);
-        if (r < 0) {
-            monitor_printf(mon, "cannot migrate with device '%s'\n", se->idstr);
-            return r;
-        }
+        vmstate_save(f, se);
     }
 
     qemu_put_byte(f, QEMU_VM_EOF);
@@ -1574,6 +1576,11 @@ static int qemu_savevm_state(Monitor *mon, QEMUFile *f)
 
     saved_vm_running = vm_running;
     vm_stop(0);
+
+    if (qemu_savevm_state_blocked(mon)) {
+        ret = -EINVAL;
+        goto out;
+    }
 
     ret = qemu_savevm_state_begin(mon, f, 0, 0);
     if (ret < 0)
@@ -1631,6 +1638,12 @@ static const VMStateDescription *vmstate_get_subsection(const VMStateSubsection 
 static int vmstate_subsection_load(QEMUFile *f, const VMStateDescription *vmsd,
                                    void *opaque)
 {
+    const VMStateSubsection *sub = vmsd->subsections;
+
+    if (!sub || !sub->needed) {
+        return 0;
+    }
+
     while (qemu_peek_byte(f) == QEMU_VM_SUBSECTION) {
         char idstr[256];
         int ret;
@@ -1643,10 +1656,11 @@ static int vmstate_subsection_load(QEMUFile *f, const VMStateDescription *vmsd,
         idstr[len] = 0;
         version_id = qemu_get_be32(f);
 
-        sub_vmsd = vmstate_get_subsection(vmsd->subsections, idstr);
+        sub_vmsd = vmstate_get_subsection(sub, idstr);
         if (sub_vmsd == NULL) {
             return -ENOENT;
         }
+        assert(!sub_vmsd->subsections);
         ret = vmstate_load_state(f, sub_vmsd, opaque, version_id);
         if (ret) {
             return ret;
@@ -1670,6 +1684,7 @@ static void vmstate_subsection_save(QEMUFile *f, const VMStateDescription *vmsd,
             qemu_put_byte(f, len);
             qemu_put_buffer(f, (uint8_t *)vmsd->name, len);
             qemu_put_be32(f, vmsd->version_id);
+            assert(!vmsd->subsections);
             vmstate_save_state(f, vmsd, opaque);
         }
         sub++;
@@ -1691,6 +1706,10 @@ int qemu_loadvm_state(QEMUFile *f)
     uint8_t section_type;
     unsigned int v;
     int ret;
+
+    if (qemu_savevm_state_blocked(default_mon)) {
+        return -EINVAL;
+    }
 
     v = qemu_get_be32(f);
     if (v != QEMU_VM_FILE_MAGIC)

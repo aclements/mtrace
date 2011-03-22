@@ -132,11 +132,10 @@ int qdev_unplug(DeviceState *dev);
 void qdev_free(DeviceState *dev);
 int qdev_simple_unplug_cb(DeviceState *dev);
 void qdev_machine_creation_done(void);
+bool qdev_machine_modified(void);
 
 qemu_irq qdev_get_gpio_in(DeviceState *dev, int n);
 void qdev_connect_gpio_out(DeviceState *dev, int n, qemu_irq pin);
-
-BlockDriverState *qdev_init_bdrv(DeviceState *dev, BlockInterfaceType type);
 
 BusState *qdev_get_child_bus(DeviceState *dev, const char *name);
 
@@ -183,6 +182,8 @@ BusState *qdev_get_parent_bus(DeviceState *dev);
 
 /*** BUS API. ***/
 
+DeviceState *qdev_find_recursive(BusState *bus, const char *id);
+
 /* Returns 0 to walk children, > 0 to skip walk, < 0 to terminate walk. */
 typedef int (qbus_walkerfn)(BusState *bus, void *opaque);
 typedef int (qdev_walkerfn)(DeviceState *dev, void *opaque);
@@ -198,7 +199,8 @@ int qbus_walk_children(BusState *bus, qdev_walkerfn *devfn,
 int qdev_walk_children(DeviceState *dev, qdev_walkerfn *devfn,
                        qbus_walkerfn *busfn, void *opaque);
 void qdev_reset_all(DeviceState *dev);
-void qbus_reset_all(BusState *bus);
+void qbus_reset_all_fn(void *opaque);
+
 void qbus_free(BusState *bus);
 
 #define FROM_QBUS(type, dev) DO_UPCAST(type, qbus, dev)

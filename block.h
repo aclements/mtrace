@@ -182,7 +182,8 @@ int bdrv_is_locked(BlockDriverState *bs);
 void bdrv_set_locked(BlockDriverState *bs, int locked);
 int bdrv_eject(BlockDriverState *bs, int eject_flag);
 void bdrv_set_change_cb(BlockDriverState *bs,
-                        void (*change_cb)(void *opaque), void *opaque);
+                        void (*change_cb)(void *opaque, int reason),
+                        void *opaque);
 void bdrv_get_format(BlockDriverState *bs, char *buf, int buf_size);
 BlockDriverState *bdrv_find(const char *name);
 BlockDriverState *bdrv_next(BlockDriverState *bs);
@@ -240,6 +241,8 @@ void bdrv_reset_dirty(BlockDriverState *bs, int64_t cur_sector,
                       int nr_sectors);
 int64_t bdrv_get_dirty_count(BlockDriverState *bs);
 
+void bdrv_set_in_use(BlockDriverState *bs, int in_use);
+int bdrv_in_use(BlockDriverState *bs);
 
 typedef enum {
     BLKDBG_L1_UPDATE,

@@ -37,7 +37,7 @@
 #include "vmware_vga.h"
 #include "qemu-char.h"
 #include "sysemu.h"
-#include "audio/audio.h"
+#include "arch_init.h"
 #include "boards.h"
 #include "qemu-log.h"
 #include "mips-bios.h"
@@ -455,25 +455,6 @@ static MaltaFPGAState *malta_fpga_init(target_phys_addr_t base, qemu_irq uart_ir
     qemu_register_reset(malta_fpga_reset, s);
 
     return s;
-}
-
-/* Audio support */
-static void audio_init (PCIBus *pci_bus)
-{
-    struct soundhw *c;
-    int audio_enabled = 0;
-
-    for (c = soundhw; !audio_enabled && c->name; ++c) {
-        audio_enabled = c->enabled;
-    }
-
-    if (audio_enabled) {
-        for (c = soundhw; c->name; ++c) {
-            if (c->enabled) {
-                c->init.init_pci(pci_bus);
-            }
-        }
-    }
 }
 
 /* Network support */
@@ -910,7 +891,7 @@ void mips_malta_init (ram_addr_t ram_size,
     /* Board ID = 0x420 (Malta Board with CoreLV)
        XXX: theoretically 0x1e000010 should map to flash and 0x1fc00010 should
        map to the board ID. */
-    stl_phys(0x1fc00010LL, 0x00000420);
+    stl_p(qemu_get_ram_ptr(bios_offset) + 0x10, 0x00000420);
 
     /* Init internal devices */
     cpu_mips_irq_init_cpu(env);
@@ -921,7 +902,7 @@ void mips_malta_init (ram_addr_t ram_size,
     i8259 = i8259_init(env->irq[2]);
 
     /* Northbridge */
-    pci_bus = pci_gt64120_init(i8259);
+    pci_bus = gt64120_register(i8259);
 
     /* Southbridge */
 
@@ -967,7 +948,7 @@ void mips_malta_init (ram_addr_t ram_size,
     fdctrl_init_isa(fd);
 
     /* Sound card */
-    audio_init(pci_bus);
+    audio_init(NULL, pci_bus);
 
     /* Network card */
     network_init();
