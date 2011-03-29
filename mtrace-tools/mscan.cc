@@ -1,10 +1,45 @@
 #include <stdint.h>
 #include <string.h>
 
+#include <fcntl.h>
+
+#include <map>
+#include <list>
+
 extern "C" {
 #include <mtrace-magic.h>
 #include "util.h"
+#include "objinfo.h"
 }
+
+#include "mscan.hh"
+#include "dissys.hh"
+
+using namespace::std;
+
+typedef map<uint64_t, struct mtrace_label_entry> LabelMap;
+
+// A bunch of global state the default handlers update
+static struct mtrace_host_entry mtrace_enable;
+
+static LabelMap labels;
+
+class DefaultHostHandler : public EntryHandler {
+public:
+	virtual void handle(union mtrace_entry *entry) {
+		struct mtrace_host_entry *e = &entry->host;
+		if (e->host_type == mtrace_call_clear_cpu ||
+		    e->host_type == mtrace_call_set_cpu) 
+		 {
+			 return;
+		 } else if (e->host_type != mtrace_access_all_cpu)
+			die("handle_host: unhandled type %u", e->host_type);
+
+		mtrace_enable = *e;
+	}
+};
+
+static list<EntryHandler *> entry_handler[mtrace_entry_num];
 
 static inline union mtrace_entry * alloc_entry(void)
 {
@@ -21,11 +56,55 @@ static inline void init_entry_alloc(void)
 	// nothing
 }
 
+static void process_log(gzFile log)
+{
+	union mtrace_entry entry;
+	int r;
+
+	printf("Scanning log file ...\n");
+	fflush(0);
+        while ((r = read_entry(log, &entry)) > 0) {
+		list<EntryHandler *> *l = &entry_handler[entry.h.type];
+		list<EntryHandler *>::iterator it = l->begin();
+		for(; it != l->end(); ++it)
+			(*it)->handle(&entry);
+	}
+}
+
+static void init_handlers(void)
+{
+	// The default handler come first
+	entry_handler[mtrace_entry_host].push_front(new DefaultHostHandler());
+
+	// Extra handlers come next
+	entry_handler[mtrace_entry_access].push_front(new DistinctSyscalls());	
+}
+
 int main(int ac, char **av)
 {
-	init_entry_alloc();
+	char symFile[128];
+	char logFile[128];
+	gzFile log;
+	int symFd;
 
-	if (ac != 2)
-		die("usage: %s mtrace-dir mtrace-log", av[0]);
+	if (ac != 3)
+		die("usage: %s mtrace-dir mtrace-out", av[0]);
+
+	snprintf(logFile, sizeof(logFile), "%s/%s", av[1], av[2]);
+	snprintf(symFile, sizeof(symFile), "%s/vmlinux.syms", av[1]);
+
+        log = gzopen(logFile, "rb");
+        if (!log)
+		edie("gzopen %s", logFile);
+	if ((symFd = open(symFile, O_RDONLY)) < 0)
+		edie("open %s", symFile);
+
+	init_entry_alloc();
+	init_handlers();
+
+	process_log(log);
+
+	gzclose(log);
+	close(symFd);
 	return 0;
 }

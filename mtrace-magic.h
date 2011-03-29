@@ -17,6 +17,8 @@ typedef enum {
     mtrace_entry_sched,
     mtrace_entry_machine,
     mtrace_entry_appdata,
+    
+    mtrace_entry_num		/* NB actually num + 1 */
 } mtrace_entry_t;
 
 typedef enum {
