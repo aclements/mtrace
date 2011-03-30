@@ -42,6 +42,7 @@ public:
 };
 
 static list<EntryHandler *> entry_handler[mtrace_entry_num];
+static list<EntryHandler *> exit_handler;
 
 static inline union mtrace_entry * alloc_entry(void)
 {
@@ -61,7 +62,6 @@ static inline void init_entry_alloc(void)
 static void process_log(gzFile log)
 {
 	union mtrace_entry entry;
-	int i;
 	int r;
 
 	printf("Scanning log file ...\n");
@@ -73,13 +73,9 @@ static void process_log(gzFile log)
 			(*it)->handle(&entry);
 	}
 
-	for (i = mtrace_entry_label; i < mtrace_entry_num; i++) {
-		list<EntryHandler *> *l = &entry_handler[i];
-		list<EntryHandler *>::iterator it = l->begin();
-		for(; it != l->end(); ++it) {
-			(*it)->exit((mtrace_entry_t)i);
-		}
-	}
+	list<EntryHandler *>::iterator it = exit_handler.begin();
+	for(; it != exit_handler.end(); ++it)
+	    (*it)->exit();
 }
 
 static void init_handlers(void)
@@ -91,8 +87,12 @@ static void init_handlers(void)
 	// Extra handlers come next
 	//
 	DistinctSyscalls *dissys = new DistinctSyscalls();
-	entry_handler[mtrace_entry_access].push_front(dissys);	
-	entry_handler[mtrace_entry_fcall].push_front(dissys);	
+	entry_handler[mtrace_entry_access].push_back(dissys);	
+	entry_handler[mtrace_entry_fcall].push_back(dissys);	
+	exit_handler.push_back(dissys);
+
+	DistinctOps *disops = new DistinctOps(dissys);
+	exit_handler.push_back(disops);
 }
 
 int main(int ac, char **av)

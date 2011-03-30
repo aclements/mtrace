@@ -44,10 +44,7 @@ public:
 		return;
 	}
 
-	virtual void exit(mtrace_entry_t type) {
-		if (type != mtrace_entry_access)
-			return;
-
+	virtual void exit(void) {
 		while (tag_to_distinct_set_.size())
 			count_tag(tag_to_distinct_set_.begin()->first);
 
@@ -110,4 +107,16 @@ private:
 
 	// The current tag
 	uint64_t current_[MAX_CPUS];
+};
+
+class DistinctOps : public EntryHandler {
+public:
+	DistinctOps(DistinctSyscalls *ds) : ds_(ds) {}
+
+	virtual void exit(void) {
+		printf("DistinctOps::exit XXX\n");
+	}
+
+private:
+	DistinctSyscalls *ds_;
 };

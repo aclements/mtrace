@@ -5,8 +5,8 @@
 
 class EntryHandler {
 public:
-	virtual void handle(const union mtrace_entry *entry) = 0;
-	virtual void exit(mtrace_entry_t type) {}
+	virtual void handle(const union mtrace_entry *entry) {}
+	virtual void exit(void) {}
 private:
 };
 
