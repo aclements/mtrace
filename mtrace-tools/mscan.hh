@@ -16,5 +16,6 @@ private:
 
 // The last mtrace_host_entry
 extern struct mtrace_host_entry mtrace_enable;
+extern Addr2line *addr2line;
 
 #endif // _MSCAN_HH_

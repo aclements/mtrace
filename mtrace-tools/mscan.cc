@@ -12,6 +12,7 @@ extern "C" {
 #include "objinfo.h"
 }
 
+#include "addr2line.hh"
 #include "mscan.hh"
 #include "dissys.hh"
 
@@ -21,6 +22,7 @@ typedef map<uint64_t, struct mtrace_label_entry> LabelMap;
 
 // A bunch of global state the default handlers update
 struct mtrace_host_entry mtrace_enable;
+Addr2line *addr2line;
 
 static LabelMap labels;
 
@@ -96,6 +98,7 @@ static void init_handlers(void)
 int main(int ac, char **av)
 {
 	char symFile[128];
+	char elfFile[128];
 	char logFile[128];
 	gzFile log;
 	int symFd;
@@ -105,12 +108,15 @@ int main(int ac, char **av)
 
 	snprintf(logFile, sizeof(logFile), "%s/%s", av[1], av[2]);
 	snprintf(symFile, sizeof(symFile), "%s/vmlinux.syms", av[1]);
+	snprintf(elfFile, sizeof(elfFile), "%s/vmlinux", av[1]);
 
         log = gzopen(logFile, "rb");
         if (!log)
 		edie("gzopen %s", logFile);
 	if ((symFd = open(symFile, O_RDONLY)) < 0)
 		edie("open %s", symFile);
+
+	addr2line = new Addr2line(elfFile);
 
 	init_entry_alloc();
 	init_handlers();
