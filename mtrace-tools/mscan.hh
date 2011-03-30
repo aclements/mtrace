@@ -8,4 +8,11 @@ public:
 private:
 };
 
+//
+// A bunch of global state the default handlers update
+//
+
+// The last mtrace_host_entry
+extern struct mtrace_host_entry mtrace_enable;
+
 #endif // _MSCAN_HH_

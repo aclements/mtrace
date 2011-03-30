@@ -6,11 +6,14 @@ using namespace::std;
 class DistinctSyscalls : public EntryHandler {
 public:
 	virtual void handle(union mtrace_entry *entry) {
+		if (mtrace_enable.access.value == 0)
+			return;
+
 		if (entry->h.type == mtrace_entry_access) {
 			struct mtrace_access_entry *a = &entry->access;
 			if (a->traffic)
-				tag_to_distinct_set_[current_].insert(a->guest_addr);
-		} else if (entry->h.type == mtrace_entry_access) {
+				tag_to_distinct_set_[current_].insert(a->guest_addr & ~63);
+		} else if (entry->h.type == mtrace_entry_fcall) {
 			struct mtrace_fcall_entry *f = &entry->fcall;
 			switch (f->state) {
 			case mtrace_resume:
@@ -43,11 +46,11 @@ public:
 
 		map<uint64_t, SysStats>::iterator pit = pc_to_stats_.begin();
 		for (; pit != pc_to_stats_.end(); ++pit) {
-			uint64_t n;
+			float n;
 			
 			n = (float)pit->second.distinct / 
 				(float)pit->second.calls;
-			printf("%lx %lu\n", pit->first, n);
+			printf("%lx %lu %lu %f\n", pit->first, pit->second.calls, pit->second.distinct, n);
 		}
 	}
 
@@ -61,6 +64,10 @@ private:
 		pc = tag_to_pc_[tag];
 		tag_to_pc_.erase(tag);
 
+		if (pc_to_stats_.find(pc) == pc_to_stats_.end()) {
+			pc_to_stats_[pc].distinct = 0;
+			pc_to_stats_[pc].calls = 0;
+		}
 		pc_to_stats_[pc].distinct += n;
 		pc_to_stats_[pc].calls++;
 	}

@@ -20,7 +20,7 @@ using namespace::std;
 typedef map<uint64_t, struct mtrace_label_entry> LabelMap;
 
 // A bunch of global state the default handlers update
-static struct mtrace_host_entry mtrace_enable;
+struct mtrace_host_entry mtrace_enable;
 
 static LabelMap labels;
 
@@ -85,8 +85,12 @@ static void init_handlers(void)
 	// The default handler come first
 	entry_handler[mtrace_entry_host].push_front(new DefaultHostHandler());
 
+	//
 	// Extra handlers come next
-	entry_handler[mtrace_entry_access].push_front(new DistinctSyscalls());	
+	//
+	DistinctSyscalls *dissys = new DistinctSyscalls();
+	entry_handler[mtrace_entry_access].push_front(dissys);	
+	entry_handler[mtrace_entry_fcall].push_front(dissys);	
 }
 
 int main(int ac, char **av)
