@@ -1,6 +1,8 @@
 #ifndef _MSCAN_HH_
 #define _MSCAN_HH_
 
+#define MAX_CPUS 4
+
 class EntryHandler {
 public:
 	virtual void handle(union mtrace_entry *entry) = 0;

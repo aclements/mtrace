@@ -6,29 +6,34 @@ using namespace::std;
 class DistinctSyscalls : public EntryHandler {
 public:
 	virtual void handle(union mtrace_entry *entry) {
+		int cpu;
+
 		if (mtrace_enable.access.value == 0)
 			return;
+
+		cpu = entry->h.cpu;
 
 		if (entry->h.type == mtrace_entry_access) {
 			struct mtrace_access_entry *a = &entry->access;
 			if (a->traffic)
-				tag_to_distinct_set_[current_].insert(a->guest_addr & ~63);
+				tag_to_distinct_set_[current_[cpu]].insert(a->guest_addr & ~63UL);
 		} else if (entry->h.type == mtrace_entry_fcall) {
 			struct mtrace_fcall_entry *f = &entry->fcall;
+			
 			switch (f->state) {
 			case mtrace_resume:
-				current_ = f->tag;
+				current_[cpu] = f->tag;
 				break;
 			case mtrace_start:
-				current_ = f->tag;
-				tag_to_pc_[current_] = f->pc;
+				current_[cpu] = f->tag;
+				tag_to_pc_[current_[cpu]] = f->pc;
 				break;
 			case mtrace_pause:
-				current_ = 0;
+				current_[cpu] = 0;
 				break;
 			case mtrace_done:
-				count_tag(current_);
-				current_ = 0;
+				count_tag(current_[cpu]);
+				current_[cpu] = 0;
 				break;
 			default:
 				die("DistinctSyscalls::handle: default error");
@@ -82,5 +87,5 @@ private:
 	map<uint64_t, set<uint64_t> > tag_to_distinct_set_;
 
 	// The current tag
-	uint64_t current_;
+	uint64_t current_[MAX_CPUS];
 };
