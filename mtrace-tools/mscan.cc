@@ -26,8 +26,8 @@ static LabelMap labels;
 
 class DefaultHostHandler : public EntryHandler {
 public:
-	virtual void handle(union mtrace_entry *entry) {
-		struct mtrace_host_entry *e = &entry->host;
+	virtual void handle(const union mtrace_entry *entry) {
+		const struct mtrace_host_entry *e = &entry->host;
 		if (e->host_type == mtrace_call_clear_cpu ||
 		    e->host_type == mtrace_call_set_cpu) 
 		 {

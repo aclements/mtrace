@@ -5,7 +5,7 @@ using namespace::std;
 
 class DistinctSyscalls : public EntryHandler {
 public:
-	virtual void handle(union mtrace_entry *entry) {
+	virtual void handle(const union mtrace_entry *entry) {
 		int cpu;
 
 		if (mtrace_enable.access.value == 0)
@@ -14,11 +14,11 @@ public:
 		cpu = entry->h.cpu;
 
 		if (entry->h.type == mtrace_entry_access) {
-			struct mtrace_access_entry *a = &entry->access;
+			const struct mtrace_access_entry *a = &entry->access;
 			if (a->traffic)
 				tag_to_distinct_set_[current_[cpu]].insert(a->guest_addr & ~63UL);
 		} else if (entry->h.type == mtrace_entry_fcall) {
-			struct mtrace_fcall_entry *f = &entry->fcall;
+			const struct mtrace_fcall_entry *f = &entry->fcall;
 			
 			switch (f->state) {
 			case mtrace_resume:
@@ -49,13 +49,18 @@ public:
 		while (tag_to_distinct_set_.size())
 			count_tag(tag_to_distinct_set_.begin()->first);
 
+		printf("%-16s %10s %10s %10s\n",
+		       "pc", "calls", "distinct", "ave");
+
 		map<uint64_t, SysStats>::iterator pit = pc_to_stats_.begin();
 		for (; pit != pc_to_stats_.end(); ++pit) {
 			float n;
 			
 			n = (float)pit->second.distinct / 
 				(float)pit->second.calls;
-			printf("%lx %lu %lu %f\n", pit->first, pit->second.calls, pit->second.distinct, n);
+			printf("%-16lx %10lu %10lu %10.2f\n", 
+			       pit->first, pit->second.calls, 
+			       pit->second.distinct, n);
 		}
 	}
 
