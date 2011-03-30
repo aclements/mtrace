@@ -59,6 +59,7 @@ static inline void init_entry_alloc(void)
 static void process_log(gzFile log)
 {
 	union mtrace_entry entry;
+	int i;
 	int r;
 
 	printf("Scanning log file ...\n");
@@ -68,6 +69,14 @@ static void process_log(gzFile log)
 		list<EntryHandler *>::iterator it = l->begin();
 		for(; it != l->end(); ++it)
 			(*it)->handle(&entry);
+	}
+
+	for (i = mtrace_entry_label; i < mtrace_entry_num; i++) {
+		list<EntryHandler *> *l = &entry_handler[i];
+		list<EntryHandler *>::iterator it = l->begin();
+		for(; it != l->end(); ++it) {
+			(*it)->exit((mtrace_entry_t)i);
+		}
 	}
 }
 
