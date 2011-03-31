@@ -51,8 +51,8 @@ public:
 
 		printf("%-32s %10s %10s %10s\n",
 		       "function", "calls", "distinct", "ave");
-
-		map<uint64_t, SysStats>::iterator pit = pc_to_stats_.begin();
+		
+		auto pit = pc_to_stats_.begin();
 		for (; pit != pc_to_stats_.end(); ++pit) {
 			uint64_t pc;
 			char *func;
@@ -80,7 +80,7 @@ public:
 	}
 
 	int64_t distinct(const char *syscall) {
-		map<uint64_t, SysStats>::iterator pit = pc_to_stats_.begin();
+		auto pit = pc_to_stats_.begin();
 		for (; pit != pc_to_stats_.end(); ++pit) {
 			uint64_t pc;
 			char *func;
