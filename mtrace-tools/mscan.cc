@@ -23,6 +23,8 @@ typedef map<uint64_t, struct mtrace_label_entry> LabelMap;
 // A bunch of global state the default handlers update
 struct mtrace_host_entry mtrace_enable;
 Addr2line *addr2line;
+char mtrace_app_name[32];
+MtraceSummary mtrace_summary;
 
 static LabelMap labels;
 
@@ -36,8 +38,18 @@ public:
 			 return;
 		 } else if (e->host_type != mtrace_access_all_cpu)
 			die("handle_host: unhandled type %u", e->host_type);
-
+		
+		if (!mtrace_app_name[0])
+			strncpy(mtrace_app_name, e->access.str, sizeof(mtrace_app_name));
 		mtrace_enable = *e;
+	}
+};
+
+class DefaultAppDataHandler : public EntryHandler {
+public:
+	virtual void handle(const union mtrace_entry *entry) {
+		const struct mtrace_appdata_entry *a = &entry->appdata;
+		mtrace_summary.app_ops = a->u64;
 	}
 };
 
@@ -82,6 +94,7 @@ static void init_handlers(void)
 {
 	// The default handler come first
 	entry_handler[mtrace_entry_host].push_front(new DefaultHostHandler());
+	entry_handler[mtrace_entry_appdata].push_front(new DefaultAppDataHandler());
 
 	//
 	// Extra handlers come next

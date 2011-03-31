@@ -1,5 +1,6 @@
 #include <map>
 #include <set>
+#include <string>
 
 #include "addr2line.hh"
 
@@ -78,6 +79,24 @@ public:
 		}
 	}
 
+	int64_t distinct(const char *syscall) {
+		map<uint64_t, SysStats>::iterator pit = pc_to_stats_.begin();
+		for (; pit != pc_to_stats_.end(); ++pit) {
+			uint64_t pc;
+			char *func;
+			char *file;
+			int line;
+
+			pc = pit->first;
+
+			if (addr2line->lookup(pc, &func, &file, &line) == 0) {
+				if (strcmp(syscall, func) == 0)
+					return pit->second.distinct;
+			}
+		}
+		return -1;
+	}
+
 private:
 	void count_tag(uint64_t tag) {
 		uint64_t pc;
@@ -111,12 +130,37 @@ private:
 
 class DistinctOps : public EntryHandler {
 public:
-	DistinctOps(DistinctSyscalls *ds) : ds_(ds) {}
+	DistinctOps(DistinctSyscalls *ds) : ds_(ds) {
+		appname_to_syscalls_["procy"] = { "stub_clone", "sys_exit_group", "sys_wait4" };
+	}
 
 	virtual void exit(void) {
-		printf("DistinctOps::exit XXX\n");
+		map<string, set<const char *> >::iterator it = 
+			appname_to_syscalls_.find(mtrace_app_name);
+		if (it == appname_to_syscalls_.end()) {
+			fprintf(stderr, "DistinctOps::exit unable to find '%s'\n", 
+				mtrace_app_name);
+			return;
+		}
+
+		set<const char *> *syscall = &it->second;		
+		set<const char *>::iterator sysit = syscall->begin();
+		uint64_t n = 0;
+		for (; sysit != syscall->end(); ++sysit) {
+			int64_t r = ds_->distinct(*sysit);
+			if (r < 0)
+				die("DistinctOps::exit: unable to find %s", *sysit);
+			n += r;
+		}
+
+		float ave = (float)n / (float)mtrace_summary.app_ops;
+
+		printf("%s ops: %lu distincts: %lu ave: %.2f\n",
+		       mtrace_app_name, mtrace_summary.app_ops, n, ave);
 	}
 
 private:
 	DistinctSyscalls *ds_;
+	map<string, set<const char *> > appname_to_syscalls_;
+
 };
