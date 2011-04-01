@@ -30,6 +30,7 @@ pc_t mtrace_call_pc[MAX_CPUS];
 MtraceLabelMap mtrace_label_map;
 
 static LabelMap labels;
+static list<struct mtrace_label_entry> percpu_labels;
 
 class DefaultHostHandler : public EntryHandler {
 public:
@@ -96,6 +97,34 @@ public:
 	}
 };
 
+class DefaultSegmentHandler : public EntryHandler { 
+public:
+	virtual void handle(const union mtrace_entry *entry) {
+		const struct mtrace_segment_entry *s = &entry->seg;
+
+		if (s->object_type != mtrace_label_percpu)
+			die("DefaultSegmentHandler::handle: bad type %u", s->object_type);
+		
+		auto it = percpu_labels.begin();
+		for (; it != percpu_labels.end(); ++it) {
+			struct mtrace_label_entry offset = *it;
+			struct mtrace_label_entry l;
+			
+			memcpy(&l, &offset, sizeof(l));
+			l.guest_addr = s->baseaddr + offset.guest_addr;
+			l.label_type = mtrace_label_percpu;
+			
+			if (l.guest_addr + l.bytes > s->endaddr)
+				die("DefaultSegmentHandler::handle: bad label %s", l.str);
+			
+			mtrace_label_map.add_label(&l);
+		}
+		
+		// XXX Oops, we leak the mtrace_label_entry in percpu_labels after
+		// we handle the final segment.
+	}
+};
+
 static list<EntryHandler *> entry_handler[mtrace_entry_num];
 static list<EntryHandler *> exit_handler;
 
@@ -140,6 +169,7 @@ static void init_handlers(void)
 	entry_handler[mtrace_entry_appdata].push_front(new DefaultAppDataHandler());
 	entry_handler[mtrace_entry_fcall].push_front(new DefaultFcallHandler());
 	entry_handler[mtrace_entry_label].push_front(new DefaultLabelHandler());
+	entry_handler[mtrace_entry_segment].push_front(new DefaultSegmentHandler());
 
 	//
 	// Extra handlers come next
@@ -157,35 +187,106 @@ static void init_handlers(void)
 	exit_handler.push_back(sersecs);
 }
 
+static void init_static_syms(int sym_fd)
+{
+	list<struct mtrace_label_entry> tmp;
+	uint64_t percpu_start;
+	uint64_t percpu_end;
+	char* line = NULL;
+	uint64_t addr;
+	uint64_t size;
+	char str[128];
+	size_t len;
+	char type;
+	FILE *f;
+	int r;
+
+	f = fdopen(sym_fd, "r");
+	if (f == NULL)
+		edie("fdopen");
+
+	while (getline(&line, &len, f) != -1) {
+		r = sscanf(line, "%lx %lx %c %s", &addr, &size, &type, &str);
+		if (r == 4 && (type == 'D' || type == 'd' || // .data
+			       type == 'B' || type == 'b' || // .bbs
+			       type == 'r' || type == 'R' || // .ro
+			       type == 'A'))  	      	     // absolute
+		{
+			struct mtrace_label_entry l;
+			
+			l.h.type = mtrace_entry_label;
+			l.h.access_count = 0;
+			l.label_type = mtrace_label_static;
+			strncpy(l.str, str, sizeof(l.str) - 1);
+			l.str[sizeof(l.str) - 1] = 0;
+			l.host_addr = 0;
+			l.guest_addr = addr;
+			l.bytes = size;
+
+			tmp.push_back(l);
+			continue;
+		}
+		
+		r = sscanf(line, "%lx %c %s", &addr, &type, &str);
+		if (r == 3 && type == 'D') {
+			if (!strcmp("__per_cpu_end", str)) {
+				percpu_end = addr;
+			} else if (!strcmp("__per_cpu_start", str)) {
+				percpu_start = addr;
+			}
+			continue;
+		}
+	}
+
+	// Move all the labels for percpu variables from the mtrace_label_static 
+	// list to the temporary list.  Once we know each CPUs percpu base 
+	// address we add percpu objects onto the mtrace_label_percpu list.
+	while (tmp.size()) {
+		auto it = tmp.begin();
+		struct mtrace_label_entry l = *it;
+
+		if (percpu_start <= l.guest_addr && l.guest_addr < percpu_end)
+			percpu_labels.push_back(l);
+		else
+			mtrace_label_map.add_label(&l);
+		
+		tmp.erase(it);
+	}
+
+	fclose(f);
+	free(line);
+}
+
 int main(int ac, char **av)
 {
-	char symFile[128];
-	char elfFile[128];
-	char logFile[128];
+	char sym_file[128];
+	char elf_file[128];
+	char log_file[128];
 	gzFile log;
-	int symFd;
+	int sym_fd;
 
 	if (ac != 3)
 		die("usage: %s mtrace-dir mtrace-out", av[0]);
 
-	snprintf(logFile, sizeof(logFile), "%s/%s", av[1], av[2]);
-	snprintf(symFile, sizeof(symFile), "%s/vmlinux.syms", av[1]);
-	snprintf(elfFile, sizeof(elfFile), "%s/vmlinux", av[1]);
+	snprintf(log_file, sizeof(log_file), "%s/%s", av[1], av[2]);
+	snprintf(sym_file, sizeof(sym_file), "%s/vmlinux.syms", av[1]);
+	snprintf(elf_file, sizeof(elf_file), "%s/vmlinux", av[1]);
 
-        log = gzopen(logFile, "rb");
+        log = gzopen(log_file, "rb");
         if (!log)
-		edie("gzopen %s", logFile);
-	if ((symFd = open(symFile, O_RDONLY)) < 0)
-		edie("open %s", symFile);
+		edie("gzopen %s", log_file);
+	if ((sym_fd = open(sym_file, O_RDONLY)) < 0)
+		edie("open %s", sym_file);
 
-	addr2line = new Addr2line(elfFile);
+	addr2line = new Addr2line(elf_file);
 
+	init_static_syms(sym_fd);
 	init_entry_alloc();
 	init_handlers();
 
 	process_log(log);
 
 	gzclose(log);
-	close(symFd);
+	close(sym_fd);
 	return 0;
 }

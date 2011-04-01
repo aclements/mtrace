@@ -25,6 +25,8 @@ struct MtraceSummary {
 };
 
 struct MtraceObject {
+	MtraceObject(void) {}
+
 	MtraceObject(object_id_t id, const struct mtrace_label_entry *l) {
 		id_ = id;
 		guest_addr_ = l->guest_addr;

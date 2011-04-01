@@ -119,6 +119,10 @@ public:
 		case mtrace_lockop_release: {
 			SerialSection ss;
 			if (lock_manager_.release(l, &ss)) {
+				MtraceObject object;
+
+				if (!mtrace_label_map.lower_bound(l->lock, &object))
+					die("%lx", l->lock);
 				/* XXX SerialSectionStats */
 			}
 			break;
