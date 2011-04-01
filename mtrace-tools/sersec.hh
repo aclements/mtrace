@@ -97,6 +97,14 @@ private:
 };
 
 class SerialSections : public EntryHandler {
+	struct SerialSectionStats {
+		uint64_t lock_id;
+		uint64_t obj_id;
+		string name;
+		uint64_t cycles;
+		uint64_t acquires;
+	};
+
 public:
 	SerialSections(void) : lock_manager_() {}
 
@@ -111,7 +119,7 @@ public:
 		case mtrace_lockop_release: {
 			SerialSection ss;
 			if (lock_manager_.release(l, &ss)) {
-				/* XXX */
+				/* XXX SerialSectionStats */
 			}
 			break;
 		}
@@ -132,4 +140,5 @@ public:
 
 private:
 	LockManager lock_manager_;
+	
 };

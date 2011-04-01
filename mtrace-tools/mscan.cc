@@ -27,6 +27,7 @@ Addr2line *addr2line;
 char mtrace_app_name[32];
 MtraceSummary mtrace_summary;
 pc_t mtrace_call_pc[MAX_CPUS];
+MtraceLabelMap mtrace_label_map;
 
 static LabelMap labels;
 
@@ -80,6 +81,21 @@ public:
 	}
 };
 
+class DefaultLabelHandler : public EntryHandler { 
+public:
+	virtual void handle(const union mtrace_entry *entry) {
+		const struct mtrace_label_entry *l = &entry->label;
+		
+		if (l->label_type == 0 || l->label_type >= mtrace_label_end)
+			die("DefaultLabelHandler::handle: bad label type: %u", l->label_type);
+		
+		if (l->bytes)
+			mtrace_label_map.add_label(l);
+		else
+			mtrace_label_map.rem_label(l);
+	}
+};
+
 static list<EntryHandler *> entry_handler[mtrace_entry_num];
 static list<EntryHandler *> exit_handler;
 
@@ -123,6 +139,7 @@ static void init_handlers(void)
 	entry_handler[mtrace_entry_host].push_front(new DefaultHostHandler());
 	entry_handler[mtrace_entry_appdata].push_front(new DefaultAppDataHandler());
 	entry_handler[mtrace_entry_fcall].push_front(new DefaultFcallHandler());
+	entry_handler[mtrace_entry_label].push_front(new DefaultLabelHandler());
 
 	//
 	// Extra handlers come next
