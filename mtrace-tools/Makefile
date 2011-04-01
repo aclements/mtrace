@@ -18,7 +18,7 @@ HDRS	= $(QEMUDIR)/mtrace-magic.h syms.hh calltrace.hh util.h objinfo.h
 
 all: mt2db mt2text mscan
 
-mscan: mscan.cc addr2line.cc $(HDRS) dissys.hh mscan.hh addr2line.hh
+mscan: mscan.cc addr2line.cc $(HDRS) dissys.hh mscan.hh addr2line.hh sersec.hh
 	@echo "CXX	$@"
 	$(Q)$(CXX) -o $@ $< addr2line.cc $(CFLAGS) -std=c++0x $(LDFLAGS) -ldwarf -lelf
 

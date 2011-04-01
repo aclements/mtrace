@@ -15,6 +15,7 @@ extern "C" {
 #include "addr2line.hh"
 #include "mscan.hh"
 #include "dissys.hh"
+#include "sersec.hh"
 
 using namespace::std;
 
@@ -25,6 +26,7 @@ struct mtrace_host_entry mtrace_enable;
 Addr2line *addr2line;
 char mtrace_app_name[32];
 MtraceSummary mtrace_summary;
+pc_t mtrace_call_pc[MAX_CPUS];
 
 static LabelMap labels;
 
@@ -50,6 +52,31 @@ public:
 	virtual void handle(const union mtrace_entry *entry) {
 		const struct mtrace_appdata_entry *a = &entry->appdata;
 		mtrace_summary.app_ops = a->u64;
+	}
+};
+
+class DefaultFcallHandler : public EntryHandler {
+public:
+	virtual void handle(const union mtrace_entry *entry) {
+		const struct mtrace_fcall_entry *f = &entry->fcall;
+		int cpu = f->h.cpu;
+
+		switch (f->state) {
+		case mtrace_resume:
+			mtrace_call_pc[cpu] = f->pc;
+			break;
+		case mtrace_start:
+			mtrace_call_pc[cpu] = f->pc;
+			break;
+		case mtrace_pause:
+			mtrace_call_pc[cpu] = 0;
+			break;
+		case mtrace_done:
+			mtrace_call_pc[cpu] = 0;
+			break;
+		default:
+			die("DefaultFcallHandler::handle: default error");
+		}
 	}
 };
 
@@ -95,6 +122,7 @@ static void init_handlers(void)
 	// The default handler come first
 	entry_handler[mtrace_entry_host].push_front(new DefaultHostHandler());
 	entry_handler[mtrace_entry_appdata].push_front(new DefaultAppDataHandler());
+	entry_handler[mtrace_entry_fcall].push_front(new DefaultFcallHandler());
 
 	//
 	// Extra handlers come next
@@ -106,6 +134,10 @@ static void init_handlers(void)
 
 	DistinctOps *disops = new DistinctOps(dissys);
 	exit_handler.push_back(disops);
+
+	SerialSections *sersecs = new SerialSections();
+	entry_handler[mtrace_entry_lock].push_back(sersecs);
+	exit_handler.push_back(sersecs);
 }
 
 int main(int ac, char **av)
