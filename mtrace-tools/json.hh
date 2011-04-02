@@ -18,26 +18,28 @@ public:
 };
 
 class JsonString : public JsonObject {
+	friend class JsonDict;
+	friend class JsonList;
 public:
-	JsonString(string value) : value_(value) {}
-
 	virtual string str(void) const { 
 		return string("\"") + value_ + string("\"");
 	}
 private:
+	JsonString(string value) : value_(value) {}
 	string value_;
 };
 
 class JsonUint : public JsonObject {
+	friend class JsonDict;
+	friend class JsonList;
 public:
-	JsonUint(uint64_t value) : value_(value) {}
-
 	virtual string str(void) const {
 		char buf[64];
 		snprintf(buf, sizeof(buf), "%lu", value_);
 		return string(buf);
 	}
 private:
+	JsonUint(uint64_t value) : value_(value) {}
 	uint64_t value_;
 };
 
@@ -52,6 +54,10 @@ public:
 			free(s);
 			delete o;
 		}
+	}
+
+	static JsonDict *create() {
+		return new JsonDict();
 	}
 
 	void put(string key, string value) {
@@ -85,6 +91,10 @@ public:
 
 private:
 	hash_map<char *, JsonObject *> table_;
+
+	JsonDict() {}
+	JsonDict(const JsonDict&);
+	JsonDict& operator=(const JsonDict&);
 };
 
 class JsonList : public JsonObject {
@@ -96,6 +106,10 @@ public:
 			list_.erase(it);
 			delete o;
 		}
+	}
+
+	static JsonList *create() {
+		return new JsonList();
 	}
 
 	void append(JsonObject *value) {
@@ -118,6 +132,10 @@ public:
 
 private:
 	list<JsonObject *> list_;
+
+	JsonList() {}
+	JsonList(const JsonList&);
+	JsonList& operator=(const JsonList&);
 };
 
 #endif

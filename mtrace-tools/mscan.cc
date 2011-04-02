@@ -158,13 +158,14 @@ static void process_log(gzFile log)
 			(*it)->handle(&entry);
 	}
 
-	JsonDict json_dict;
+	JsonDict *json_dict = JsonDict::create();;
 
 	list<EntryHandler *>::iterator it = exit_handler.begin();
 	for(; it != exit_handler.end(); ++it)
-	    (*it)->exit(&json_dict);
+	    (*it)->exit(json_dict);
 	
-	cout << json_dict.str();
+	cout << json_dict->str();
+	delete json_dict;
 }
 
 static void init_handlers(void)

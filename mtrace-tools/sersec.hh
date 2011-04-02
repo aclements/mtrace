@@ -214,12 +214,12 @@ public:
 	}
 
 	virtual void exit(JsonDict *json_file) {
-		JsonList *list = new JsonList();
+		JsonList *list = JsonList::create();
 		
 		auto it = stat_.begin();
 		for (; it != stat_.end(); ++it) {
 			SerialSectionStat *stat = &it->second;
-			JsonDict *dict = new JsonDict();
+			JsonDict *dict = JsonDict::create();
 			dict->put("name", stat->name);
 			dict->put("cycles",  stat->ts_cycles);
 			dict->put("acquires", stat->acquires);
