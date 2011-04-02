@@ -164,7 +164,9 @@ static void process_log(gzFile log)
 
 static void init_handlers(void)
 {
+	//
 	// The default handler come first
+	//
 	entry_handler[mtrace_entry_host].push_front(new DefaultHostHandler());
 	entry_handler[mtrace_entry_appdata].push_front(new DefaultAppDataHandler());
 	entry_handler[mtrace_entry_fcall].push_front(new DefaultFcallHandler());
