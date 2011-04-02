@@ -7,6 +7,8 @@ using namespace::__gnu_cxx;
 struct SerialSection {
 	timestamp_t start;
 	timestamp_t end;
+	int acquire_cpu;
+	int release_cpu;
 	pc_t call_pc;
 };
 
@@ -15,12 +17,18 @@ class LockManager {
 		LockState(const struct mtrace_lock_entry *lock, pc_t call_pc) {
 			ss_.call_pc = call_pc;
 			ss_.start = lock->h.ts;
+			ss_.acquire_cpu = lock->h.cpu;
+
 			acquired_ts_ = 0;
 			depth_ = 0;
 		}
 
-		void release(void) {
+		void release(const struct mtrace_lock_entry *lock) {
 			depth_--;
+			if (depth_ == 0) {
+				ss_.end = lock->h.ts;
+				ss_.release_cpu = lock->h.cpu;
+			}
 		}
 
 		void acquire(void) {
@@ -52,11 +60,11 @@ public:
 				die("LockManager: released too many unheld locks");
 		}
 
-		it->second->release();
+		it->second->release(lock);
 
 		if (it->second->depth_ == 0) {
 			memcpy(ss, &it->second->ss_, sizeof(*ss));
-			ss->end = lock->h.ts;
+
 			delete it->second;
 			state_.erase(it);
 			return true;
@@ -101,9 +109,19 @@ private:
 class SerialSections : public EntryHandler {
 	struct SerialSectionStat {
 		SerialSectionStat(void) : 
-			lock_id(0), obj_id(0), name(""), ts_cycles(0), acquires(0) {}
+			lock_id(0), 
+			obj_id(0), 
+			name(""), 
+			ts_cycles(0), 
+			acquires(0),
+			mismatches(0) {}
 
 		void add(const SerialSection *ss) {
+			if (ss->acquire_cpu != ss->release_cpu) {
+				mismatches++;
+				return;
+			}
+			
 			ts_cycles += ss->end - ss->start;
 			acquires++;
 		}
@@ -122,6 +140,7 @@ class SerialSections : public EntryHandler {
 		// Updated by add
 		timestamp_t ts_cycles;
 		uint64_t acquires;
+		uint64_t mismatches;
 	};
 
 	struct SerialSectionKey {
@@ -174,11 +193,16 @@ public:
 
 	virtual void exit(void) {
 		auto it = stat_.begin();
+
+		printf("serial sections:\n");
 		
 		for (; it != stat_.end(); ++it) {
-			printf("%s\n", it->second.name.c_str());
+			SerialSectionStat *stat = &it->second;
+			printf(" %s  %lu  %lu\n", 
+			       stat->name.c_str(), 
+			       stat->ts_cycles, 
+			       stat->acquires);
 		}
-		printf("SerialSections::exit: XXX\n");
 	}
 
 private:
