@@ -1,6 +1,8 @@
 #include <ext/hash_map>
 #include <assert.h>
 
+#include "json.hh"
+
 using namespace::std;
 using namespace::__gnu_cxx;
 
@@ -211,6 +213,21 @@ public:
 		}
 	}
 
+	virtual void exit(JsonDict *json_file) {
+		JsonList *list = new JsonList();
+		
+		auto it = stat_.begin();
+		for (; it != stat_.end(); ++it) {
+			SerialSectionStat *stat = &it->second;
+			JsonDict *dict = new JsonDict();
+			dict->put("name", stat->name);
+			dict->put("cycles",  stat->ts_cycles);
+			dict->put("acquires", stat->acquires);
+			list->append(dict);
+		}
+		json_file->put("serial-sections", list);
+	}
+
 private:
 	LockManager lock_manager_;
 
@@ -273,6 +290,7 @@ private:
 			
 			mix64(a, b, c);
 			return c;
+			#undef mix64
 		}
 	};
 	

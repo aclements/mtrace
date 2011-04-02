@@ -13,10 +13,13 @@ typedef uint64_t timestamp_t;
 typedef uint64_t object_id_t;
 typedef uint64_t guest_addr_t;
 
+class JsonDict;
+
 class EntryHandler {
 public:
 	virtual void handle(const union mtrace_entry *entry) {}
 	virtual void exit(void) {}
+	virtual void exit(JsonDict *json_file) {}
 private:
 };
 

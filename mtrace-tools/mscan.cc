@@ -5,6 +5,7 @@
 
 #include <map>
 #include <list>
+#include <iostream>
 
 extern "C" {
 #include <mtrace-magic.h>
@@ -157,9 +158,13 @@ static void process_log(gzFile log)
 			(*it)->handle(&entry);
 	}
 
+	JsonDict json_dict;
+
 	list<EntryHandler *>::iterator it = exit_handler.begin();
 	for(; it != exit_handler.end(); ++it)
-	    (*it)->exit();
+	    (*it)->exit(&json_dict);
+	
+	cout << json_dict.str();
 }
 
 static void init_handlers(void)
