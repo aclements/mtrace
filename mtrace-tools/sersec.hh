@@ -14,11 +14,7 @@ struct SerialSection {
 
 class LockManager {
 	struct LockState {
-		LockState(const struct mtrace_lock_entry *lock, pc_t call_pc) {
-			ss_.call_pc = call_pc;
-			ss_.start = lock->h.ts;
-			ss_.acquire_cpu = lock->h.cpu;
-
+		LockState(void) {
 			acquired_ts_ = 0;
 			depth_ = 0;
 		}
@@ -31,7 +27,12 @@ class LockManager {
 			}
 		}
 
-		void acquire(void) {
+		void acquire(const struct mtrace_lock_entry *lock) {
+			if (depth_ == 0) {
+				ss_.start = lock->h.ts;
+				ss_.call_pc = mtrace_call_pc[lock->h.cpu];
+				ss_.acquire_cpu = lock->h.cpu;
+			}
 			depth_++;
 		}
 
@@ -53,6 +54,7 @@ class LockManager {
 public:
 	bool release(const struct mtrace_lock_entry *lock, SerialSection *ss) {
 		static int misses;
+		LockState *ls;
 
 		auto it = state_.find(lock->lock);
 		if (it == state_.end()) {
@@ -61,12 +63,12 @@ public:
 				die("LockManager: released too many unheld locks");
 		}
 
-		it->second->release(lock);
+		ls = it->second;
+		ls->release(lock);
 
-		if (it->second->depth_ == 0) {
-			memcpy(ss, &it->second->ss_, sizeof(*ss));
-
-			delete it->second;
+		if (ls->depth_ == 0) {
+			memcpy(ss, &ls->ss_, sizeof(*ss));
+			delete ls;
 			state_.erase(it);
 			return true;
 		}
@@ -78,14 +80,14 @@ public:
 
 		if (it == state_.end()) {
 			pair<LockStateTable::iterator, bool> r;
-			LockState *ls = new LockState(lock, mtrace_call_pc[lock->h.cpu]);
+			LockState *ls = new LockState();
 			r = state_.insert(pair<uint64_t, LockState *>(lock->lock, ls));
 			if (!r.second)
 				die("acquire: insert failed");
-			stack_.push_front(ls);
+			// XXX stack_.push_front(ls);
 			it = r.first;
 		}
-		it->second->acquire();
+		it->second->acquire(lock);
 	}
 
 	void acquired(const struct mtrace_lock_entry *lock) {
