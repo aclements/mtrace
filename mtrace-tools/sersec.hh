@@ -39,6 +39,7 @@ class LockManager {
 			if (acquired_ts_ == 0) {
 				acquired_ts_ = lock->h.ts;
 				ss_.start = lock->h.ts;
+				ss_.acquire_cpu = lock->h.cpu;
 			}
 		}
 
@@ -121,6 +122,9 @@ class SerialSections : public EntryHandler {
 				mismatches++;
 				return;
 			}
+
+			if (ss->end < ss->start)
+				die("SerialSections::add %lu < %lu", ss->end, ss->start);
 			
 			ts_cycles += ss->end - ss->start;
 			acquires++;
