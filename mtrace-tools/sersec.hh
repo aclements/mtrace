@@ -10,16 +10,20 @@ using namespace::__gnu_cxx;
 struct SerialSection {
 	timestamp_t start;
 	timestamp_t end;
+
 	int acquire_cpu;
 	int release_cpu;
+
 	pc_t call_pc;
+
+	uint64_t coherence_miss;
+	uint64_t locked_inst;
 };
 
 class LockManager {
 	struct LockState {
-		LockState(void) {
-			acquired_ts_ = 0;
-			depth_ = 0;
+		LockState(void) : acquired_ts_(0), depth_(0) {
+			memset(&ss_, 0, sizeof(ss_));
 		}
 
 		void release(const struct mtrace_lock_entry *lock) {
@@ -47,6 +51,13 @@ class LockManager {
 			}
 		}
 
+		void access(const struct mtrace_access_entry *a) {
+			if (a->traffic)
+				ss_.coherence_miss++;
+			else if (a->lock)
+				ss_.locked_inst++;
+		}
+
 		struct SerialSection ss_;
 		uint64_t acquired_ts_;
 		int depth_;
@@ -71,8 +82,9 @@ public:
 
 		if (ls->depth_ == 0) {
 			memcpy(ss, &ls->ss_, sizeof(*ss));
-			delete ls;
+			stack_.remove(ls);
 			state_.erase(it);
+			delete ls;
 			return true;
 		}
 		return false;
@@ -87,7 +99,7 @@ public:
 			r = state_.insert(pair<uint64_t, LockState *>(lock->lock, ls));
 			if (!r.second)
 				die("acquire: insert failed");
-			// XXX stack_.push_front(ls);
+			stack_.push_front(ls);
 			it = r.first;
 		}
 		it->second->acquire(lock);
@@ -107,6 +119,13 @@ public:
 		it->second->acquired(lock);
 	}
 
+	void access(const struct mtrace_access_entry *a) {
+		if (stack_.empty())
+			return;
+		
+		stack_.front()->access(a);
+	}
+
 private:
 	LockStateTable state_;
 	list<LockState *> stack_;
@@ -120,7 +139,9 @@ class SerialSections : public EntryHandler {
 			name(""), 
 			ts_cycles(0), 
 			acquires(0),
-			mismatches(0) {}
+			mismatches(0),
+			coherence_miss(0),
+			locked_inst(0) {}
 
 		void add(const SerialSection *ss) {
 			if (ss->acquire_cpu != ss->release_cpu) {
@@ -132,6 +153,8 @@ class SerialSections : public EntryHandler {
 				die("SerialSections::add %lu < %lu", ss->end, ss->start);
 			
 			ts_cycles += ss->end - ss->start;
+			coherence_miss += ss->coherence_miss;
+			locked_inst += ss->locked_inst;
 			acquires++;
 		}
 
@@ -150,6 +173,8 @@ class SerialSections : public EntryHandler {
 		timestamp_t ts_cycles;
 		uint64_t acquires;
 		uint64_t mismatches;
+		uint64_t coherence_miss;
+		uint64_t locked_inst;
 	};
 
 	struct SerialSectionKey {
@@ -161,12 +186,76 @@ public:
 	SerialSections(void) : lock_manager_() {}
 
 	virtual void handle(const union mtrace_entry *entry) {
-		const struct mtrace_lock_entry *l;
-		
 		if (mtrace_enable.access.value == 0)
 			return;
 
-		l = &entry->lock;
+		switch (entry->h.type) {
+		case mtrace_entry_access:
+			handle_access(&entry->access);
+			break;
+		case mtrace_entry_lock:
+			handle_lock(&entry->lock);
+			break;
+		default:
+			die("SerialSections::handle type %u", entry->h.type);
+		}
+	}
+
+	virtual void exit(void) {
+		auto it = stat_.begin();
+
+		printf("serial sections:\n");
+		
+		for (; it != stat_.end(); ++it) {
+			SerialSectionStat *stat = &it->second;
+			printf(" %s  %lu  %lu\n", 
+			       stat->name.c_str(), 
+			       stat->ts_cycles, 
+			       stat->acquires);
+		}
+	}
+
+	virtual void exit(JsonDict *json_file) {
+		JsonList *list = JsonList::create();
+		
+		auto it = stat_.begin();
+		for (; it != stat_.end(); ++it) {
+			SerialSectionStat *stat = &it->second;
+			JsonDict *dict = JsonDict::create();
+			dict->put("name", stat->name);
+			dict->put("cycles",  stat->ts_cycles);
+			dict->put("acquires", stat->acquires);
+			dict->put("coherence-miss", stat->coherence_miss);
+			dict->put("locked-inst", stat->locked_inst);
+			list->append(dict);
+		}
+		json_file->put("serial-sections", list);
+	}
+
+private:
+	LockManager lock_manager_;
+
+	struct SerialEq {
+		bool operator()(const SerialSectionKey s1, const SerialSectionKey s2) const
+		{
+			return (s1.lock_id == s2.lock_id) && (s1.obj_id == s2.obj_id);
+		}
+	};
+
+	struct SerialHash {
+		size_t operator()(const SerialSectionKey s) const
+		{
+			register uintptr_t *k = (uintptr_t *)&s;
+			register uint64_t length = sizeof(s) / sizeof(uintptr_t);
+			
+			// XXX should be a static assertion
+			assert(length == 2);
+
+			return bb_hash(k, length);
+		}
+	};
+
+	void handle_lock(const struct mtrace_lock_entry *l) {
 		switch(l->op) {
 		case mtrace_lockop_release: {
 			SerialSection ss;
@@ -200,57 +289,9 @@ public:
 		}
 	}
 
-	virtual void exit(void) {
-		auto it = stat_.begin();
-
-		printf("serial sections:\n");
-		
-		for (; it != stat_.end(); ++it) {
-			SerialSectionStat *stat = &it->second;
-			printf(" %s  %lu  %lu\n", 
-			       stat->name.c_str(), 
-			       stat->ts_cycles, 
-			       stat->acquires);
-		}
+	void handle_access(const struct mtrace_access_entry *a) {
+		lock_manager_.access(a);
 	}
-
-	virtual void exit(JsonDict *json_file) {
-		JsonList *list = JsonList::create();
-		
-		auto it = stat_.begin();
-		for (; it != stat_.end(); ++it) {
-			SerialSectionStat *stat = &it->second;
-			JsonDict *dict = JsonDict::create();
-			dict->put("name", stat->name);
-			dict->put("cycles",  stat->ts_cycles);
-			dict->put("acquires", stat->acquires);
-			list->append(dict);
-		}
-		json_file->put("serial-sections", list);
-	}
-
-private:
-	LockManager lock_manager_;
-
-	struct SerialEq {
-		bool operator()(const SerialSectionKey s1, const SerialSectionKey s2) const
-		{
-			return (s1.lock_id == s2.lock_id) && (s1.obj_id == s2.obj_id);
-		}
-	};
-
-	struct SerialHash {
-		size_t operator()(const SerialSectionKey s) const
-		{
-			register uintptr_t *k = (uintptr_t *)&s;
-			register uint64_t length = sizeof(s) / sizeof(uintptr_t);
-			
-			// XXX should be a static assertion
-			assert(length == 2);
-
-			return bb_hash(k, length);
-		}
-	};
 	
 	hash_map<SerialSectionKey, SerialSectionStat, SerialHash, SerialEq> stat_;
 };
