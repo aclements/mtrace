@@ -149,7 +149,6 @@ static void process_log(gzFile log)
 	union mtrace_entry entry;
 	int r;
 
-	printf("Scanning log file ...\n");
 	fflush(0);
         while ((r = read_entry(log, &entry)) > 0) {
 		list<EntryHandler *> *l = &entry_handler[entry.h.type];
