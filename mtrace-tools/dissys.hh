@@ -172,13 +172,31 @@ public:
 	}
 
 	virtual void exit(void) {
+		uint64_t dist = distinct();
+		float ave = (float)dist / (float)mtrace_summary.app_ops;
+
+		printf("%s ops: %lu distincts: %lu ave: %.2f\n",
+		       mtrace_summary.app_name, mtrace_summary.app_ops, dist, ave);
+	}
+
+	virtual void exit(JsonDict *json_file) {
+		uint64_t dist = distinct();
+		float ave = (float)dist / (float)mtrace_summary.app_ops;
+
+		JsonDict *dict = JsonDict::create();
+		dict->put("ops", mtrace_summary.app_ops);
+		dict->put("distinct", dist);
+		dict->put("ave", ave);
+		json_file->put("distinct-per-op", dict);
+	}
+
+private:
+	uint64_t distinct(void) {
 		map<string, set<const char *> >::iterator it = 
 			appname_to_syscalls_.find(mtrace_summary.app_name);
-		if (it == appname_to_syscalls_.end()) {
-			fprintf(stderr, "DistinctOps::exit unable to find '%s'\n", 
-				mtrace_summary.app_name);
-			return;
-		}
+		if (it == appname_to_syscalls_.end())
+			die("DistinctOps::exit unable to find '%s'",
+			    mtrace_summary.app_name);
 
 		set<const char *> *syscall = &it->second;		
 		set<const char *>::iterator sysit = syscall->begin();
@@ -190,13 +208,9 @@ public:
 			n += r;
 		}
 
-		float ave = (float)n / (float)mtrace_summary.app_ops;
-
-		printf("%s ops: %lu distincts: %lu ave: %.2f\n",
-		       mtrace_summary.app_name, mtrace_summary.app_ops, n, ave);
+		return n;
 	}
 
-private:
 	DistinctSyscalls *ds_;
 	map<string, set<const char *> > appname_to_syscalls_;
 

@@ -192,7 +192,7 @@ static void init_handlers(void)
 	SerialSections *sersecs = new SerialSections();
 	entry_handler[mtrace_entry_lock].push_back(sersecs);
 	entry_handler[mtrace_entry_access].push_back(sersecs);
-	exit_handler.push_back(sersecs);
+	//exit_handler.push_back(sersecs);
 }
 
 static void init_static_syms(int sym_fd)
