@@ -3,6 +3,7 @@
 #include <string>
 
 #include "addr2line.hh"
+#include "json.hh"
 
 using namespace::std;
 
@@ -77,6 +78,42 @@ public:
 			       pit->second.calls, 
 			       pit->second.distinct, n);
 		}
+	}
+
+	virtual void exit(JsonDict *json_file) {
+		JsonList *list = JsonList::create();
+
+		auto pit = pc_to_stats_.begin();
+		for (; pit != pc_to_stats_.end(); ++pit) {
+			JsonDict *dict = JsonDict::create();
+			uint64_t pc;
+			char *func;
+			char *file;
+			int line;
+			float n;
+
+			pc = pit->first;
+			n = (float)pit->second.distinct / 
+				(float)pit->second.calls;
+			
+			if (pc == 0)
+				dict->put("entry", "(unknown)");
+			else if (addr2line->lookup(pc, &func, &file, &line) == 0) {
+				dict->put("entry", func);
+				free(func);
+				free(file);
+			} else {
+				char buf[32];
+				snprintf(buf, sizeof(buf), "%lx", pc);
+				dict->put("entry", buf);
+			}
+
+			dict->put("calls", pit->second.calls);
+			dict->put("distinct", pit->second.distinct);
+			dict->put("ave", n);
+			list->append(dict);
+		}
+		json_file->put("distinct-per-entry", list);
 	}
 
 	int64_t distinct(const char *syscall) {

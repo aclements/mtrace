@@ -43,6 +43,20 @@ private:
 	uint64_t value_;
 };
 
+class JsonFloat : public JsonObject {
+	friend class JsonDict;
+	friend class JsonList;
+public:
+	virtual string str(void) const {
+		char buf[64];
+		snprintf(buf, sizeof(buf), "%f", value_);
+		return string(buf);
+	}
+private:
+	JsonFloat(float value) : value_(value) {}
+	float value_;
+};
+
 class JsonDict : public JsonObject {
 public:
 	~JsonDict(void) {
@@ -66,6 +80,10 @@ public:
 
 	void put(string key, uint64_t value) {
 		put(key, new JsonUint(value));
+	}
+
+	void put(string key, float value) {
+		put(key, new JsonFloat(value));
 	}
 
 	void put(string key, JsonObject *value) {
