@@ -136,10 +136,10 @@ public:
 
 	virtual void exit(void) {
 		map<string, set<const char *> >::iterator it = 
-			appname_to_syscalls_.find(mtrace_app_name);
+			appname_to_syscalls_.find(mtrace_summary.app_name);
 		if (it == appname_to_syscalls_.end()) {
 			fprintf(stderr, "DistinctOps::exit unable to find '%s'\n", 
-				mtrace_app_name);
+				mtrace_summary.app_name);
 			return;
 		}
 
@@ -156,7 +156,7 @@ public:
 		float ave = (float)n / (float)mtrace_summary.app_ops;
 
 		printf("%s ops: %lu distincts: %lu ave: %.2f\n",
-		       mtrace_app_name, mtrace_summary.app_ops, n, ave);
+		       mtrace_summary.app_name, mtrace_summary.app_ops, n, ave);
 	}
 
 private:

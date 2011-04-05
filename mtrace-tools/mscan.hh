@@ -25,6 +25,7 @@ private:
 
 struct MtraceSummary {
 	uint64_t app_ops;
+	char app_name[32];
 };
 
 struct MtraceObject {
@@ -107,10 +108,13 @@ private:
 
 // The last mtrace_host_entry
 extern struct mtrace_host_entry mtrace_enable;
+// An addr2line instance for vmlinux
 extern Addr2line *addr2line;
-extern char mtrace_app_name[32];
+// A summary of the application/workload
 extern MtraceSummary mtrace_summary;
+// The current fcall/kernel entry point
 extern pc_t mtrace_call_pc[MAX_CPUS];
+// A map from guest address to kernel object
 extern MtraceLabelMap mtrace_label_map;
 
 #endif // _MSCAN_HH_

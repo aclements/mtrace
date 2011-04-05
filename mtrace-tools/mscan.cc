@@ -25,7 +25,6 @@ typedef map<uint64_t, struct mtrace_label_entry> LabelMap;
 // A bunch of global state the default handlers update
 struct mtrace_host_entry mtrace_enable;
 Addr2line *addr2line;
-char mtrace_app_name[32];
 MtraceSummary mtrace_summary;
 pc_t mtrace_call_pc[MAX_CPUS];
 MtraceLabelMap mtrace_label_map;
@@ -44,8 +43,9 @@ public:
 		 } else if (e->host_type != mtrace_access_all_cpu)
 			die("handle_host: unhandled type %u", e->host_type);
 		
-		if (!mtrace_app_name[0])
-			strncpy(mtrace_app_name, e->access.str, sizeof(mtrace_app_name));
+		if (!mtrace_summary.app_name[0])
+			strncpy(mtrace_summary.app_name, e->access.str, 
+				sizeof(mtrace_summary.app_name));
 		mtrace_enable = *e;
 	}
 };
