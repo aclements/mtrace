@@ -3004,7 +3004,7 @@ RAMBlock *qemu_ramblock_from_host(void *ptr)
         }
     }
 
-    fprintf(stderr, "Bad ram pointer %p\n", ptr);
+    fprintf(stderr, "mtrace: bad ram pointer %p\n", ptr);
     abort();
 
     return 0;

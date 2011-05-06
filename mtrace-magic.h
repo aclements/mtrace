@@ -289,7 +289,7 @@ static inline void mtrace_label_register(mtrace_label_t type,
     label.label_type = type;
     memcpy((void *)label.str, str, n);
     label.str[n] = 0;
-    label.guest_addr = (uint64_t)addr;
+    label.guest_addr = (uintptr_t)addr;
     label.bytes = bytes;
     label.pc = call_site;
 
