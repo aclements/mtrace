@@ -83,7 +83,7 @@ public:
 	}
 };
 
-class DefaultLabelHandler : public EntryHandler { 
+class DefaultLabelHandler : public EntryHandler {
 public:
 	virtual void handle(const union mtrace_entry *entry) {
 		const struct mtrace_label_entry *l = &entry->label;
@@ -198,8 +198,8 @@ static void init_handlers(void)
 static void init_static_syms(int sym_fd)
 {
 	list<struct mtrace_label_entry> tmp;
-	uint64_t percpu_start;
-	uint64_t percpu_end;
+	uint64_t percpu_start = 0;
+	uint64_t percpu_end = 0;
 	char* line = NULL;
 	uint64_t addr;
 	uint64_t size;
