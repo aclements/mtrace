@@ -176,7 +176,11 @@ public:
 			"sys_exit_group",
 			"sys_wait4"
 		};
-		appname_to_syscalls_["xv6"] = { };
+		appname_to_syscalls_["xv6-forktest"] = {
+			"sys_fork",
+			"sys_exit",
+			"sys_wait"
+		};
 	}
 
 	virtual void exit(void) {
