@@ -499,7 +499,7 @@ static int mtrace_host_addr(target_ulong guest_addr, target_ulong *host_addr)
  * Handler for the mtrace magic instruction
  */
 static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
-                                  target_ulong len, target_ulong cpu,
+                                  target_ulong len, target_ulong n4,
                                   target_ulong n5)
 {
     union mtrace_entry entry;
@@ -520,10 +520,7 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
 
     entry.h.type = type;
     entry.h.size = len;
-    if (cpu == ~0)
-        entry.h.cpu = cpu_single_env->cpu_index;
-    else
-        entry.h.cpu = cpu;
+    entry.h.cpu = cpu_single_env->cpu_index;
     entry.h.access_count = mtrace_access_count;
     entry.h.ts = mtrace_get_percore_tsc(cpu_single_env);
 
