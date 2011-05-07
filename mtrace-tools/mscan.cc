@@ -37,14 +37,14 @@ public:
 	virtual void handle(const union mtrace_entry *entry) {
 		const struct mtrace_host_entry *e = &entry->host;
 		if (e->host_type == mtrace_call_clear_cpu ||
-		    e->host_type == mtrace_call_set_cpu) 
+		    e->host_type == mtrace_call_set_cpu)
 		 {
 			 return;
 		 } else if (e->host_type != mtrace_access_all_cpu)
 			die("handle_host: unhandled type %u", e->host_type);
-		
+
 		if (!mtrace_summary.app_name[0])
-			strncpy(mtrace_summary.app_name, e->access.str, 
+			strncpy(mtrace_summary.app_name, e->access.str,
 				sizeof(mtrace_summary.app_name));
 		mtrace_enable = *e;
 	}
@@ -87,10 +87,10 @@ class DefaultLabelHandler : public EntryHandler {
 public:
 	virtual void handle(const union mtrace_entry *entry) {
 		const struct mtrace_label_entry *l = &entry->label;
-		
+
 		if (l->label_type == 0 || l->label_type >= mtrace_label_end)
 			die("DefaultLabelHandler::handle: bad label type: %u", l->label_type);
-		
+
 		if (l->bytes)
 			mtrace_label_map.add_label(l);
 		else
@@ -98,29 +98,29 @@ public:
 	}
 };
 
-class DefaultSegmentHandler : public EntryHandler { 
+class DefaultSegmentHandler : public EntryHandler {
 public:
 	virtual void handle(const union mtrace_entry *entry) {
 		const struct mtrace_segment_entry *s = &entry->seg;
 
 		if (s->object_type != mtrace_label_percpu)
 			die("DefaultSegmentHandler::handle: bad type %u", s->object_type);
-		
+
 		auto it = percpu_labels.begin();
 		for (; it != percpu_labels.end(); ++it) {
 			struct mtrace_label_entry offset = *it;
 			struct mtrace_label_entry l;
-			
+
 			memcpy(&l, &offset, sizeof(l));
 			l.guest_addr = s->baseaddr + offset.guest_addr;
 			l.label_type = mtrace_label_percpu;
-			
+
 			if (l.guest_addr + l.bytes > s->endaddr)
 				die("DefaultSegmentHandler::handle: bad label %s", l.str);
-			
+
 			mtrace_label_map.add_label(&l);
 		}
-		
+
 		// XXX Oops, we leak the mtrace_label_entry in percpu_labels after
 		// we handle the final segment.
 	}
@@ -162,7 +162,7 @@ static void process_log(gzFile log)
 	list<EntryHandler *>::iterator it = exit_handler.begin();
 	for(; it != exit_handler.end(); ++it)
 	    (*it)->exit(json_dict);
-	
+
 	cout << json_dict->str();
 	delete json_dict;
 }
@@ -182,8 +182,8 @@ static void init_handlers(void)
 	// Extra handlers come next
 	//
 	DistinctSyscalls *dissys = new DistinctSyscalls();
-	entry_handler[mtrace_entry_access].push_back(dissys);	
-	entry_handler[mtrace_entry_fcall].push_back(dissys);	
+	entry_handler[mtrace_entry_access].push_back(dissys);
+	entry_handler[mtrace_entry_fcall].push_back(dissys);
 	exit_handler.push_back(dissys);
 
 	DistinctOps *disops = new DistinctOps(dissys);
@@ -221,7 +221,7 @@ static void init_static_syms(int sym_fd)
 			       type == 'A'))  	      	     // absolute
 		{
 			struct mtrace_label_entry l;
-			
+
 			l.h.type = mtrace_entry_label;
 			l.h.access_count = 0;
 			l.label_type = mtrace_label_static;
@@ -234,7 +234,7 @@ static void init_static_syms(int sym_fd)
 			tmp.push_back(l);
 			continue;
 		}
-		
+
 		r = sscanf(line, "%lx %c %s", &addr, &type, &str);
 		if (r == 3 && type == 'D') {
 			if (!strcmp("__per_cpu_end", str)) {
@@ -246,8 +246,8 @@ static void init_static_syms(int sym_fd)
 		}
 	}
 
-	// Move all the labels for percpu variables from the mtrace_label_static 
-	// list to the temporary list.  Once we know each CPUs percpu base 
+	// Move all the labels for percpu variables from the mtrace_label_static
+	// list to the temporary list.  Once we know each CPUs percpu base
 	// address we add percpu objects onto the mtrace_label_percpu list.
 	while (tmp.size()) {
 		auto it = tmp.begin();
@@ -257,7 +257,7 @@ static void init_static_syms(int sym_fd)
 			percpu_labels.push_back(l);
 		else
 			mtrace_label_map.add_label(&l);
-		
+
 		tmp.erase(it);
 	}
 
