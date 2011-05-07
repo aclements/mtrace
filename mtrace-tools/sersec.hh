@@ -92,7 +92,7 @@ public:
 	}
 
 	void acquire(const struct mtrace_lock_entry *lock) {
-		auto it = state_.find(lock->lock);		
+		auto it = state_.find(lock->lock);
 
 		if (it == state_.end()) {
 			pair<LockStateTable::iterator, bool> r;
@@ -109,7 +109,7 @@ public:
 	void acquired(const struct mtrace_lock_entry *lock) {
 		static int misses;
 
-		auto it = state_.find(lock->lock);		
+		auto it = state_.find(lock->lock);
 
 		if (it == state_.end()) {
 			misses++;
@@ -123,7 +123,7 @@ public:
 	void access(const struct mtrace_access_entry *a) {
 		if (stack_.empty())
 			return;
-		
+
 		stack_.front()->access(a);
 	}
 
@@ -134,11 +134,11 @@ private:
 
 class SerialSections : public EntryHandler {
 	struct SerialSectionStat {
-		SerialSectionStat(void) : 
-			lock_id(0), 
-			obj_id(0), 
-			name(""), 
-			ts_cycles(0), 
+		SerialSectionStat(void) :
+			lock_id(0),
+			obj_id(0),
+			name(""),
+			ts_cycles(0),
 			acquires(0),
 			mismatches(0),
 			coherence_miss(0),
@@ -152,7 +152,7 @@ class SerialSections : public EntryHandler {
 
 			if (ss->end < ss->start)
 				die("SerialSections::add %lu < %lu", ss->end, ss->start);
-			
+
 			ts_cycles += ss->end - ss->start;
 			coherence_miss += ss->coherence_miss;
 			locked_inst += ss->locked_inst;
@@ -206,19 +206,19 @@ public:
 		auto it = stat_.begin();
 
 		printf("serial sections:\n");
-		
+
 		for (; it != stat_.end(); ++it) {
 			SerialSectionStat *stat = &it->second;
-			printf(" %s  %lu  %lu\n", 
-			       stat->name.c_str(), 
-			       stat->ts_cycles, 
+			printf(" %s  %lu  %lu\n",
+			       stat->name.c_str(),
+			       stat->ts_cycles,
 			       stat->acquires);
 		}
 	}
 
 	virtual void exit(JsonDict *json_file) {
 		JsonList *list = JsonList::create();
-		
+
 		auto it = stat_.begin();
 		for (; it != stat_.end(); ++it) {
 			SerialSectionStat *stat = &it->second;
@@ -248,7 +248,7 @@ private:
 		{
 			register uintptr_t *k = (uintptr_t *)&s;
 			register uint64_t length = sizeof(s) / sizeof(uintptr_t);
-			
+
 			// XXX should be a static assertion
 			assert(length == 2);
 
@@ -266,7 +266,7 @@ private:
 
 				if (!mtrace_label_map.lower_bound(l->lock, &object))
 					die("SerialSections::handle: missing %lx", l->lock);
-				
+
 				key.lock_id = l->lock;
 				key.obj_id = object.id_;
 
@@ -293,6 +293,6 @@ private:
 	void handle_access(const struct mtrace_access_entry *a) {
 		lock_manager_.access(a);
 	}
-	
+
 	hash_map<SerialSectionKey, SerialSectionStat, SerialHash, SerialEq> stat_;
 };
