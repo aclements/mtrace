@@ -20,23 +20,23 @@ public:
 		if (entry->h.type == mtrace_entry_access) {
 			const struct mtrace_access_entry *a = &entry->access;
 			if (a->traffic)
-				tag_to_distinct_set_[current_[cpu]].insert(a->guest_addr & ~63UL);
+				tid_to_distinct_set_[current_[cpu]].insert(a->guest_addr & ~63UL);
 		} else if (entry->h.type == mtrace_entry_fcall) {
 			const struct mtrace_fcall_entry *f = &entry->fcall;
-			
+
 			switch (f->state) {
 			case mtrace_resume:
-				current_[cpu] = f->tag;
+				current_[cpu] = f->tid;
 				break;
 			case mtrace_start:
-				current_[cpu] = f->tag;
-				tag_to_pc_[current_[cpu]] = f->pc;
+				current_[cpu] = f->tid;
+				tid_to_pc_[current_[cpu]] = f->pc;
 				break;
 			case mtrace_pause:
 				current_[cpu] = 0;
 				break;
 			case mtrace_done:
-				count_tag(current_[cpu]);
+				count_tid(current_[cpu]);
 				current_[cpu] = 0;
 				break;
 			default:
@@ -47,12 +47,12 @@ public:
 	}
 
 	virtual void exit(void) {
-		while (tag_to_distinct_set_.size())
-			count_tag(tag_to_distinct_set_.begin()->first);
+		while (tid_to_distinct_set_.size())
+			count_tid(tid_to_distinct_set_.begin()->first);
 
 		printf("%-32s %10s %10s %10s\n",
 		       "function", "calls", "distinct", "ave");
-		
+
 		auto pit = pc_to_stats_.begin();
 		for (; pit != pc_to_stats_.end(); ++pit) {
 			uint64_t pc;
@@ -62,9 +62,9 @@ public:
 			float n;
 
 			pc = pit->first;
-			n = (float)pit->second.distinct / 
+			n = (float)pit->second.distinct /
 				(float)pit->second.calls;
-			
+
 			if (pc == 0)
 				printf("%-32s", "(unknown)");
 			else if (addr2line->lookup(pc, &func, &file, &line) == 0) {
@@ -74,14 +74,17 @@ public:
 			} else
 				printf("%-32lx", pc);
 
-			printf("%10lu %10lu %10.2f\n", 
-			       pit->second.calls, 
+			printf("%10lu %10lu %10.2f\n",
+			       pit->second.calls,
 			       pit->second.distinct, n);
 		}
 	}
 
 	virtual void exit(JsonDict *json_file) {
 		JsonList *list = JsonList::create();
+
+		while (tid_to_distinct_set_.size())
+			count_tid(tid_to_distinct_set_.begin()->first);
 
 		auto pit = pc_to_stats_.begin();
 		for (; pit != pc_to_stats_.end(); ++pit) {
@@ -93,9 +96,9 @@ public:
 			float n;
 
 			pc = pit->first;
-			n = (float)pit->second.distinct / 
+			n = (float)pit->second.distinct /
 				(float)pit->second.calls;
-			
+
 			if (pc == 0)
 				dict->put("entry", "(unknown)");
 			else if (addr2line->lookup(pc, &func, &file, &line) == 0) {
@@ -135,14 +138,14 @@ public:
 	}
 
 private:
-	void count_tag(uint64_t tag) {
+	void count_tid(uint64_t tid) {
 		uint64_t pc;
 		uint64_t n;
 
-		n = tag_to_distinct_set_[tag].size();
-		tag_to_distinct_set_.erase(tag);
-		pc = tag_to_pc_[tag];
-		tag_to_pc_.erase(tag);
+		n = tid_to_distinct_set_[tid].size();
+		tid_to_distinct_set_.erase(tid);
+		pc = tid_to_pc_[tid];
+		tid_to_pc_.erase(tid);
 
 		if (pc_to_stats_.find(pc) == pc_to_stats_.end()) {
 			pc_to_stats_[pc].distinct = 0;
@@ -157,18 +160,23 @@ private:
 		uint64_t calls;
 	};
 
-	map<uint64_t, uint64_t> tag_to_pc_;
+	map<uint64_t, uint64_t> tid_to_pc_;
 	map<uint64_t, SysStats> pc_to_stats_;
-	map<uint64_t, set<uint64_t> > tag_to_distinct_set_;
+	map<uint64_t, set<uint64_t> > tid_to_distinct_set_;
 
-	// The current tag
+	// The current tid
 	uint64_t current_[MAX_CPUS];
 };
 
 class DistinctOps : public EntryHandler {
 public:
 	DistinctOps(DistinctSyscalls *ds) : ds_(ds) {
-		appname_to_syscalls_["procy"] = { "stub_clone", "sys_exit_group", "sys_wait4" };
+		appname_to_syscalls_["procy"] = {
+			"stub_clone",
+			"sys_exit_group",
+			"sys_wait4"
+		};
+		appname_to_syscalls_["xv6"] = { };
 	}
 
 	virtual void exit(void) {
@@ -192,13 +200,13 @@ public:
 
 private:
 	uint64_t distinct(void) {
-		map<string, set<const char *> >::iterator it = 
+		map<string, set<const char *> >::iterator it =
 			appname_to_syscalls_.find(mtrace_summary.app_name);
 		if (it == appname_to_syscalls_.end())
 			die("DistinctOps::exit unable to find '%s'",
 			    mtrace_summary.app_name);
 
-		set<const char *> *syscall = &it->second;		
+		set<const char *> *syscall = &it->second;
 		set<const char *>::iterator sysit = syscall->begin();
 		uint64_t n = 0;
 		for (; sysit != syscall->end(); ++sysit) {

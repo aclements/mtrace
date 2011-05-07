@@ -16,7 +16,7 @@ LDFLAGS = -lsqlite3 -lz
 
 HDRS	= $(QEMUDIR)/mtrace-magic.h syms.hh calltrace.hh util.h objinfo.h
 
-all: mt2db mt2text mscan
+all: mscan
 
 mscan: mscan.cc addr2line.cc hash.c $(HDRS) dissys.hh mscan.hh addr2line.hh sersec.hh json.hh hash.h
 	@echo "CXX	$@"
