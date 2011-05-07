@@ -215,7 +215,7 @@ struct mtrace_appdata_entry {
     union {
 	uint64_t u64;
     };
-};
+} __pack__;
 
 union mtrace_entry {
     struct mtrace_entry_header h;
@@ -231,7 +231,7 @@ union mtrace_entry {
     struct mtrace_sched_entry sched;
     struct mtrace_machine_entry machine;
     struct mtrace_appdata_entry appdata;
-}__pack__;
+} __pack__;
 
 #ifndef QEMU_MTRACE
 
