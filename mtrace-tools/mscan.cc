@@ -268,7 +268,7 @@ static void init_static_syms(int sym_fd)
 int main(int ac, char **av)
 {
 	char sym_file[128] = "mscan.syms";
-	char elf_file[128] = "kernel";
+	char elf_file[128] = "mscan.kern";
 	char log_file[128] = "mtrace.out";
 	gzFile log;
 	int sym_fd;
