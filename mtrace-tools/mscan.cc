@@ -267,18 +267,11 @@ static void init_static_syms(int sym_fd)
 
 int main(int ac, char **av)
 {
-	char sym_file[128];
-	char elf_file[128];
-	char log_file[128];
+	char sym_file[128] = "mscan.syms";
+	char elf_file[128] = "kernel";
+	char log_file[128] = "mtrace.out";
 	gzFile log;
 	int sym_fd;
-
-	if (ac != 3)
-		die("usage: %s mtrace-dir mtrace-out", av[0]);
-
-	snprintf(log_file, sizeof(log_file), "%s/%s", av[1], av[2]);
-	snprintf(sym_file, sizeof(sym_file), "%s/vmlinux.syms", av[1]);
-	snprintf(elf_file, sizeof(elf_file), "%s/vmlinux", av[1]);
 
         log = gzopen(log_file, "rb");
         if (!log)
