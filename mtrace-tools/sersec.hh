@@ -75,6 +75,7 @@ public:
 			misses++;
 			if (misses >= 20)
 				die("LockManager: released too many unheld locks");
+			return false;
 		}
 
 		ls = it->second;
