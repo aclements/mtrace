@@ -14,7 +14,7 @@ static char *xstrndup(const char *str, size_t len)
 {
 	char *r;
 
-	r = malloc(len + 1);
+	r = (char *) malloc(len + 1);
 	if (r == NULL)
 		return r;
 	memcpy(r, str, len);
