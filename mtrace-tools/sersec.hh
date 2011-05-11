@@ -10,7 +10,7 @@ using namespace::__gnu_cxx;
 
 namespace __gnu_cxx {
 template <>
-class hash<long long unsigned int> {
+struct hash<long long unsigned int> {
 	size_t operator()(long long unsigned int k) const
 	{
 		return 0;
