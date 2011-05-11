@@ -7,6 +7,7 @@
 
 extern "C" {
 #include "util.h"
+char *strndup(const char *str, size_t len);
 }
 
 Addr2line::Addr2line(const char *path)

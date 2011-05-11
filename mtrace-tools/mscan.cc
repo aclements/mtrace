@@ -18,6 +18,8 @@ extern "C" {
 #include "dissys.hh"
 #include "sersec.hh"
 
+extern "C" ssize_t getline(char **lineptr, size_t *n, FILE *stream);
+
 using namespace::std;
 
 typedef map<uint64_t, struct mtrace_label_entry> LabelMap;
