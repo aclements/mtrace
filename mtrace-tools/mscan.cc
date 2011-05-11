@@ -11,7 +11,6 @@
 extern "C" {
 #include <mtrace-magic.h>
 #include "util.h"
-#include "objinfo.h"
 }
 
 #include "addr2line.hh"
