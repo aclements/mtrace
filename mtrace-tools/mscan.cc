@@ -165,7 +165,7 @@ static void process_log(gzFile log)
 	for(; it != exit_handler.end(); ++it)
 	    (*it)->exit(json_dict);
 
-	cout << json_dict->str();
+	cout << json_dict->str(0) << "\n";
 	delete json_dict;
 }
 

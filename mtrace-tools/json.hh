@@ -12,16 +12,25 @@ class JsonList;
 
 typedef enum { json_string, json_u64, json_list } value_type_t;
 
+static string
+tab(int level)
+{
+  string s = "";
+  for (int i = 0; i < level; i++)
+    s = s + "  ";
+  return s;
+}
+
 class JsonObject {
 public:
-	virtual string str(void) const = 0;
+	virtual string str(int level) const = 0;
 };
 
 class JsonString : public JsonObject {
 	friend class JsonDict;
 	friend class JsonList;
 public:
-	virtual string str(void) const { 
+	virtual string str(int level) const { 
 		return string("\"") + value_ + string("\"");
 	}
 private:
@@ -33,7 +42,7 @@ class JsonUint : public JsonObject {
 	friend class JsonDict;
 	friend class JsonList;
 public:
-	virtual string str(void) const {
+	virtual string str(int level) const {
 		char buf[64];
 		snprintf(buf, sizeof(buf), "%lu", value_);
 		return string(buf);
@@ -47,7 +56,7 @@ class JsonFloat : public JsonObject {
 	friend class JsonDict;
 	friend class JsonList;
 public:
-	virtual string str(void) const {
+	virtual string str(int level) const {
 		char buf[64];
 		snprintf(buf, sizeof(buf), "%f", value_);
 		return string(buf);
@@ -90,21 +99,21 @@ public:
 		table_[strdup(key.c_str())] = value;
 	}
 
-	virtual string str(void) const {
+	virtual string str(int level) const {
 		if (!table_.size())
 			return "{ }";
 
 		string ret = "{";
 		auto it = table_.begin();
 		
-		ret += string("\"") + string(it->first) + string("\"") + 
-			string(": ") + it->second->str();
+		ret += "\n" + tab(level+1) + string("\"") + string(it->first) + string("\"") + 
+			string(": ") + it->second->str(level+1);
 		++it;
 		for (; it != table_.end(); ++it)
-			ret += ", " + string("\"") + string(it->first) + string("\"") + 
-				string(": ") + it->second->str();
+			ret += ",\n" + tab(level+1) + string("\"") + string(it->first) + string("\"") + 
+				string(": ") + it->second->str(level+1);
 
-		return ret + "}";
+		return ret + "\n" + tab(level) + "}";
 	}
 
 private:
@@ -134,18 +143,18 @@ public:
 		list_.push_back(value);
 	}
 
-	virtual string str(void) const {
+	virtual string str(int level) const {
 		if (!list_.size())
 			return "[ ]";
 
 		string ret = "[";		
 		auto it = list_.begin();
 		
-		ret += (*it)->str();
+		ret += "\n" + tab(level+1) + (*it)->str(level+1);
 		++it;
 		for (; it != list_.end(); ++it)
-			ret += ", " + (*it)->str();
-		return ret + "]";
+			ret += ",\n" + tab(level+1) + (*it)->str(level+1);
+		return ret + " ]";
 	}
 
 private:
