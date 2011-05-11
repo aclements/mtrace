@@ -13,7 +13,9 @@ template <>
 struct hash<long long unsigned int> {
 	size_t operator()(long long unsigned int k) const
 	{
-		return 0;
+		// XXX should be a static assertion		
+		assert(sizeof(k) / sizeof(uintptr_t));
+		return bb_hash((uintptr_t *)&k, sizeof(k) / sizeof(uintptr_t));
 	}
 };
 }
