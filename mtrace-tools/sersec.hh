@@ -8,6 +8,16 @@
 using namespace::std;
 using namespace::__gnu_cxx;
 
+namespace __gnu_cxx {
+template <>
+class hash<long long unsigned int> {
+	size_t operator()(long long unsigned int k) const
+	{
+		return 0;
+	}
+};
+}
+
 struct SerialSection {
 	timestamp_t start;
 	timestamp_t end;
