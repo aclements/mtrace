@@ -7,8 +7,23 @@
 
 extern "C" {
 #include "util.h"
-char *strndup(const char *str, size_t len);
 }
+
+#ifdef __APPLE__
+static char *xstrndup(const char *str, size_t len)
+{
+	char *r;
+
+	r = malloc(len + 1);
+	if (r == NULL)
+		return r;
+	memcpy(r, str, len);
+	r[len] = 0;
+	return r;
+}
+#else
+#define xstrndup strndup
+#endif
 
 Addr2line::Addr2line(const char *path)
 {
@@ -82,11 +97,11 @@ Addr2line::lookup(uint64_t pc, char **func, char **file, int *line)
 
 	char *nl, *col, *end;
 	nl = strchr(buf, '\n');
-	*func = strndup(buf, nl - buf);
+	*func = xstrndup(buf, nl - buf);
 	col = strchr(nl, ':');
 	if (!col)
 		goto bad;
-	*file = strndup(nl + 1, col - nl - 1);
+	*file = xstrndup(nl + 1, col - nl - 1);
 	end = NULL;
 	*line = strtol(col + 1, &end, 10);
 	if (!end || *end != '\n')
