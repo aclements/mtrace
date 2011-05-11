@@ -45,4 +45,4 @@ install: mt2db mt2text
 
 clean:
 	@echo "CLEAN"
-	$(Q)rm -f mt2db mt2text
+	$(Q)rm -f mt2db mt2text mscan
