@@ -1,5 +1,6 @@
 #include <ext/hash_map>
 #include <assert.h>
+#include <cinttypes>
 
 #include "json.hh"
 #include "hash.h"
@@ -151,7 +152,8 @@ class SerialSections : public EntryHandler {
 			}
 
 			if (ss->end < ss->start)
-				die("SerialSections::add %lu < %lu", ss->end, ss->start);
+			    die("SerialSections::add %"PRIu64" < %"PRIu64,
+				ss->end, ss->start);
 
 			ts_cycles += ss->end - ss->start;
 			coherence_miss += ss->coherence_miss;
@@ -265,7 +267,7 @@ private:
 				SerialSectionKey key;
 
 				if (!mtrace_label_map.lower_bound(l->lock, &object))
-					die("SerialSections::handle: missing %lx", l->lock);
+					die("SerialSections::handle: missing %"PRIu64, l->lock);
 
 				key.lock_id = l->lock;
 				key.obj_id = object.id_;
