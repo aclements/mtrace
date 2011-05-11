@@ -8,6 +8,11 @@
 using namespace::std;
 using namespace::__gnu_cxx;
 
+//
+// Handle OS X:
+//  * uint64_t is a long long unsigned int 
+//  * there is no hash<long long unsigned int>
+//
 namespace __gnu_cxx {
 template <>
 struct hash<long long unsigned int> {
