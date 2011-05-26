@@ -9,7 +9,29 @@ using namespace::std;
 // Every access per system call
 //
 class SyscallAccesses : public EntryHandler {
+	friend class SyscallAccessesPC;
 public:
+	static string syscall_pc_to_name(pc_t pc) {
+		string ret;
+		char *func;
+		char *file;
+		int line;
+		
+		if (pc == 0)
+			ret = "(unknown)";
+		else if (addr2line->lookup(pc, &func, &file, &line) == 0) {
+			ret = func;
+			free(func);
+			free(file);
+		} else {
+			char buf[32];
+			snprintf(buf, sizeof(buf), "%lx", pc);
+			ret = buf;
+		}
+
+		return ret;
+	}
+
 	virtual void handle(const union mtrace_entry *entry) {
 		struct mtrace_access_entry *cp;
 		int cpu;
@@ -32,24 +54,13 @@ public:
 		auto it = pc_to_stats_.begin();
 		for (; it != pc_to_stats_.end(); ++it) {
 			JsonList *list;
-			char *func;
-			char *file;
-			int line;
-			char name[32];
 			uint64_t pc;
+			string name;
 
 			list = JsonList::create();
 
 			pc = it->first;
-			if (pc == 0)
-				strcpy(name, "(unknown)");
-			else if (addr2line->lookup(pc, &func, &file, &line) == 0) {
-				strcpy(name, func);
-				free(func);
-				free(file);
-			} else {
-				snprintf(name, sizeof(name), "%lx", pc);
-			}
+			name = syscall_pc_to_name(pc);
 			
 			auto vit = it->second.begin();
 			for (; vit != it->second.end(); ++vit) {
@@ -69,6 +80,58 @@ public:
 	}
 
 private:
+	map<pc_t, vector<struct mtrace_access_entry *> > pc_to_stats_;
+};
 
-	map<uint64_t, vector<struct mtrace_access_entry *> > pc_to_stats_;
+//
+// The PC of every acesss per system call
+//
+class SyscallAccessesPC: public EntryHandler {
+public:
+	SyscallAccessesPC(SyscallAccesses *accesses) 
+		: accesses_(accesses) {}
+
+	virtual void exit(JsonDict *json_file) {
+		JsonDict *dict = JsonDict::create();
+		auto stats = &accesses_->pc_to_stats_;
+
+		auto it = stats->begin();
+		for (; it != stats->end(); ++it) {
+			JsonList *list;
+			string name;
+			uint64_t pc;
+
+			list = JsonList::create();
+
+			pc = it->first;
+			name = SyscallAccesses::syscall_pc_to_name(pc);
+
+			map<pc_t, uint64_t> pc_to_count;
+
+			auto vit = it->second.begin();
+			for (; vit != it->second.end(); ++vit) {
+				pc_t access_pc = (*vit)->pc;
+				auto pit = pc_to_count.find(access_pc);
+				if (pit == pc_to_count.end())
+					pc_to_count[access_pc] = 1;
+				else
+					pit->second++;
+			}
+
+			auto mit = pc_to_count.begin();
+			for (; mit != pc_to_count.end(); ++mit) {
+				JsonDict *entry = JsonDict::create();
+				entry->put("pc", new JsonHex(mit->first));
+				entry->put("count", mit->second);
+				list->append(entry);
+			}
+
+			dict->put(name, list);
+		}
+		
+		json_file->put("syscall-accesses-pc", dict);
+	}
+
+private:
+	SyscallAccesses *accesses_;
 };
