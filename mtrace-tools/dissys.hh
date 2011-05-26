@@ -7,6 +7,9 @@
 
 using namespace::std;
 
+//
+// Distinct cache lines per system call
+//
 class DistinctSyscalls : public EntryHandler {
 public:
 	virtual void handle(const union mtrace_entry *entry) {
@@ -168,6 +171,9 @@ private:
 	uint64_t current_[MAX_CPUS];
 };
 
+//
+// Distinct cache lines per application operation
+//
 class DistinctOps : public EntryHandler {
 public:
 	DistinctOps(DistinctSyscalls *ds) : ds_(ds) {
