@@ -52,6 +52,19 @@ private:
 	uint64_t value_;
 };
 
+class JsonHex : public JsonObject {
+public:
+	JsonHex(uint64_t value) : value_(value) {}
+
+	virtual string str(int level) const {
+		char buf[64];
+		snprintf(buf, sizeof(buf), "%lx", value_);
+		return string(buf);
+	}
+private:
+	uint64_t value_;
+};
+
 class JsonFloat : public JsonObject {
 	friend class JsonDict;
 	friend class JsonList;
@@ -89,6 +102,10 @@ public:
 
 	void put(string key, uint64_t value) {
 		put(key, new JsonUint(value));
+	}
+
+	void put(string key, uint8_t value) {
+		put(key, new JsonUint((uint64_t)value));
 	}
 
 	void put(string key, float value) {
