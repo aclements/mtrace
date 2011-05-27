@@ -33,6 +33,7 @@ struct SerialSection {
 	int release_cpu;
 
 	pc_t call_pc;
+	pc_t acquire_pc;
 
 	uint64_t coherence_miss;
 	uint64_t locked_inst;
@@ -57,6 +58,7 @@ class LockManager {
 				ss_.start = lock->h.ts;
 				ss_.call_pc = mtrace_call_pc[lock->h.cpu];
 				ss_.acquire_cpu = lock->h.cpu;
+				ss_.acquire_pc = lock->pc;
 			}
 			depth_++;
 		}
@@ -66,6 +68,7 @@ class LockManager {
 				acquired_ts_ = lock->h.ts;
 				ss_.start = lock->h.ts;
 				ss_.acquire_cpu = lock->h.cpu;
+				ss_.acquire_pc = lock->pc;
 			}
 		}
 
@@ -140,6 +143,9 @@ public:
 
 	void access(const struct mtrace_access_entry *a) {
 		if (stack_.empty())
+			//
+			// XXX Should count this as a 1 cycle serial section..
+			//
 			return;
 
 		stack_.front()->access(a);
@@ -151,11 +157,8 @@ private:
 };
 
 class SerialSections : public EntryHandler {
-	struct SerialSectionStat {
-		SerialSectionStat(void) :
-			lock_id(0),
-			obj_id(0),
-			name(""),
+	struct SerialSectionSummary {
+		SerialSectionSummary(void):
 			ts_cycles(0),
 			acquires(0),
 			mismatches(0),
@@ -169,13 +172,31 @@ class SerialSections : public EntryHandler {
 			}
 
 			if (ss->end < ss->start)
-			    die("SerialSections::add %"PRIu64" < %"PRIu64,
+			    die("SerialSectionSummary::add %"PRIu64" < %"PRIu64,
 				ss->end, ss->start);
 
 			ts_cycles += ss->end - ss->start;
 			coherence_miss += ss->coherence_miss;
 			locked_inst += ss->locked_inst;
 			acquires++;
+		}
+
+		timestamp_t ts_cycles;
+		uint64_t acquires;
+		uint64_t mismatches;
+		uint64_t coherence_miss;
+		uint64_t locked_inst;
+	};
+
+	struct SerialSectionStat {
+		SerialSectionStat(void) :
+			lock_id(0),
+			obj_id(0),
+			name("") {}
+
+		void add(const SerialSection *ss) {
+			summary.add(ss);
+			per_pc[ss->acquire_pc].add(ss);
 		}
 
 		void init(const MtraceObject *object, const struct mtrace_lock_entry *l) {
@@ -190,11 +211,8 @@ class SerialSections : public EntryHandler {
 		string name;
 
 		// Updated by add
-		timestamp_t ts_cycles;
-		uint64_t acquires;
-		uint64_t mismatches;
-		uint64_t coherence_miss;
-		uint64_t locked_inst;
+		SerialSectionSummary summary;
+		map<pc_t, SerialSectionSummary> per_pc;
 	};
 
 	struct SerialSectionKey {
@@ -230,8 +248,8 @@ public:
 			SerialSectionStat *stat = &it->second;
 			printf(" %s  %lu  %lu\n",
 			       stat->name.c_str(),
-			       stat->ts_cycles,
-			       stat->acquires);
+			       stat->summary.ts_cycles,
+			       stat->summary.acquires);
 		}
 	}
 
@@ -243,10 +261,22 @@ public:
 			SerialSectionStat *stat = &it->second;
 			JsonDict *dict = JsonDict::create();
 			dict->put("name", stat->name);
-			dict->put("cycles",  stat->ts_cycles);
-			dict->put("acquires", stat->acquires);
-			dict->put("coherence-miss", stat->coherence_miss);
-			dict->put("locked-inst", stat->locked_inst);
+			populateSummaryDict(dict, &stat->summary);
+
+			JsonList *pc_list = JsonList::create();
+			auto mit = stat->per_pc.begin();
+			for (; mit != stat->per_pc.end(); ++mit) {
+				JsonDict *pc_dict = JsonDict::create();
+				SerialSectionSummary *sum = &mit->second;
+				pc_t pc = mit->first;
+
+				pc_dict->put("pc", new JsonHex(pc));
+				populateSummaryDict(pc_dict, sum);
+
+				pc_list->append(pc_dict);
+			}
+			dict->put("per-acquire-pc", pc_list);
+
 			list->append(dict);
 		}
 		json_file->put("serial-sections", list);
@@ -274,6 +304,13 @@ private:
 			return bb_hash(k, length);
 		}
 	};
+
+	void populateSummaryDict(JsonDict *dict, SerialSectionSummary *sum) {
+		dict->put("cycles",  sum->ts_cycles);
+		dict->put("acquires", sum->acquires);
+		dict->put("coherence-miss", sum->coherence_miss);
+		dict->put("locked-inst", sum->locked_inst);
+	}
 
 	void handle_lock(const struct mtrace_lock_entry *l) {
 		switch(l->op) {

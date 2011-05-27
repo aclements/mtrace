@@ -17,6 +17,7 @@ extern "C" {
 #include "mscan.hh"
 #include "dissys.hh"
 #include "sersec.hh"
+#include "sysaccess.hh"
 
 extern "C" ssize_t getline(char **lineptr, size_t *n, FILE *stream);
 
@@ -195,6 +196,15 @@ static void init_handlers(void)
 	entry_handler[mtrace_entry_lock].push_back(sersecs);
 	entry_handler[mtrace_entry_access].push_back(sersecs);
 	exit_handler.push_back(sersecs);
+
+#if 0
+	SyscallAccesses *sysaccesses = new SyscallAccesses();
+	entry_handler[mtrace_entry_access].push_back(sysaccesses);
+	exit_handler.push_back(sysaccesses);
+
+	SyscallAccessesPC *sys_accesses_pc = new SyscallAccessesPC(sysaccesses);
+	exit_handler.push_back(sys_accesses_pc);
+#endif
 }
 
 static void init_static_syms(const char *sym_file)
