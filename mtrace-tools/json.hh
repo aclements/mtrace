@@ -163,6 +163,10 @@ public:
 		list_.push_back(value);
 	}
 
+	void append(float value) {
+		append(new JsonFloat(value));
+	}
+
 	virtual string str(int level) const {
 		if (!list_.size())
 			return "[ ]";

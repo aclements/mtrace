@@ -162,7 +162,7 @@ private:
 class SerialSections : public EntryHandler {
 	struct SerialSectionSummary {
 		SerialSectionSummary(void):
-			ts_cycles(0),
+			ts_cycles({0}),
 			acquires(0),
 			mismatches(0),
 			coherence_miss(0),
@@ -178,13 +178,22 @@ class SerialSections : public EntryHandler {
 			    die("SerialSectionSummary::add %"PRIu64" < %"PRIu64,
 				ss->end, ss->start);
 
-			ts_cycles += ss->end - ss->start;
+			ts_cycles[ss->acquire_cpu] += ss->end - ss->start;
 			coherence_miss += ss->coherence_miss;
 			locked_inst += ss->locked_inst;
 			acquires++;
 		}
 
-		timestamp_t ts_cycles;
+		timestamp_t total_cycles(void) {
+			timestamp_t sum = 0;
+			int i;
+
+			for (i = 0; i < MAX_CPUS; i++)
+				sum += ts_cycles[i];
+			return sum;
+		}
+
+		timestamp_t ts_cycles[MAX_CPUS];
 		uint64_t acquires;
 		uint64_t mismatches;
 		uint64_t coherence_miss;
@@ -310,7 +319,22 @@ private:
 	};
 
 	void populateSummaryDict(JsonDict *dict, SerialSectionSummary *sum) {
-		dict->put("cycles",  sum->ts_cycles);
+		timestamp_t tot;
+		JsonList *list;
+		int i;
+
+		tot = sum->total_cycles();
+		dict->put("total-cycles",  tot);
+
+		list = JsonList::create();
+		for (i = 0; i < mtrace_summary.num_cpus; i++) {
+			float percent;
+			
+			percent = 100.0 * ((float)sum->ts_cycles[i] / (float)tot);
+			list->append(percent);
+		}
+		dict->put("per-cpu-percent", list);
+
 		dict->put("acquires", sum->acquires);
 		dict->put("coherence-miss", sum->coherence_miss);
 		dict->put("locked-inst", sum->locked_inst);
