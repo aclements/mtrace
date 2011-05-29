@@ -156,6 +156,9 @@ private:
 	list<LockState *> stack_;
 };
 
+//
+// A summary of every serial section and a per-acquire PC breakdown
+//
 class SerialSections : public EntryHandler {
 	struct SerialSectionSummary {
 		SerialSectionSummary(void):
@@ -271,6 +274,7 @@ public:
 				pc_t pc = mit->first;
 
 				pc_dict->put("pc", new JsonHex(pc));
+				pc_dict->put("info", addr2line->function_description(pc));
 				populateSummaryDict(pc_dict, sum);
 
 				pc_list->append(pc_dict);

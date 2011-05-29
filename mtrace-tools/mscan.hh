@@ -2,6 +2,8 @@
 #define _MSCAN_HH_
 
 #include <map>
+#include <sstream>
+
 #include "addr2line.hh"
 
 using namespace::std;
@@ -105,32 +107,60 @@ private:
 
 class MtraceAddr2line{
 public:
-    MtraceAddr2line(const char *elf_file)
-	    : addr2line_(elf_file) {}
+	MtraceAddr2line(const char *elf_file)
+		: addr2line_(elf_file) {}
 
-    string function_name(pc_t pc) {
-	    string ret;
-	    char *func;
-	    char *file;
-	    int line;
-	    
-	    if (pc == 0)
-		    ret = "(unknown)";
-	    else if (addr2line_.lookup(pc, &func, &file, &line) == 0) {
-		    ret = func;
-		    free(func);
-		    free(file);
-		    
-	    } else {
-		    char buf[32];
-		    snprintf(buf, sizeof(buf), "%lx", pc);
-		    ret = buf;
-	    }
-	    return ret;
-    }
+	string function_name(pc_t pc) {
+		string func;
+		string file;
+		string line;
+
+		all_string(pc, func, file, line);
+		return func;
+	}
+	
+	string function_description(pc_t pc) {
+		string func;
+		string file;
+		string line;
+
+		all_string(pc, func, file, line);
+		return file + ":" + line + ":" + func;
+	}
 
 private:
-    Addr2line addr2line_;
+	void all_string(pc_t pc, string &func, string &file, string &line) {
+		char *xfunc;
+		char *xfile;
+		int xline;
+		
+		if (pc == 0) {
+			func = "(unknown function)";
+			file = "(unknown file)";
+			line = "0";
+		} else if (addr2line_.lookup(pc, &xfunc, &xfile, &xline) == 0) {
+			stringstream ss;
+
+			func = xfunc;
+			file = xfile;
+			ss << xline;
+			line = ss.str();
+			
+			free(xfunc);
+			free(xfile);
+			
+		} else {
+			stringstream ss;
+
+			ss << pc;
+			func = ss.str();
+			file = "(unknown file)";
+			line = "0";
+		}
+	}
+	
+	
+	Addr2line addr2line_;
 };
 
 //
