@@ -61,6 +61,14 @@ public:
 	}
 };
 
+class DefaultMachineHandler : public EntryHandler {
+	virtual void handle(const union mtrace_entry *entry) {
+		const struct mtrace_machine_entry *m = &entry->machine;
+		mtrace_summary.num_cpus = m->num_cpus;
+		mtrace_summary.num_ram = m->num_ram;
+	}
+};
+
 class DefaultFcallHandler : public EntryHandler {
 public:
 	virtual void handle(const union mtrace_entry *entry) {
@@ -180,6 +188,7 @@ static void init_handlers(void)
 	entry_handler[mtrace_entry_fcall].push_front(new DefaultFcallHandler());
 	entry_handler[mtrace_entry_label].push_front(new DefaultLabelHandler());
 	entry_handler[mtrace_entry_segment].push_front(new DefaultSegmentHandler());
+	entry_handler[mtrace_entry_machine].push_front(new DefaultMachineHandler());
 
 	//
 	// Extra handlers come next

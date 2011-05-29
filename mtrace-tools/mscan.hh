@@ -29,6 +29,8 @@ private:
 struct MtraceSummary {
 	uint64_t app_ops;
 	char app_name[32];
+	uint16_t num_cpus;
+	uint64_t num_ram;
 };
 
 struct MtraceObject {
