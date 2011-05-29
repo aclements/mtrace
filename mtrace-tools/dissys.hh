@@ -175,7 +175,12 @@ public:
 
 	virtual void exit(JsonDict *json_file) {
 		uint64_t dist = distinct();
-		float ave = (float)dist / (float)mtrace_summary.app_ops;
+		float ave;
+		
+		if (mtrace_summary.app_ops)
+			ave = (float)dist / (float)mtrace_summary.app_ops;
+		else
+			ave = 0.0;
 
 		JsonDict *dict = JsonDict::create();
 		dict->put("ops", mtrace_summary.app_ops);
