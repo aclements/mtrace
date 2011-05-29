@@ -11,27 +11,6 @@ using namespace::std;
 class SyscallAccesses : public EntryHandler {
 	friend class SyscallAccessesPC;
 public:
-	static string syscall_pc_to_name(pc_t pc) {
-		string ret;
-		char *func;
-		char *file;
-		int line;
-		
-		if (pc == 0)
-			ret = "(unknown)";
-		else if (addr2line->lookup(pc, &func, &file, &line) == 0) {
-			ret = func;
-			free(func);
-			free(file);
-		} else {
-			char buf[32];
-			snprintf(buf, sizeof(buf), "%lx", pc);
-			ret = buf;
-		}
-
-		return ret;
-	}
-
 	virtual void handle(const union mtrace_entry *entry) {
 		struct mtrace_access_entry *cp;
 		int cpu;
@@ -60,7 +39,7 @@ public:
 			list = JsonList::create();
 
 			pc = it->first;
-			name = syscall_pc_to_name(pc);
+			name = addr2line->function_name(pc);
 			
 			auto vit = it->second.begin();
 			for (; vit != it->second.end(); ++vit) {
@@ -104,7 +83,7 @@ public:
 			list = JsonList::create();
 
 			pc = it->first;
-			name = SyscallAccesses::syscall_pc_to_name(pc);
+			name = addr2line->function_name(pc);
 
 			map<pc_t, uint64_t> pc_to_count;
 

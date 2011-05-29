@@ -27,7 +27,7 @@ typedef map<uint64_t, struct mtrace_label_entry> LabelMap;
 
 // A bunch of global state the default handlers update
 struct mtrace_host_entry mtrace_enable;
-Addr2line *addr2line;
+MtraceAddr2line *addr2line;
 MtraceSummary mtrace_summary;
 pc_t mtrace_call_pc[MAX_CPUS];
 MtraceLabelMap mtrace_label_map;
@@ -288,7 +288,7 @@ int main(int ac, char **av)
         if (!log)
 		edie("gzopen %s", log_file);
 
-	addr2line = new Addr2line(elf_file);
+	addr2line = new MtraceAddr2line(elf_file);
 
 	init_static_syms(sym_file);
 	init_entry_alloc();

@@ -2,6 +2,7 @@
 #define _MSCAN_HH_
 
 #include <map>
+#include "addr2line.hh"
 
 using namespace::std;
 
@@ -102,14 +103,44 @@ private:
 	map<guest_addr_t, MtraceObject> object_;
 };
 
+class MtraceAddr2line{
+public:
+    MtraceAddr2line(const char *elf_file)
+	    : addr2line_(elf_file) {}
+
+    string function_name(pc_t pc) {
+	    string ret;
+	    char *func;
+	    char *file;
+	    int line;
+	    
+	    if (pc == 0)
+		    ret = "(unknown)";
+	    else if (addr2line_.lookup(pc, &func, &file, &line) == 0) {
+		    ret = func;
+		    free(func);
+		    free(file);
+		    
+	    } else {
+		    char buf[32];
+		    snprintf(buf, sizeof(buf), "%lx", pc);
+		    ret = buf;
+	    }
+	    return ret;
+    }
+
+private:
+    Addr2line addr2line_;
+};
+
 //
 // A bunch of global state the default handlers update
 //
 
 // The last mtrace_host_entry
 extern struct mtrace_host_entry mtrace_enable;
-// An addr2line instance for vmlinux
-extern Addr2line *addr2line;
+// An addr2line instance for the ELF file
+extern MtraceAddr2line *addr2line;
 // A summary of the application/workload
 extern MtraceSummary mtrace_summary;
 // The current fcall/kernel entry point

@@ -59,25 +59,16 @@ public:
 		auto pit = pc_to_stats_.begin();
 		for (; pit != pc_to_stats_.end(); ++pit) {
 			uint64_t pc;
-			char *func;
-			char *file;
-			int line;
+			string func;
 			float n;
 
 			pc = pit->first;
 			n = (float)pit->second.distinct /
 				(float)pit->second.calls;
 
-			if (pc == 0)
-				printf("%-32s", "(unknown)");
-			else if (addr2line->lookup(pc, &func, &file, &line) == 0) {
-				printf("%-32s", func);
-				free(func);
-				free(file);
-			} else
-				printf("%-32lx", pc);
-
-			printf("%10lu %10lu %10.2f\n",
+			func = addr2line->function_name(pc);
+			printf("%-32s %10lu %10lu %10.2f\n",
+			       func.c_str(),
 			       pit->second.calls,
 			       pit->second.distinct, n);
 		}
@@ -93,26 +84,15 @@ public:
 		for (; pit != pc_to_stats_.end(); ++pit) {
 			JsonDict *dict = JsonDict::create();
 			uint64_t pc;
-			char *func;
-			char *file;
-			int line;
+			string func;
 			float n;
 
 			pc = pit->first;
 			n = (float)pit->second.distinct /
 				(float)pit->second.calls;
 
-			if (pc == 0)
-				dict->put("entry", "(unknown)");
-			else if (addr2line->lookup(pc, &func, &file, &line) == 0) {
-				dict->put("entry", func);
-				free(func);
-				free(file);
-			} else {
-				char buf[32];
-				snprintf(buf, sizeof(buf), "%lx", pc);
-				dict->put("entry", buf);
-			}
+			func = addr2line->function_name(pc);
+			dict->put("entry", func);
 
 			dict->put("calls", pit->second.calls);
 			dict->put("distinct", pit->second.distinct);
@@ -126,16 +106,12 @@ public:
 		auto pit = pc_to_stats_.begin();
 		for (; pit != pc_to_stats_.end(); ++pit) {
 			uint64_t pc;
-			char *func;
-			char *file;
-			int line;
+			string func;
 
 			pc = pit->first;
-
-			if (addr2line->lookup(pc, &func, &file, &line) == 0) {
-				if (strcmp(syscall, func) == 0)
-					return pit->second.distinct;
-			}
+			func = addr2line->function_name(pc);
+			if (strcmp(syscall, func.c_str()) == 0)
+				return pit->second.distinct;
 		}
 		return -1;
 	}
