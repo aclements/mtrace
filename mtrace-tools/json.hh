@@ -1,6 +1,8 @@
 #ifndef _JSON_HH_
 #define _JSON_HH_
 
+// JSON spec: http://www.json.org/
+
 #include <string>
 #include <ext/hash_map>
 #include <list>
@@ -15,10 +17,10 @@ typedef enum { json_string, json_u64, json_list } value_type_t;
 static string
 tab(int level)
 {
-  string s = "";
-  for (int i = 0; i < level; i++)
-    s = s + "  ";
-  return s;
+	string s = "";
+	for (int i = 0; i < level; i++)
+		s = s + "  ";
+	return s;
 }
 
 class JsonObject {
@@ -58,7 +60,8 @@ public:
 
 	virtual string str(int level) const {
 		char buf[64];
-		snprintf(buf, sizeof(buf), "%lx", value_);
+		// JSON spec doesn't include hex numbers
+		snprintf(buf, sizeof(buf), "\"0x%lx\"", value_);
 		return string(buf);
 	}
 private:
