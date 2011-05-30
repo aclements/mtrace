@@ -112,7 +112,7 @@ public:
 	MtraceAddr2line(const char *elf_file)
 		: addr2line_(elf_file) {}
 
-	string function_name(pc_t pc) {
+	string function_name(pc_t pc) const {
 		string func;
 		string file;
 		string line;
@@ -121,7 +121,7 @@ public:
 		return func;
 	}
 	
-	string function_description(pc_t pc) {
+	string function_description(pc_t pc) const {
 		string func;
 		string file;
 		string line;
@@ -131,7 +131,7 @@ public:
 	}
 
 private:
-	void all_string(pc_t pc, string &func, string &file, string &line) {
+	void all_string(pc_t pc, string &func, string &file, string &line) const {
 		char *xfunc;
 		char *xfile;
 		int xline;

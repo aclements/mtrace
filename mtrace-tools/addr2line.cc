@@ -72,7 +72,7 @@ Addr2line::~Addr2line()
 }
 
 int
-Addr2line::lookup(uint64_t pc, char **func, char **file, int *line)
+Addr2line::lookup(uint64_t pc, char **func, char **file, int *line) const
 {
 	char buf[4096];
 	int n = snprintf(buf, sizeof(buf), "%#"PRIx64"\n", pc);

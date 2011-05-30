@@ -11,7 +11,7 @@ private:
 public:
 	explicit Addr2line(const char *path);
 	~Addr2line();
-	int lookup(uint64_t pc, char **func, char **file, int *line);
+	int lookup(uint64_t pc, char **func, char **file, int *line) const;
 };
 
 #endif // _ADDR2LINE_H
