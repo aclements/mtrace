@@ -18,6 +18,7 @@ extern "C" {
 #include "dissys.hh"
 #include "sersec.hh"
 #include "sysaccess.hh"
+#include "false.hh"
 
 extern "C" ssize_t getline(char **lineptr, size_t *n, FILE *stream);
 
@@ -205,6 +206,10 @@ static void init_handlers(void)
 	entry_handler[mtrace_entry_lock].push_back(sersecs);
 	entry_handler[mtrace_entry_access].push_back(sersecs);
 	exit_handler.push_back(sersecs);
+
+	FalseSharing *false_sharing = new FalseSharing();
+	entry_handler[mtrace_entry_access].push_back(false_sharing);
+	exit_handler.push_back(false_sharing);
 
 #if 0
 	SyscallAccesses *sysaccesses = new SyscallAccesses();

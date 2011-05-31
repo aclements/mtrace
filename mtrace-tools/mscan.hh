@@ -40,10 +40,14 @@ struct MtraceObject {
 		id_ = id;
 		guest_addr_ = l->guest_addr;
 		bytes_= l->bytes;
+		guest_addr_end_ = guest_addr_ + bytes_;
+		name_ = l->str;
 	}
 
+	string name_;
 	object_id_t id_;
 	guest_addr_t guest_addr_;
+	guest_addr_t guest_addr_end_;
 	uint64_t bytes_;
 };
 
@@ -106,25 +110,47 @@ public:
 	}
 
 	
-	bool last_lower_bound(guest_addr_t addr, MtraceObject *ret) const {
+	bool last_lower_bound(guest_addr_t addr, MtraceObject &ret) const {
 		auto it = object_last_.lower_bound(addr);
 		if (it == object_last_.end())
 			return false;
 		
-		memcpy(ret, it->second, sizeof(*ret));
+		ret = *it->second;
 		return true;
 	}
 
-	bool object(guest_addr_t addr, MtraceObject *ret) const {
+	bool object(guest_addr_t addr, MtraceObject &ret) const {
 		MtraceObject o;
 		
-		if (last_lower_bound(addr, &o)) {
+		if (last_lower_bound(addr, o)) {
 			if (o.guest_addr_ <= addr && addr < (o.guest_addr_ + o.bytes_)) {
-				*ret = o;
+				ret = o;
 				return true;
 			}
 		}
 		return false;
+	}
+
+	list<MtraceObject> objects_on_cline(guest_addr_t addr) const {
+		list<MtraceObject> ret;
+		guest_addr_t caddr;
+		guest_addr_t next_caddr;
+
+		caddr = addr & ~63;
+		next_caddr = caddr + 64;
+
+		auto it = object_last_.lower_bound(caddr);
+		for (; it != object_last_.end(); ++it) {
+			if (it->second->guest_addr_ < next_caddr &&
+			    caddr < it->second->guest_addr_end_)
+			{
+				ret.push_back(*(it->second));
+				continue;
+			}
+			break;
+		}
+
+		return ret;
 	}
 
 private:
