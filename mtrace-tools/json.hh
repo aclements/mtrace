@@ -167,6 +167,10 @@ public:
 		append(new JsonFloat(value));
 	}
 
+	void append(string value) {
+		append(new JsonString(value));
+	}
+
 	virtual string str(int level) const {
 		if (!list_.size())
 			return "[ ]";
