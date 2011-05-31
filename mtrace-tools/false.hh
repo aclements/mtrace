@@ -13,7 +13,7 @@ public:
 		if (!mtrace_enable.access.value)
 			return;
 		objs = mtrace_label_map.objects_on_cline(a->guest_addr);
-		if (objs.size()) {
+		if (objs.size() > 1) {
 			auto it = objs.begin();
 			for (; it != objs.end(); ++it)
 				false_sharing_at_[a->pc].insert(it->name_);
