@@ -9,6 +9,11 @@ extern "C" {
 #include "util.h"
 }
 
+const char *addr2line_exe[] = {
+	"addr2line",
+	"x86_64-jos-elf-addr2line",
+};
+
 #ifdef __APPLE__
 static char *xstrndup(const char *str, size_t len)
 {
@@ -39,6 +44,8 @@ Addr2line::Addr2line(const char *path)
 	if (child < 0) {
 		edie("%s: fork", __func__);
 	} else if (child == 0) {
+		unsigned int i;
+
 		close(check[0]);
 		dup2(out[0], 0);
 		close(out[0]);
@@ -47,8 +54,11 @@ Addr2line::Addr2line(const char *path)
 		close(in[0]);
 		close(in[1]);
 
-		r = execlp("addr2line", "addr2line", "-f", "-e", path, NULL);
-		r = write(check[1], &r, sizeof(r));
+		for (i = 0; i < sizeof(addr2line_exe) / sizeof(addr2line_exe[0]); i++)
+			r = execlp(addr2line_exe[i], addr2line_exe[i], 
+				   "-f", "-e", path, NULL);
+		r = 1;
+		write(check[1], &r, sizeof(r));
 		exit(0);
 	}
 	close(out[0]);
