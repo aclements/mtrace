@@ -4,6 +4,7 @@
 #include <inttypes.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <assert.h>
 
 extern "C" {
 #include "util.h"
@@ -58,7 +59,7 @@ Addr2line::Addr2line(const char *path)
 			r = execlp(addr2line_exe[i], addr2line_exe[i], 
 				   "-f", "-e", path, NULL);
 		r = 1;
-		write(check[1], &r, sizeof(r));
+		assert(sizeof(r) == write(check[1], &r, sizeof(r)));
 		exit(0);
 	}
 	close(out[0]);
