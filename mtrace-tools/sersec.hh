@@ -325,19 +325,20 @@ private:
 
 		tot = sum->total_cycles();
 		dict->put("total-cycles",  tot);
-
 		list = JsonList::create();
 		for (i = 0; i < mtrace_summary.num_cpus; i++) {
 			float percent;
-			
-			percent = 100.0 * ((float)sum->ts_cycles[i] / (float)tot);
+
+			percent = 0.0;
+			if (tot != 0.0)
+				percent = 100.0 * ((float)sum->ts_cycles[i] / (float)tot);
 			list->append(percent);
 		}
 		dict->put("per-cpu-percent", list);
-
 		dict->put("acquires", sum->acquires);
 		dict->put("coherence-miss", sum->coherence_miss);
 		dict->put("locked-inst", sum->locked_inst);
+		dict->put("mismatches", sum->mismatches);
 	}
 
 	void handle_lock(const struct mtrace_lock_entry *l) {
