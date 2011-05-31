@@ -39,22 +39,25 @@ struct MtraceObject {
 	MtraceObject(object_id_t id, const struct mtrace_label_entry *l) {
 		id_ = id;
 		guest_addr_ = l->guest_addr;
+		bytes_= l->bytes;
 	}
 
 	object_id_t id_;
 	guest_addr_t guest_addr_;
+	uint64_t bytes_;
 };
 
 class MtraceLabelMap {
 public:
 	void add_label(const struct mtrace_label_entry *l) {
 		static uint64_t object_count;
+		MtraceObject *o;
 		object_id_t id;
 		
 		if (l->label_type == 0 || l->label_type >= mtrace_label_end)
 			die("MtraceLabelMap::add_label: bad type: %u", l->label_type);
 
-		if (object_.find(l->guest_addr) != object_.end())
+		if (object_first_.find(l->guest_addr) != object_first_.end())
 			die("MtraceLabelMap::add_label: overlapping labels");
 		
 		// XXX ignore for now
@@ -62,9 +65,13 @@ public:
 			return;
 		
 		id = ++object_count;
-		MtraceObject o(id, l);
+		o = new MtraceObject(id, l);
 
-		object_.insert(pair<guest_addr_t, MtraceObject>(l->guest_addr, o));
+		if (l->bytes == 0)
+			die("MtraceLabelMap::add_label: 0 bytes");
+
+		object_first_.insert(pair<guest_addr_t, MtraceObject *>(l->guest_addr, o));
+		object_last_.insert(pair<guest_addr_t, MtraceObject *>(l->guest_addr + l->bytes - 1, o));
 	}
 
 	void rem_label(const struct mtrace_label_entry *l) {
@@ -74,8 +81,8 @@ public:
 		if (l->label_type == mtrace_label_block)
 			return;
 
-		auto it = object_.find(l->guest_addr);
-		if (it == object_.end()) {
+		auto it = object_first_.find(l->guest_addr);
+		if (it == object_first_.end()) {
 			extern struct mtrace_host_entry mtrace_enable;
 
 			if (mtrace_enable.access.value)
@@ -90,21 +97,39 @@ public:
 				die("suspicious number of misses %u", 
 				    l->label_type);
 		} else {
-			object_.erase(it);
+			MtraceObject *o = it->second;
+
+			object_last_.erase(o->guest_addr_ + o->bytes_ - 1);
+			delete it->second;
+			object_first_.erase(it);
 		}
 	}
 
-	bool lower_bound(guest_addr_t addr, MtraceObject *ret) const {
-		auto it = object_.lower_bound(addr);
-		if (it == object_.end())
+	
+	bool last_lower_bound(guest_addr_t addr, MtraceObject *ret) const {
+		auto it = object_last_.lower_bound(addr);
+		if (it == object_last_.end())
 			return false;
 		
-		memcpy(ret, &it->second, sizeof(*ret));
+		memcpy(ret, it->second, sizeof(*ret));
 		return true;
 	}
 
+	bool object(guest_addr_t addr, MtraceObject *ret) const {
+		MtraceObject o;
+		
+		if (last_lower_bound(addr, &o)) {
+			if (o.guest_addr_ <= addr && addr < (o.guest_addr_ + o.bytes_)) {
+				*ret = o;
+				return true;
+			}
+		}
+		return false;
+	}
+
 private:
-	map<guest_addr_t, MtraceObject> object_;
+	map<guest_addr_t, MtraceObject *> object_first_;
+	map<guest_addr_t, MtraceObject *> object_last_;
 };
 
 class MtraceAddr2line{
