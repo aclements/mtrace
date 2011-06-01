@@ -163,6 +163,11 @@ public:
 			"sys_exit",
 			"sys_wait"
 		};
+		appname_to_syscalls_["xv6-forktree"] = {
+			"sys_fork",
+			"sys_exit",
+			"sys_wait"
+		};
 	}
 
 	virtual void exit(void) {
