@@ -168,6 +168,13 @@ public:
 			"sys_exit",
 			"sys_wait"
 		};
+		appname_to_syscalls_["xv6-mapbench"] = {
+			"sys_fork",
+			"sys_exit",
+			"sys_map",
+			"sys_unmap",
+			"sys_wait"
+		};
 	}
 
 	virtual void exit(void) {
