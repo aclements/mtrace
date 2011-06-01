@@ -42,6 +42,7 @@ struct MtraceObject {
 		bytes_= l->bytes;
 		guest_addr_end_ = guest_addr_ + bytes_;
 		name_ = l->str;
+		alloc_pc_ = l->pc;
 	}
 
 	string name_;
@@ -49,6 +50,7 @@ struct MtraceObject {
 	guest_addr_t guest_addr_;
 	guest_addr_t guest_addr_end_;
 	uint64_t bytes_;
+	pc_t alloc_pc_;
 };
 
 class MtraceLabelMap {

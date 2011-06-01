@@ -22,8 +22,10 @@ public:
 		objs = mtrace_label_map.objects_on_cline(a->guest_addr);
 		if (objs.size() > 1) {
 			auto it = objs.begin();
-			for (; it != objs.end(); ++it)
-				false_sharing_at_[a->pc].insert(FalseSharingInstance(0, it->name_));
+			for (; it != objs.end(); ++it) {
+				FalseSharingInstance fsi(it->alloc_pc_, it->name_);
+				false_sharing_at_[a->pc].insert(fsi);
+			}
 		}
 	}
 
