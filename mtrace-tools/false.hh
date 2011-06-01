@@ -41,9 +41,13 @@ public:
 			JsonList *str_list = JsonList::create();
 			auto sit = it->second.begin();
 			for (; sit != it->second.end(); ++sit) {
-				str_list->append(sit->name_);
+				JsonDict *inst_dict = JsonDict::create();
+				inst_dict->put("name", sit->name_);
+				inst_dict->put("alloc-pc", new JsonHex(sit->alloc_pc_));
+				inst_dict->put("alloc-info", addr2line->function_description(sit->alloc_pc_));
+				str_list->append(inst_dict);
 			}
-			dict->put("types", str_list);
+			dict->put("instances", str_list);
 
 			list->append(dict);
 		}
