@@ -4,6 +4,13 @@
 // Different objects that share a cache line and cause coherence misses
 //
 class FalseSharing : public EntryHandler {
+	struct FalseSharingInstance {
+		FalseSharingInstance(pc_t alloc_pc, string name)
+			: alloc_pc_(alloc_pc), name_(name) {}
+		pc_t alloc_pc_;
+		string name_;
+	};
+
 public:
 	virtual void handle(const union mtrace_entry *entry) {
 		const struct mtrace_access_entry *a = &entry->access;
@@ -16,7 +23,7 @@ public:
 		if (objs.size() > 1) {
 			auto it = objs.begin();
 			for (; it != objs.end(); ++it)
-				false_sharing_at_[a->pc].insert(it->name_);
+				false_sharing_at_[a->pc].insert(FalseSharingInstance(0, it->name_));
 		}
 	}
 
@@ -32,7 +39,7 @@ public:
 			JsonList *str_list = JsonList::create();
 			auto sit = it->second.begin();
 			for (; sit != it->second.end(); ++sit) {
-				str_list->append(*sit);
+				str_list->append(sit->name_);
 			}
 			dict->put("types", str_list);
 
@@ -42,5 +49,14 @@ public:
 	}
 
 private:
-	map<pc_t, set<string> > false_sharing_at_;
+	struct LtFalse
+	{
+		bool operator()(FalseSharingInstance x0, FalseSharingInstance x1) const {
+			if (x0.name_ == x1.name_)
+				return x0.alloc_pc_ < x1.alloc_pc_;
+			return x0.name_ < x1.name_;
+		}
+	};
+
+	map<pc_t, set<FalseSharingInstance, LtFalse> > false_sharing_at_;
 };
