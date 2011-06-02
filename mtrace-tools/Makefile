@@ -4,7 +4,6 @@ QEMUDIR = ..
 INSTDIR = /usr/local/bin
 
 CXX  = g++
-CC   = gcc
 
 CWARNS	= -Wformat=2 -Wextra -Wmissing-noreturn -Wwrite-strings -Wshadow \
 	   -Wno-unused-parameter -Wmissing-format-attribute -fno-builtin \
