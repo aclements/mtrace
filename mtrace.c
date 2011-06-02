@@ -630,7 +630,7 @@ uint8_t *mtrace_cline_track_alloc(size_t size)
      * size >> MTRACE_CLINE_SHIFT is large 
      */
 
-    memset(b, 0, size >> MTRACE_CLINE_SHIFT);
+    memset(b, 0xff, size >> MTRACE_CLINE_SHIFT);
     return b;
 }
 
