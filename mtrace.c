@@ -495,6 +495,15 @@ static int mtrace_host_addr(target_ulong guest_addr, target_ulong *host_addr)
     return 0;
 }
 
+static void mtrace_reset_cline_track(void)
+{
+    RAMBlock *block;
+
+    QLIST_FOREACH(block, &ram_list.blocks, next)
+	if (block->cline_track)
+	    memset(block->cline_track, 0xff, block->length >> MTRACE_CLINE_SHIFT);
+}
+
 /*
  * Handler for the mtrace magic instruction
  */
@@ -545,7 +554,9 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
 	entry.host.global_ts = mtrace_get_global_tsc(cpu_single_env);
 	switch (entry.host.host_type) {
 	case mtrace_access_all_cpu:
-	    mtrace_enable = entry.host.access.value;
+	    if (entry.host.access.value ^ mtrace_enable)
+		mtrace_reset_cline_track();
+	    mtrace_enable = !!entry.host.access.value;
 	    break;
 	case mtrace_call_clear_cpu:
 	    mtrace_call_stack_active[entry.host.call.cpu] = 0;
