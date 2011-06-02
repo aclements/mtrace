@@ -4,6 +4,7 @@ QEMUDIR = ..
 INSTDIR = /usr/local/bin
 
 CXX  = g++
+CC   = gcc
 
 CWARNS	= -Wformat=2 -Wextra -Wmissing-noreturn -Wwrite-strings -Wshadow \
 	   -Wno-unused-parameter -Wmissing-format-attribute -fno-builtin \
@@ -15,11 +16,15 @@ LDFLAGS = -lz
 
 HDRS	= $(QEMUDIR)/mtrace-magic.h util.h
 
-all: mscan
+all: mscan m2text
 
 mscan: mscan.cc addr2line.cc hash.c $(HDRS) dissys.hh mscan.hh addr2line.hh sersec.hh json.hh hash.h sysaccess.hh false.hh
 	@echo "CXX	$@"
 	$(Q)$(CXX) -o $@ $< addr2line.cc hash.c $(CFLAGS) -std=c++0x $(LDFLAGS)
+
+m2text: m2text.c $(HDRS)
+	@echo "CC       $@"
+	$(Q)$(CC) -o $@ $< $(CFLAGS) $(LDFLAGS)
 
 .PHONY: install clean
 
