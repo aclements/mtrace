@@ -26,6 +26,16 @@ struct hash<long long unsigned int> {
 }
 
 struct SerialSection {
+	SerialSection(void)
+		: start(0), 
+		  end(0), 
+		  acquire_cpu(0), 
+		  release_cpu(0), 
+		  call_pc(0), 
+		  acquire_pc(0), 
+		  per_pc_coherence_miss(), 
+		  locked_inst(0) {}
+
 	timestamp_t start;
 	timestamp_t end;
 
@@ -35,15 +45,14 @@ struct SerialSection {
 	pc_t call_pc;
 	pc_t acquire_pc;
 
-	uint64_t coherence_miss;
+	map<pc_t, uint64_t> per_pc_coherence_miss;
 	uint64_t locked_inst;
 };
 
 class LockManager {
 	struct LockState {
-		LockState(void) : acquired_ts_(0), depth_(0) {
-			memset(&ss_, 0, sizeof(ss_));
-		}
+		LockState(void) 
+			: ss_(), acquired_ts_(0), depth_(0) {}
 
 		void release(const struct mtrace_lock_entry *lock) {
 			depth_--;
@@ -74,7 +83,7 @@ class LockManager {
 
 		void access(const struct mtrace_access_entry *a) {
 			if (a->traffic)
-				ss_.coherence_miss++;
+				ss_.per_pc_coherence_miss[a->pc]++;
 			else if (a->lock)
 				ss_.locked_inst++;
 		}
@@ -87,7 +96,7 @@ class LockManager {
 	typedef hash_map<uint64_t, LockState *> LockStateTable;
 
 public:
-	bool release(const struct mtrace_lock_entry *lock, SerialSection *ss) {
+	bool release(const struct mtrace_lock_entry *lock, SerialSection &ss) {
 		static int misses;
 		LockState *ls;
 
@@ -103,7 +112,7 @@ public:
 		ls->release(lock);
 
 		if (ls->depth_ == 0) {
-			memcpy(ss, &ls->ss_, sizeof(*ss));
+			ss = ls->ss_;
 			stack_.remove(ls);
 			state_.erase(it);
 			delete ls;
@@ -162,10 +171,10 @@ private:
 class SerialSections : public EntryHandler {
 	struct SerialSectionSummary {
 		SerialSectionSummary(void):
+			per_pc_coherence_miss(),
 			ts_cycles({0}),
 			acquires(0),
 			mismatches(0),
-			coherence_miss(0),
 			locked_inst(0) {}
 
 		void add(const SerialSection *ss) {
@@ -175,16 +184,19 @@ class SerialSections : public EntryHandler {
 			}
 
 			if (ss->end < ss->start)
-			    die("SerialSectionSummary::add %"PRIu64" < %"PRIu64,
-				ss->end, ss->start);
+				die("SerialSectionSummary::add %"PRIu64" < %"PRIu64,
+				    ss->end, ss->start);
 
 			ts_cycles[ss->acquire_cpu] += ss->end - ss->start;
-			coherence_miss += ss->coherence_miss;
+			auto it = ss->per_pc_coherence_miss.begin();
+			for (; it != ss->per_pc_coherence_miss.end(); ++it)
+				per_pc_coherence_miss[it->first] += it->second;
+
 			locked_inst += ss->locked_inst;
 			acquires++;
 		}
 
-		timestamp_t total_cycles(void) {
+		timestamp_t total_cycles(void) const {
 			timestamp_t sum = 0;
 			int i;
 
@@ -193,10 +205,20 @@ class SerialSections : public EntryHandler {
 			return sum;
 		}
 
+		uint64_t coherence_misses(void) const {
+			uint64_t sum = 0;
+
+			auto it = per_pc_coherence_miss.begin();
+			for (; it != per_pc_coherence_miss.end(); ++it)
+				sum += it->second;
+			
+			return sum;
+		}
+
+		map<pc_t, uint64_t> per_pc_coherence_miss;
 		timestamp_t ts_cycles[MAX_CPUS];
 		uint64_t acquires;
 		uint64_t mismatches;
-		uint64_t coherence_miss;
 		uint64_t locked_inst;
 	};
 
@@ -336,7 +358,7 @@ private:
 		}
 		dict->put("per-cpu-percent", list);
 		dict->put("acquires", sum->acquires);
-		dict->put("coherence-miss", sum->coherence_miss);
+		dict->put("coherence-miss", sum->coherence_misses());
 		dict->put("locked-inst", sum->locked_inst);
 		dict->put("mismatches", sum->mismatches);
 	}
@@ -345,7 +367,7 @@ private:
 		switch(l->op) {
 		case mtrace_lockop_release: {
 			SerialSection ss;
-			if (lock_manager_.release(l, &ss)) {
+			if (lock_manager_.release(l, ss)) {
 				MtraceObject object;
 				SerialSectionKey key;
 
