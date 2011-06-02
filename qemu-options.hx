@@ -1022,7 +1022,7 @@ DEF("mtrace-all", 0, QEMU_OPTION_mtrace_all,
     "-mtrace-all     Log all memory accesses\n"
     "                (the default is only the shared cache lines)\n", QEMU_ARCH_I386)
 DEF("mtrace-locked", 0, QEMU_OPTION_mtrace_locked,
-    "-mtrace-locked    log all memory accesses by locked instructions\n", QEMU_ARCH_I386)
+    "-mtrace-locked  Log all memory accesses by locked instructions\n", QEMU_ARCH_I386)
 DEF("mtrace-calls", 0, QEMU_OPTION_mtrace_calls,
     "-mtrace-calls   Log all retired call and ret instructions\n"
     "                (the default is to ignore call and ret instructions)\n", QEMU_ARCH_I386)
