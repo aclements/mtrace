@@ -358,7 +358,20 @@ private:
 		}
 		dict->put("per-cpu-percent", list);
 		dict->put("acquires", sum->acquires);
+
+		JsonList *coherence_list = JsonList::create();
+		auto it = sum->per_pc_coherence_miss.begin();
+		for (; it != sum->per_pc_coherence_miss.end(); ++it) {
+			JsonDict *coherence_dict = JsonDict::create();
+			pc_t pc = it->first;
+			coherence_dict->put("pc", new JsonHex(pc));
+			coherence_dict->put("info", addr2line->function_description(pc));
+			coherence_dict->put("count", it->second);
+			coherence_list->append(coherence_dict);
+		}
 		dict->put("coherence-miss", sum->coherence_misses());
+		dict->put("coherence-miss-list", coherence_list);
+
 		dict->put("locked-inst", sum->locked_inst);
 		dict->put("mismatches", sum->mismatches);
 	}
