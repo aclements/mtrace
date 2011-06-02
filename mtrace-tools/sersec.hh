@@ -150,14 +150,23 @@ public:
 		it->second->acquired(lock);
 	}
 
-	void access(const struct mtrace_access_entry *a) {
-		if (stack_.empty())
-			//
-			// XXX Should count this as a 1 cycle serial section..
-			//
-			return;
+	bool access(const struct mtrace_access_entry *a, SerialSection &ss) {
+		if (stack_.empty()) {
+			ss.start = a->h.ts;
+			ss.end = ss.start + 1;
+			ss.acquire_cpu = a->h.cpu;
+			ss.release_cpu = a->h.cpu;
+			ss.call_pc = mtrace_call_pc[a->h.cpu];
+			ss.acquire_pc = a->pc;
+			if (a->traffic)
+				ss.per_pc_coherence_miss[a->pc] = 1;
+			else if (a->lock)
+				ss.locked_inst = 1;
+			return true;
+		}
 
 		stack_.front()->access(a);
+		return false;
 	}
 
 private:
@@ -176,6 +185,7 @@ class SerialSections : public EntryHandler {
 			acquires(0),
 			mismatches(0),
 			locked_inst(0) {}
+		
 
 		void add(const SerialSection *ss) {
 			if (ss->acquire_cpu != ss->release_cpu) {
@@ -237,12 +247,21 @@ class SerialSections : public EntryHandler {
 			lock_id = l->lock;
 			obj_id = object->id_;
 			name = l->str;
+			lock_section = true;
+		}
+
+		void init(const MtraceObject *object, const struct mtrace_access_entry *a, string str) {
+			lock_id = a->guest_addr;
+			obj_id = object->id_;
+			name = str;
+			lock_section = false;
 		}
 
 		// Set by init
 		uint64_t lock_id;
 		uint64_t obj_id;
 		string name;
+		bool lock_section;
 
 		// Updated by add
 		SerialSectionSummary summary;
@@ -295,6 +314,7 @@ public:
 			SerialSectionStat *stat = &it->second;
 			JsonDict *dict = JsonDict::create();
 			dict->put("name", stat->name);
+			dict->put("section-type", stat->lock_section ? "lock" : "instruction");
 			populateSummaryDict(dict, &stat->summary);
 
 			JsonList *pc_list = JsonList::create();
@@ -412,7 +432,24 @@ private:
 	}
 
 	void handle_access(const struct mtrace_access_entry *a) {
-		lock_manager_.access(a);
+		SerialSection ss;
+
+		if (lock_manager_.access(a, ss)) {
+			MtraceObject object;
+			SerialSectionKey key;
+			
+			key.obj_id = 0;
+			if (mtrace_label_map.object(a->guest_addr, object))
+				key.obj_id = object.id_;
+			key.lock_id = a->guest_addr;
+
+			auto it = stat_.find(key);
+			if (it == stat_.end()) {
+				stat_[key].init(&object, a, object.name_);
+				it = stat_.find(key);
+			}
+			it->second.add(&ss);
+		}
 	}
 
 	hash_map<SerialSectionKey, SerialSectionStat, SerialHash, SerialEq> stat_;
