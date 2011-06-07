@@ -697,14 +697,22 @@ void bdrv_close_all(void)
     }
 }
 
+/* make a BlockDriverState anonymous by removing from bdrv_state list.
+   Also, NULL terminate the device_name to prevent double remove */
+void bdrv_make_anon(BlockDriverState *bs)
+{
+    if (bs->device_name[0] != '\0') {
+        QTAILQ_REMOVE(&bdrv_states, bs, list);
+    }
+    bs->device_name[0] = '\0';
+}
+
 void bdrv_delete(BlockDriverState *bs)
 {
     assert(!bs->peer);
 
     /* remove from list, if necessary */
-    if (bs->device_name[0] != '\0') {
-        QTAILQ_REMOVE(&bdrv_states, bs, list);
-    }
+    bdrv_make_anon(bs);
 
     bdrv_close(bs);
     if (bs->file != NULL) {
@@ -2294,6 +2302,14 @@ int bdrv_aio_multiwrite(BlockDriverState *bs, BlockRequest *reqs, int num_reqs)
     BlockDriverAIOCB *acb;
     MultiwriteCB *mcb;
     int i;
+
+    /* don't submit writes if we don't have a medium */
+    if (bs->drv == NULL) {
+        for (i = 0; i < num_reqs; i++) {
+            reqs[i].error = -ENOMEDIUM;
+        }
+        return -1;
+    }
 
     if (num_reqs == 0) {
         return 0;

@@ -10,6 +10,7 @@ import os.path
 import pickle
 import errno
 import hashlib
+import json
 
 default_sort            = 'sum-inst'
 default_print           = [ 'sum-inst', 'sum-type', 'unique-clines' ]
@@ -122,6 +123,11 @@ class MtraceSummary:
                           key=lambda callSum: callSum.get_call_count(), 
                           reverse=True)
 
+        def precise_call_count_handler():
+            return sorted(self.call_summary, 
+                          key=lambda callSum: callSum.get_precise_call_count(), 
+                          reverse=True)
+
         def inst_handler():
             return sorted(self.call_summary, 
                           key=lambda callSum: callSum.get_total_unique_obj(), 
@@ -133,6 +139,7 @@ class MtraceSummary:
                           reverse=True)
 
         sortFuncs = {
+            'precise-call-count' : precise_call_count_handler,
             'call-count' : call_count_handler,
             'sum-inst'   : inst_handler,
             'sum-type'   : type_handler
@@ -233,6 +240,76 @@ class MtraceSummary:
                                                      higher.instanceNum)
                 print ''
 
+
+    def print_miss_per_types_json(self, numPrint):
+        xxxHack = [ 'stub_clone', 'sys_exit_group', 'sys_wait4', 'sys_read', 'sys_open' ]
+
+        callDict = {}
+        for cs in self.call_summary:
+            if cs.get_total_unique_type() == 0:
+                continue
+            if xxxHack.count(cs.get_str_name()) == 0:
+                continue
+
+            typeList = []
+            for labelType in range(mtrace_label_heap, mtrace_label_percpu + 1):
+                if labelType == mtrace_label_block:
+                    continue
+                if cs.get_unique_type(labelType) == 0:
+                    continue
+
+                top = cs.get_top_types(labelType)
+                toSort = []
+                for higher in top[0:numPrint]:
+                    entryDict = { 'name' : higher.name,
+                                  'miss_per_type' : cs.miss_per_type(labelType, higher.name),
+                                  'locked_sections' : cs.locked_section_per_type(labelType, higher.name) }
+                    toSort.append(entryDict)
+
+                typeList.extend(toSort)
+
+            typeList = sorted(typeList, key=lambda e: e['miss_per_type'], reverse=True)
+            callDict[cs.get_str_name()] = typeList
+        print json.dumps(callDict)
+
+    def print_miss_per_types(self, numPrint):
+        print 'miss-per-type summary'
+        print '---------------------'
+
+        xxxHack = [ 'stub_clone', 'sys_exit_group', 'sys_wait4', 'sys_read', 'sys_open' ]
+
+        for cs in self.call_summary:
+            if cs.get_total_unique_type() == 0:
+                continue
+            if xxxHack.count(cs.get_str_name()) == 0:
+                continue
+
+            print '  name=%s ' % ( cs.get_str_name() )
+            print '  ----'
+
+            for labelType in range(mtrace_label_heap, mtrace_label_percpu + 1):
+                if labelType == mtrace_label_block:
+                    continue
+                if cs.get_unique_type(labelType) == 0:
+                    continue
+
+                print '    type=%s' % ( mtrace_label_str[labelType] )
+                print '    ----'
+
+                print '      %-20s %16s' % ('name', 'miss-per-type')
+                print '      %-20s %16s' % ('----', '-------------')
+
+                top = cs.get_top_types(labelType)
+                toSort = []
+                for higher in top[0:numPrint]:
+                    toSort.append([higher.name, cs.miss_per_type(labelType, higher.name), 
+                                   cs.locked_section_per_type(labelType, higher.name)])
+
+                toSort = sorted(toSort, key=lambda e: e[1], reverse=True)
+                for e in toSort:
+                    print '      %-20s %13.2f' % (e[0], e[1])
+                print ''
+
     def print_all_types(self, divisor = 1):
         tmpDict = {}
         numCols = 1
@@ -288,10 +365,14 @@ def summarize_brief(stats):
 
     stats.print_summary(printCols)
 
+def summarize_miss_per_types(stats):
+    stats.print_miss_per_types_json(default_type_print)
+
 default_summarize = summarize_all
 
 summarize_types = {
     'types' : summarize_types,
+    'miss-per-types' : summarize_miss_per_types,
     'brief' : summarize_brief,
     'all'   : summarize_all
 }

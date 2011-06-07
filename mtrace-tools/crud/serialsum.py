@@ -12,6 +12,7 @@ import sys
 import pickle
 import os
 import errno
+import json
 
 DEFAULT_FILTERS         = []
 DEFAULT_COLS            = ['pc', 'length', 'percent']
@@ -20,11 +21,13 @@ PRINT_COLS              = []
 SUMMARY                 = None
 DEFAULT_NUM_CORES       = 2
 PRINT_LATEX             = False
+PRINT_JSON              = False
 DEFAULT_PICKLEDIR       = 'serialsum-pkl'
 
 DB_FILE                 = ''
 DATA_NAME               = ''
 PRINT_MAX               = True
+JSON_LIST               = []
 
 class FilterLabel(object):
     def __init__(self, labelName):
@@ -125,6 +128,10 @@ def parse_args(argv):
         global PRINT_LATEX
         PRINT_LATEX = bool(latex)
 
+    def json_handler(json):
+        global PRINT_JSON
+        PRINT_JSON = bool(json)
+
     handler = {
         '-filter-label'         : filter_label_handler,
         '-filter-tid-count'     : filter_tid_count_handler,
@@ -133,7 +140,8 @@ def parse_args(argv):
         '-print'                : print_handler,
         '-exefile'              : exefile_handler,
         '-num-cores'            : num_cores_handler,
-        '-latex'                : latex_handler
+        '-latex'                : latex_handler,
+        '-json'                 : json_handler
     }
 
     for i in range(0, len(args), 2):
@@ -232,7 +240,9 @@ def get_col_value(lock, col):
     
 
 def print_header():
-    if PRINT_LATEX:
+    if PRINT_JSON:
+        pass
+    elif PRINT_LATEX:
         vals = ['name', 'id', 'lock']
         for col in PRINT_COLS:
             vals.append(col)
@@ -258,7 +268,16 @@ def latex_sanitize(val):
     return val
 
 def print_serial(s):
-    if PRINT_LATEX:
+    if PRINT_JSON:
+        global JSON_LIST
+        serialDict = {}
+        serialDict['name'] = s.get_name()
+        serialDict['id'] = s.get_label_id()
+        serialDict['lock'] = uhex(s.get_lock())
+        for col in PRINT_COLS:
+            serialDict[col] = get_col_value(s, col)
+        JSON_LIST.append(serialDict)
+    elif PRINT_LATEX:
         vals = []
         vals.extend([pretty_name(s.get_name()), 
                      str(s.get_label_id()), 
@@ -294,7 +313,15 @@ def main(argv = None):
     DATA_NAME = dataName
 
     serials = MtraceSerials.open(dbFile, dataName, DEFAULT_PICKLEDIR)
-    filtered = serials.filter(DEFAULT_FILTERS)
+    removed = []
+    filtered = serials.filter(DEFAULT_FILTERS, removed=removed)
+
+    removedLocks = 0
+    for r in removed:
+        if isinstance(r, mtracepy.lock.MtraceLock):
+            removedLocks += 1
+    SUMMARY.lockAdjust = removedLocks
+
     sortedFiltered = sorted(filtered, 
                             key=lambda l: l.get_exclusive_stats().time(DEFAULT_NUM_CORES), 
                             reverse=True)
@@ -309,6 +336,9 @@ def main(argv = None):
             printedMax[s.get_name()] = 1
 
     serials.close(DEFAULT_PICKLEDIR)
+
+    if PRINT_JSON:
+        print json.dumps(JSON_LIST)
 
 if __name__ == "__main__":
     sys.exit(main())

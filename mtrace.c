@@ -495,11 +495,20 @@ static int mtrace_host_addr(target_ulong guest_addr, target_ulong *host_addr)
     return 0;
 }
 
+static void mtrace_reset_cline_track(void)
+{
+    RAMBlock *block;
+
+    QLIST_FOREACH(block, &ram_list.blocks, next)
+	if (block->cline_track)
+	    memset(block->cline_track, 0xff, block->length >> MTRACE_CLINE_SHIFT);
+}
+
 /*
  * Handler for the mtrace magic instruction
  */
 static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
-                                  target_ulong len, target_ulong cpu,
+                                  target_ulong len, target_ulong n4,
                                   target_ulong n5)
 {
     union mtrace_entry entry;
@@ -520,10 +529,7 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
 
     entry.h.type = type;
     entry.h.size = len;
-    if (cpu == ~0)
-        entry.h.cpu = cpu_single_env->cpu_index;
-    else
-        entry.h.cpu = cpu;
+    entry.h.cpu = cpu_single_env->cpu_index;
     entry.h.access_count = mtrace_access_count;
     entry.h.ts = mtrace_get_percore_tsc(cpu_single_env);
 
@@ -548,13 +554,16 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
 	entry.host.global_ts = mtrace_get_global_tsc(cpu_single_env);
 	switch (entry.host.host_type) {
 	case mtrace_access_all_cpu:
-	    mtrace_enable = entry.host.access.value;
+	    if (entry.host.access.value ^ mtrace_enable)
+		mtrace_reset_cline_track();
+	    mtrace_enable = !!entry.host.access.value;
 	    break;
 	case mtrace_call_clear_cpu:
 	    mtrace_call_stack_active[entry.host.call.cpu] = 0;
 	    break;
 	case mtrace_call_set_cpu:
-	    mtrace_call_stack_active[entry.host.call.cpu] = 1;
+	    /* Only enable call traces when mtrace_enable */
+	    mtrace_call_stack_active[entry.host.call.cpu] = mtrace_enable;
 	    break;
 	default:
 	    fprintf(stderr, "bad mtrace_entry_host type %u\n", 
@@ -632,7 +641,7 @@ uint8_t *mtrace_cline_track_alloc(size_t size)
      * size >> MTRACE_CLINE_SHIFT is large 
      */
 
-    memset(b, 0, size >> MTRACE_CLINE_SHIFT);
+    memset(b, 0xff, size >> MTRACE_CLINE_SHIFT);
     return b;
 }
 

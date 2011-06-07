@@ -2,7 +2,7 @@ import copy
 import sqlite3
 
 MISS_LATENCY = 200
-LOCK_LATENCY = 50
+LOCK_LATENCY = 5000
 ICNT_CONTENTION = 50
 
 def get_traffic_latency(numCores):
@@ -56,9 +56,9 @@ class MtraceLockSample(object):
     def time(self, numCores = 0):
         return (self.cycles +
                 #
-                # XXX get_lock_latency should be part of work (not the critical section!)
+                # XXX get_lock_latency should be part of work (not the critical section!)??
                 #
-                #(self.num * get_lock_latency(numCores)) +
+                (self.num * get_lock_latency(numCores)) +
                 (self.lockedAccesses * get_locked_latency(numCores)) + 
                 (self.trafficAccesses * get_traffic_latency(numCores)))
 
@@ -120,11 +120,14 @@ class MtraceSummary(object):
         self.numCpus = row['num_cpus']
         self.numRam = row['num_ram']
 
+        self.lockAdjust = 0
+
     def get_max_work(self, numCores = 0):
         return (self.get_min_work(numCores) + 
                 ((self.trafficAccesses - self.spinTrafficAccesses) * get_traffic_latency(numCores)) + 
-                ((self.lockedAccesses - self.spinLockedAccesses) * get_locked_latency(numCores)) +
-                (self.lockAcquires * get_lock_latency(numCores)))
+                ((self.lockedAccesses - self.spinLockedAccesses) * get_locked_latency(numCores)))
+
+# +  (self.lockAcquires * get_lock_latency(numCores))) - (get_lock_latency(numCores) * self.lockAdjust)
 
     def get_min_work(self, numCores = 0):
         return self.endTs - self.startTs - self.spinCycles

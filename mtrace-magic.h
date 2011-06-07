@@ -17,6 +17,8 @@ typedef enum {
     mtrace_entry_sched,
     mtrace_entry_machine,
     mtrace_entry_appdata,
+    
+    mtrace_entry_num		/* NB actually num + 1 */
 } mtrace_entry_t;
 
 typedef enum {
@@ -77,7 +79,6 @@ struct mtrace_fcall_entry {
 
     uint64_t tid;
     uint64_t pc;
-    uint64_t tag;
     uint16_t depth;
     mtrace_call_state_t state;
 } __pack__;
@@ -214,7 +215,7 @@ struct mtrace_appdata_entry {
     union {
 	uint64_t u64;
     };
-};
+} __pack__;
 
 union mtrace_entry {
     struct mtrace_entry_header h;
@@ -230,7 +231,7 @@ union mtrace_entry {
     struct mtrace_sched_entry sched;
     struct mtrace_machine_entry machine;
     struct mtrace_appdata_entry appdata;
-}__pack__;
+} __pack__;
 
 #ifndef QEMU_MTRACE
 
@@ -248,6 +249,14 @@ static inline void mtrace_magic(unsigned long ax, unsigned long bx,
 		       "S" (si), "D" (di));
 }
 
+static inline void mtrace_entry_register(volatile struct mtrace_entry_header *h,
+					 unsigned long type,
+					 unsigned long len)
+{
+    mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)h,
+		 type, len, 0, 0);
+}
+
 static inline void mtrace_enable_set(unsigned long b, const char *str)
 {
     volatile struct mtrace_host_entry entry;
@@ -257,8 +266,7 @@ static inline void mtrace_enable_set(unsigned long b, const char *str)
     strncpy((char*)entry.access.str, str, sizeof(entry.access.str));
     entry.access.str[sizeof(entry.access.str) - 1] = 0;
 
-    mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&entry,
-		 mtrace_entry_host, sizeof(entry), ~0, 0);
+    mtrace_entry_register(&entry.h, mtrace_entry_host, sizeof(entry));
 }
 
 static inline void mtrace_call_set(unsigned long b, int cpu)
@@ -268,8 +276,7 @@ static inline void mtrace_call_set(unsigned long b, int cpu)
     entry.host_type = b ? mtrace_call_set_cpu : mtrace_call_clear_cpu;
     entry.call.cpu = cpu;
 
-    mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&entry,
-		 mtrace_entry_host, sizeof(entry), ~0, 0);
+    mtrace_entry_register(&entry.h, mtrace_entry_host, sizeof(entry));
 }
 
 static inline void mtrace_label_register(mtrace_label_t type,
@@ -287,12 +294,11 @@ static inline void mtrace_label_register(mtrace_label_t type,
     label.label_type = type;
     memcpy((void *)label.str, str, n);
     label.str[n] = 0;
-    label.guest_addr = (uint64_t)addr;
+    label.guest_addr = (uintptr_t)addr;
     label.bytes = bytes;
     label.pc = call_site;
 
-    mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&label,
-		 mtrace_entry_label, sizeof(label), ~0, 0);
+    mtrace_entry_register(&label.h, mtrace_entry_label, sizeof(label));
 }
 
 static inline void mtrace_segment_register(unsigned long baseaddr,
@@ -305,24 +311,22 @@ static inline void mtrace_segment_register(unsigned long baseaddr,
     entry.endaddr = endaddr;
     entry.object_type = type;
     entry.cpu = cpu;
-    mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&entry,
-		 mtrace_entry_segment, sizeof(entry), ~0, 0);
+
+    mtrace_entry_register(&entry.h, mtrace_entry_segment, sizeof(entry));
 }
 
 static inline void mtrace_fcall_register(unsigned long tid,
 					 unsigned long pc,
-					 unsigned long tag,
 					 unsigned int depth,
 					 mtrace_call_state_t state)
 {
     volatile struct mtrace_fcall_entry entry;
     entry.tid = tid;
     entry.pc = pc;
-    entry.tag = tag;
     entry.depth = depth;
     entry.state = state;
-    mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&entry,
-		 mtrace_entry_fcall, sizeof(entry), ~0, 0);
+
+    mtrace_entry_register(&entry.h, mtrace_entry_fcall, sizeof(entry));
 }
 
 static inline void mtrace_lock_register(unsigned long pc,
@@ -339,8 +343,7 @@ static inline void mtrace_lock_register(unsigned long pc,
     entry.op = op;
     entry.read = is_read;
 
-    mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&entry,
-		 mtrace_entry_lock, sizeof(entry), ~0, 0);
+    mtrace_entry_register(&entry.h, mtrace_entry_lock, sizeof(entry));
 }
 
 static inline void mtrace_task_register(unsigned long tid,
@@ -355,8 +358,7 @@ static inline void mtrace_task_register(unsigned long tid,
     strncpy((char*)entry.str, str, sizeof(entry.str));
     entry.str[sizeof(entry.str) - 1] = 0;
 
-    mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&entry,
-		 mtrace_entry_task, sizeof(entry), ~0, 0);
+    mtrace_entry_register(&entry.h, mtrace_entry_task, sizeof(entry));
 }
 
 static inline void mtrace_sched_record(unsigned long tid)
@@ -364,8 +366,7 @@ static inline void mtrace_sched_record(unsigned long tid)
     volatile struct mtrace_sched_entry entry;
     entry.tid = tid;
 
-    mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&entry,
-                 mtrace_entry_sched, sizeof(entry), ~0, 0);
+    mtrace_entry_register(&entry.h, mtrace_entry_sched, sizeof(entry));
 }
 
 static inline void mtrace_appdata_register(struct mtrace_appdata_entry *appdata)
@@ -373,9 +374,7 @@ static inline void mtrace_appdata_register(struct mtrace_appdata_entry *appdata)
     volatile struct mtrace_appdata_entry entry;
     memcpy((void *)&entry, appdata, sizeof(entry));
 
-    mtrace_magic(MTRACE_ENTRY_REGISTER, (unsigned long)&entry,
-                 mtrace_entry_appdata, sizeof(entry), ~0, 0);
-
+    mtrace_entry_register(&entry.h, mtrace_entry_appdata, sizeof(entry));
 }
 
 #endif /* QEMU_MTRACE */
