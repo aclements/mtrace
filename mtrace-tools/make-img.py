@@ -202,7 +202,7 @@ default_root_type = Root
 
 def usage():
     print """Usage: make-img.py output-file [ -size size -fixup fixup -copy src,dst 
-                      -include pkg0,pkg1,... -mosbench mosbenchsrc -img imgtype ]
+                      -include pkg0,pkg1,... -mosbench mosbenchsrc -imgtype imgtype ]
 
     'size' is the disk image size in kilobytes. Optional suffixes
       'M' (megabyte, 1024 * 1024) and 'G' (gigabyte, 1024 * 1024 * 1024) are
