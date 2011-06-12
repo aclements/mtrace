@@ -33,6 +33,7 @@ struct SerialSection {
 		  release_cpu(0), 
 		  call_pc(0), 
 		  acquire_pc(0), 
+		  tid(0),
 		  per_pc_coherence_miss(), 
 		  locked_inst(0) {}
 
@@ -44,6 +45,8 @@ struct SerialSection {
 
 	pc_t call_pc;
 	pc_t acquire_pc;
+
+	tid_t tid;
 
 	map<pc_t, uint64_t> per_pc_coherence_miss;
 	uint64_t locked_inst;
@@ -68,6 +71,7 @@ class LockManager {
 				ss_.call_pc = mtrace_call_pc[lock->h.cpu];
 				ss_.acquire_cpu = lock->h.cpu;
 				ss_.acquire_pc = lock->pc;
+				ss_.tid = mtrace_tid[lock->h.cpu];
 			}
 			depth_++;
 		}
@@ -78,6 +82,7 @@ class LockManager {
 				ss_.start = lock->h.ts;
 				ss_.acquire_cpu = lock->h.cpu;
 				ss_.acquire_pc = lock->pc;
+				ss_.tid = mtrace_tid[lock->h.cpu];
 			}
 		}
 
@@ -241,6 +246,7 @@ class SerialSections : public EntryHandler {
 		void add(const SerialSection *ss) {
 			summary.add(ss);
 			per_pc[ss->acquire_pc].add(ss);
+			per_tid[ss->tid].add(ss);
 		}
 
 		void init(const MtraceObject *object, const struct mtrace_lock_entry *l) {
@@ -266,6 +272,7 @@ class SerialSections : public EntryHandler {
 		// Updated by add
 		SerialSectionSummary summary;
 		map<pc_t, SerialSectionSummary> per_pc;
+		map<tid_t, SerialSectionSummary> per_tid;
 	};
 
 	struct SerialSectionKey {
@@ -331,6 +338,19 @@ public:
 				pc_list->append(pc_dict);
 			}
 			dict->put("per-acquire-pc", pc_list);
+
+			JsonList *tid_list = JsonList::create();
+			auto tit = stat->per_tid.begin();
+			for (; tit != stat->per_tid.end(); ++tit) {
+				JsonDict *tid_dict = JsonDict::create();
+				SerialSectionSummary *sum = &tit->second;
+				tid_t tid = tit->first;
+
+				tid_dict->put("tid", tid);
+				tid_dict->put("acquires", sum->acquires);
+				tid_list->append(tid_dict);
+			}
+			dict->put("tids", tid_list);
 
 			list->append(dict);
 		}
