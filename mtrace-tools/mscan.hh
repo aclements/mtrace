@@ -15,6 +15,7 @@ typedef uint64_t pc_t;
 typedef uint64_t timestamp_t;
 typedef uint64_t object_id_t;
 typedef uint64_t guest_addr_t;
+typedef uint64_t tid_t;
 
 class JsonDict;
 
@@ -230,6 +231,8 @@ extern MtraceAddr2line *addr2line;
 extern MtraceSummary mtrace_summary;
 // The current fcall/kernel entry point
 extern pc_t mtrace_call_pc[MAX_CPUS];
+// The current task ID
+extern tid_t mtrace_tid[MAX_CPUS];
 // A map from guest address to kernel object
 extern MtraceLabelMap mtrace_label_map;
 

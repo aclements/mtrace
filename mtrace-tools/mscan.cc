@@ -31,6 +31,7 @@ struct mtrace_host_entry mtrace_enable;
 MtraceAddr2line *addr2line;
 MtraceSummary mtrace_summary;
 pc_t mtrace_call_pc[MAX_CPUS];
+tid_t mtrace_tid[MAX_CPUS];
 MtraceLabelMap mtrace_label_map;
 
 static LabelMap labels;
@@ -79,15 +80,19 @@ public:
 		switch (f->state) {
 		case mtrace_resume:
 			mtrace_call_pc[cpu] = f->pc;
+			mtrace_tid[cpu] = f->tid;
 			break;
 		case mtrace_start:
 			mtrace_call_pc[cpu] = f->pc;
+			mtrace_tid[cpu] = f->tid;
 			break;
 		case mtrace_pause:
 			mtrace_call_pc[cpu] = 0;
+			mtrace_tid[cpu] = 0;
 			break;
 		case mtrace_done:
 			mtrace_call_pc[cpu] = 0;
+			mtrace_tid[cpu] = 0;
 			break;
 		default:
 			die("DefaultFcallHandler::handle: default error");
