@@ -75,6 +75,7 @@ void qemu_announce_self(void);
 
 void main_loop_wait(int nonblocking);
 
+bool qemu_savevm_state_blocked(Monitor *mon);
 int qemu_savevm_state_begin(Monitor *mon, QEMUFile *f, int blk_enable,
                             int shared);
 int qemu_savevm_state_iterate(Monitor *mon, QEMUFile *f);
@@ -158,6 +159,11 @@ void pci_device_hot_add(Monitor *mon, const QDict *qdict);
 void drive_hot_add(Monitor *mon, const QDict *qdict);
 void do_pci_device_hot_remove(Monitor *mon, const QDict *qdict);
 
+/* pcie aer error injection */
+void pcie_aer_inject_error_print(Monitor *mon, const QObject *data);
+int do_pcie_aer_inejct_error(Monitor *mon,
+                             const QDict *qdict, QObject **ret_data);
+
 /* serial ports */
 
 #define MAX_SERIAL_PORTS 4
@@ -171,21 +177,6 @@ extern CharDriverState *serial_hds[MAX_SERIAL_PORTS];
 extern CharDriverState *parallel_hds[MAX_PARALLEL_PORTS];
 
 #define TFR(expr) do { if ((expr) != -1) break; } while (errno == EINTR)
-
-#ifdef HAS_AUDIO
-struct soundhw {
-    const char *name;
-    const char *descr;
-    int enabled;
-    int isa;
-    union {
-        int (*init_isa) (qemu_irq *pic);
-        int (*init_pci) (PCIBus *bus);
-    } init;
-};
-
-extern struct soundhw soundhw[];
-#endif
 
 void do_usb_add(Monitor *mon, const QDict *qdict);
 void do_usb_del(Monitor *mon, const QDict *qdict);

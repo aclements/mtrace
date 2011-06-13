@@ -53,6 +53,25 @@ Quit the emulator.
 ETEXI
 
     {
+        .name       = "block_resize",
+        .args_type  = "device:B,size:o",
+        .params     = "device size",
+        .help       = "resize a block image",
+        .user_print = monitor_user_noop,
+        .mhandler.cmd_new = do_block_resize,
+    },
+
+STEXI
+@item block_resize
+@findex block_resize
+Resize a block image while a guest is running.  Usually requires guest
+action to see the updated size.  Resize to a lower size is supported,
+but should be used with extreme caution.  Note that this command only
+resizes image files, it can not resize block devices like LVM volumes.
+ETEXI
+
+
+    {
         .name       = "eject",
         .args_type  = "force:-f,device:B",
         .params     = "[-f] device",
@@ -803,7 +822,7 @@ ETEXI
 
     {
         .name       = "snapshot_blkdev",
-        .args_type  = "device:s,snapshot_file:s?,format:s?",
+        .args_type  = "device:B,snapshot_file:s?,format:s?",
         .params     = "device [new-image-file] [format]",
         .help       = "initiates a live snapshot\n\t\t\t"
                       "of device. If a new image file is specified, the\n\t\t\t"
@@ -812,6 +831,23 @@ ETEXI
                       "be created in that format. Otherwise the\n\t\t\t"
                       "snapshot will be internal! (currently unsupported)",
         .mhandler.cmd_new = do_snapshot_blkdev,
+    },
+
+STEXI
+@item client_migrate_info @var{protocol} @var{hostname} @var{port} @var{tls-port} @var{cert-subject}
+@findex client_migrate_info
+Set the spice/vnc connection info for the migration target.  The spice/vnc
+server will ask the spice/vnc client to automatically reconnect using the
+new parameters (if specified) once the vm migration finished successfully.
+ETEXI
+
+    {
+        .name       = "client_migrate_info",
+        .args_type  = "protocol:s,hostname:s,port:i?,tls-port:i?,cert-subject:s?",
+        .params     = "protocol hostname port tls-port cert-subject",
+        .help       = "send migration info to spice/vnc client",
+        .user_print = monitor_user_noop,
+        .mhandler.cmd_new = client_migrate_info,
     },
 
 STEXI
@@ -870,6 +906,31 @@ STEXI
 @item pci_del
 @findex pci_del
 Hot remove PCI device.
+ETEXI
+
+    {
+        .name       = "pcie_aer_inject_error",
+        .args_type  = "advisory_non_fatal:-a,correctable:-c,"
+	              "id:s,error_status:s,"
+	              "header0:i?,header1:i?,header2:i?,header3:i?,"
+	              "prefix0:i?,prefix1:i?,prefix2:i?,prefix3:i?",
+        .params     = "[-a] [-c] id "
+                      "<error_status> [<tlp header> [<tlp header prefix>]]",
+        .help       = "inject pcie aer error\n\t\t\t"
+	              " -a for advisory non fatal error\n\t\t\t"
+	              " -c for correctable error\n\t\t\t"
+                      "<id> = qdev device id\n\t\t\t"
+                      "<error_status> = error string or 32bit\n\t\t\t"
+                      "<tlb header> = 32bit x 4\n\t\t\t"
+                      "<tlb header prefix> = 32bit x 4",
+        .user_print  = pcie_aer_inject_error_print,
+        .mhandler.cmd_new = do_pcie_aer_inejct_error,
+    },
+
+STEXI
+@item pcie_aer_inject_error
+@findex pcie_aer_inject_error
+Inject PCIe AER error
 ETEXI
 
     {
@@ -1091,9 +1152,9 @@ ETEXI
 
     {
         .name       = "mce",
-        .args_type  = "cpu_index:i,bank:i,status:l,mcg_status:l,addr:l,misc:l",
-        .params     = "cpu bank status mcgstatus addr misc",
-        .help       = "inject a MCE on the given CPU",
+        .args_type  = "broadcast:-b,cpu_index:i,bank:i,status:l,mcg_status:l,addr:l,misc:l",
+        .params     = "[-b] cpu bank status mcgstatus addr misc",
+        .help       = "inject a MCE on the given CPU [and broadcast to other CPUs with -b option]",
         .mhandler.cmd = do_inject_mce,
     },
 

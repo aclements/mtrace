@@ -113,39 +113,77 @@ static size_t write_to_port(VirtIOSerialPort *port,
     return offset;
 }
 
-static void do_flush_queued_data(VirtIOSerialPort *port, VirtQueue *vq,
-                                 VirtIODevice *vdev, bool discard)
+static void discard_vq_data(VirtQueue *vq, VirtIODevice *vdev)
 {
     VirtQueueElement elem;
 
-    assert(port || discard);
-    assert(virtio_queue_ready(vq));
-
-    while ((discard || !port->throttled) && virtqueue_pop(vq, &elem)) {
-        uint8_t *buf;
-        size_t ret, buf_size;
-
-        if (!discard) {
-            buf_size = iov_size(elem.out_sg, elem.out_num);
-            buf = qemu_malloc(buf_size);
-            ret = iov_to_buf(elem.out_sg, elem.out_num, buf, 0, buf_size);
-
-            port->info->have_data(port, buf, ret);
-            qemu_free(buf);
-        }
+    if (!virtio_queue_ready(vq)) {
+        return;
+    }
+    while (virtqueue_pop(vq, &elem)) {
         virtqueue_push(vq, &elem, 0);
     }
     virtio_notify(vdev, vq);
 }
 
-static void flush_queued_data(VirtIOSerialPort *port, bool discard)
+static void do_flush_queued_data(VirtIOSerialPort *port, VirtQueue *vq,
+                                 VirtIODevice *vdev)
+{
+    assert(port);
+    assert(virtio_queue_ready(vq));
+
+    while (!port->throttled) {
+        unsigned int i;
+
+        /* Pop an elem only if we haven't left off a previous one mid-way */
+        if (!port->elem.out_num) {
+            if (!virtqueue_pop(vq, &port->elem)) {
+                break;
+            }
+            port->iov_idx = 0;
+            port->iov_offset = 0;
+        }
+
+        for (i = port->iov_idx; i < port->elem.out_num; i++) {
+            size_t buf_size;
+            ssize_t ret;
+
+            buf_size = port->elem.out_sg[i].iov_len - port->iov_offset;
+            ret = port->info->have_data(port,
+                                        port->elem.out_sg[i].iov_base
+                                          + port->iov_offset,
+                                        buf_size);
+            if (ret < 0 && ret != -EAGAIN) {
+                /* We don't handle any other type of errors here */
+                abort();
+            }
+            if (ret == -EAGAIN || (ret >= 0 && ret < buf_size)) {
+                virtio_serial_throttle_port(port, true);
+                port->iov_idx = i;
+                if (ret > 0) {
+                    port->iov_offset += ret;
+                }
+                break;
+            }
+            port->iov_offset = 0;
+        }
+        if (port->throttled) {
+            break;
+        }
+        virtqueue_push(vq, &port->elem, 0);
+        port->elem.out_num = 0;
+    }
+    virtio_notify(vdev, vq);
+}
+
+static void flush_queued_data(VirtIOSerialPort *port)
 {
     assert(port);
 
     if (!virtio_queue_ready(port->ovq)) {
         return;
     }
-    do_flush_queued_data(port, port->ovq, &port->vser->vdev, discard);
+    do_flush_queued_data(port, port->ovq, &port->vser->vdev);
 }
 
 static size_t send_control_msg(VirtIOSerialPort *port, void *buf, size_t len)
@@ -204,7 +242,7 @@ int virtio_serial_close(VirtIOSerialPort *port)
      * consume, reset the throttling flag and discard the data.
      */
     port->throttled = false;
-    flush_queued_data(port, true);
+    discard_vq_data(port->ovq, &port->vser->vdev);
 
     send_control_event(port, VIRTIO_CONSOLE_PORT_OPEN, 0);
 
@@ -258,7 +296,7 @@ void virtio_serial_throttle_port(VirtIOSerialPort *port, bool throttle)
         return;
     }
 
-    flush_queued_data(port, false);
+    flush_queued_data(port);
 }
 
 /* Guest wants to notify us of some event */
@@ -414,11 +452,15 @@ static void handle_output(VirtIODevice *vdev, VirtQueue *vq)
         discard = true;
     }
 
-    if (!discard && port->throttled) {
+    if (discard) {
+        discard_vq_data(vq, vdev);
+        return;
+    }
+    if (port->throttled) {
         return;
     }
 
-    do_flush_queued_data(port, vq, vdev, discard);
+    do_flush_queued_data(port, vq, vdev);
 }
 
 static void handle_input(VirtIODevice *vdev, VirtQueue *vq)
@@ -488,9 +530,24 @@ static void virtio_serial_save(QEMUFile *f, void *opaque)
      * Items in struct VirtIOSerialPort.
      */
     QTAILQ_FOREACH(port, &s->ports, next) {
+        uint32_t elem_popped;
+
         qemu_put_be32s(f, &port->id);
         qemu_put_byte(f, port->guest_connected);
         qemu_put_byte(f, port->host_connected);
+
+	elem_popped = 0;
+        if (port->elem.out_num) {
+            elem_popped = 1;
+        }
+        qemu_put_be32s(f, &elem_popped);
+        if (elem_popped) {
+            qemu_put_be32s(f, &port->iov_idx);
+            qemu_put_be64s(f, &port->iov_offset);
+
+            qemu_put_buffer(f, (unsigned char *)&port->elem,
+                            sizeof(port->elem));
+        }
     }
 }
 
@@ -501,7 +558,7 @@ static int virtio_serial_load(QEMUFile *f, void *opaque, int version_id)
     uint32_t max_nr_ports, nr_active_ports, ports_map;
     unsigned int i;
 
-    if (version_id > 2) {
+    if (version_id > 3) {
         return -EINVAL;
     }
 
@@ -553,6 +610,29 @@ static int virtio_serial_load(QEMUFile *f, void *opaque, int version_id)
              */
             send_control_event(port, VIRTIO_CONSOLE_PORT_OPEN,
                                port->host_connected);
+        }
+
+        if (version_id > 2) {
+            uint32_t elem_popped;
+
+            qemu_get_be32s(f, &elem_popped);
+            if (elem_popped) {
+                qemu_get_be32s(f, &port->iov_idx);
+                qemu_get_be64s(f, &port->iov_offset);
+
+                qemu_get_buffer(f, (unsigned char *)&port->elem,
+                                sizeof(port->elem));
+                virtqueue_map_sg(port->elem.in_sg, port->elem.in_addr,
+                                 port->elem.in_num, 1);
+                virtqueue_map_sg(port->elem.out_sg, port->elem.out_addr,
+                                 port->elem.out_num, 1);
+
+                /*
+                 *  Port was throttled on source machine.  Let's
+                 *  unthrottle it here so data starts flowing again.
+                 */
+                virtio_serial_throttle_port(port, false);
+            }
         }
     }
     return 0;
@@ -634,7 +714,7 @@ static void remove_port(VirtIOSerial *vser, uint32_t port_id)
 
     port = find_port_by_id(vser, port_id);
     /* Flush out any unconsumed buffers first */
-    flush_queued_data(port, true);
+    discard_vq_data(port->ovq, &port->vser->vdev);
 
     send_control_event(port, VIRTIO_CONSOLE_PORT_REMOVE, 1);
 }
@@ -694,6 +774,8 @@ static int virtser_port_qdev_init(DeviceState *qdev, DeviceInfo *base)
          */
         port->guest_connected = true;
     }
+
+    port->elem.out_num = 0;
 
     QTAILQ_INSERT_TAIL(&port->vser->ports, port, next);
     port->ivq = port->vser->ivqs[port->id];
@@ -769,10 +851,16 @@ VirtIODevice *virtio_serial_init(DeviceState *dev, uint32_t max_nr_ports)
     /* Add a queue for guest to host transfers for port 0 (backward compat) */
     vser->ovqs[0] = virtio_add_queue(vdev, 128, handle_output);
 
+    /* TODO: host to guest notifications can get dropped
+     * if the queue fills up. Implement queueing in host,
+     * this might also make it possible to reduce the control
+     * queue size: as guest preposts buffers there,
+     * this will save 4Kbyte of guest memory per entry. */
+
     /* control queue: host to guest */
-    vser->c_ivq = virtio_add_queue(vdev, 16, control_in);
+    vser->c_ivq = virtio_add_queue(vdev, 32, control_in);
     /* control queue: guest to host */
-    vser->c_ovq = virtio_add_queue(vdev, 16, control_out);
+    vser->c_ovq = virtio_add_queue(vdev, 32, control_out);
 
     for (i = 1; i < vser->bus->max_nr_ports; i++) {
         /* Add a per-port queue for host to guest transfers */
@@ -800,7 +888,7 @@ VirtIODevice *virtio_serial_init(DeviceState *dev, uint32_t max_nr_ports)
      * Register for the savevm section with the virtio-console name
      * to preserve backward compat
      */
-    register_savevm(dev, "virtio-console", -1, 2, virtio_serial_save,
+    register_savevm(dev, "virtio-console", -1, 3, virtio_serial_save,
                     virtio_serial_load, vser);
 
     return vdev;

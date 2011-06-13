@@ -37,7 +37,9 @@ DEF_HELPER_0(save, void)
 DEF_HELPER_0(restore, void)
 DEF_HELPER_1(flush, void, tl)
 DEF_HELPER_2(udiv, tl, tl, tl)
+DEF_HELPER_2(udiv_cc, tl, tl, tl)
 DEF_HELPER_2(sdiv, tl, tl, tl)
+DEF_HELPER_2(sdiv_cc, tl, tl, tl)
 DEF_HELPER_2(stdf, void, tl, int)
 DEF_HELPER_2(lddf, void, tl, int)
 DEF_HELPER_2(ldqf, void, tl, int)
@@ -83,6 +85,7 @@ DEF_HELPER_0(fcmpeq_fcc2, void)
 DEF_HELPER_0(fcmpeq_fcc3, void)
 #endif
 DEF_HELPER_1(raise_exception, void, int)
+DEF_HELPER_0(shutdown, void)
 #define F_HELPER_0_0(name) DEF_HELPER_0(f ## name, void)
 #define F_HELPER_DQ_0_0(name)                   \
     F_HELPER_0_0(name ## d);                    \

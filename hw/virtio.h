@@ -92,9 +92,12 @@ typedef struct {
     void (*save_queue)(void * opaque, int n, QEMUFile *f);
     int (*load_config)(void * opaque, QEMUFile *f);
     int (*load_queue)(void * opaque, int n, QEMUFile *f);
+    int (*load_done)(void * opaque, QEMUFile *f);
     unsigned (*get_features)(void * opaque);
+    bool (*query_guest_notifiers)(void * opaque);
     int (*set_guest_notifiers)(void * opaque, bool assigned);
     int (*set_host_notifier)(void * opaque, int n, bool assigned);
+    void (*vmstate_change)(void * opaque, bool running);
 } VirtIOBindings;
 
 #define VIRTIO_PCI_QUEUE_MAX 64
@@ -123,6 +126,8 @@ struct VirtIODevice
     const VirtIOBindings *binding;
     void *binding_opaque;
     uint16_t device_id;
+    bool vm_running;
+    VMChangeStateEntry *vmstate;
 };
 
 static inline void virtio_set_status(VirtIODevice *vdev, uint8_t val)
@@ -219,5 +224,6 @@ void virtio_queue_set_last_avail_idx(VirtIODevice *vdev, int n, uint16_t idx);
 VirtQueue *virtio_get_queue(VirtIODevice *vdev, int n);
 EventNotifier *virtio_queue_get_guest_notifier(VirtQueue *vq);
 EventNotifier *virtio_queue_get_host_notifier(VirtQueue *vq);
+void virtio_queue_notify_vq(VirtQueue *vq);
 void virtio_irq(VirtQueue *vq);
 #endif

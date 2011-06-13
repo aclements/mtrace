@@ -177,7 +177,7 @@ static inline unsigned int tb_jmp_cache_hash_func(target_ulong pc)
 
 static inline unsigned int tb_phys_hash_func(tb_page_addr_t pc)
 {
-    return pc & (CODE_GEN_PHYS_HASH_SIZE - 1);
+    return (pc >> 2) & (CODE_GEN_PHYS_HASH_SIZE - 1);
 }
 
 TranslationBlock *tb_alloc(target_ulong pc);
@@ -192,7 +192,7 @@ extern TranslationBlock *tb_phys_hash[CODE_GEN_PHYS_HASH_SIZE];
 #if defined(USE_DIRECT_JUMP)
 
 #if defined(_ARCH_PPC)
-extern void ppc_tb_set_jmp_target(unsigned long jmp_addr, unsigned long addr);
+void ppc_tb_set_jmp_target(unsigned long jmp_addr, unsigned long addr);
 #define tb_set_jmp_target1 ppc_tb_set_jmp_target
 #elif defined(__i386__) || defined(__x86_64__)
 static inline void tb_set_jmp_target1(unsigned long jmp_addr, unsigned long addr)

@@ -422,9 +422,14 @@ static void sd_reset(SDState *sd, BlockDriverState *bdrv)
     sd->pwd_len = 0;
 }
 
-static void sd_cardchange(void *opaque)
+static void sd_cardchange(void *opaque, int reason)
 {
     SDState *sd = opaque;
+
+    if (!(reason & CHANGE_MEDIA)) {
+        return;
+    }
+
     qemu_set_irq(sd->inserted_cb, bdrv_is_inserted(sd->bdrv));
     if (bdrv_is_inserted(sd->bdrv)) {
         sd_reset(sd, sd->bdrv);
@@ -1163,6 +1168,7 @@ static sd_rsp_type_t sd_app_command(SDState *sd,
     case 13:	/* ACMD13: SD_STATUS */
         switch (sd->state) {
         case sd_transfer_state:
+            sd->state = sd_sendingdata_state;
             sd->data_start = 0;
             sd->data_offset = 0;
             return sd_r1;
@@ -1177,6 +1183,7 @@ static sd_rsp_type_t sd_app_command(SDState *sd,
         case sd_transfer_state:
             *(uint32_t *) sd->data = sd->blk_written;
 
+            sd->state = sd_sendingdata_state;
             sd->data_start = 0;
             sd->data_offset = 0;
             return sd_r1;

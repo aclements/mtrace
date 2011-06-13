@@ -75,11 +75,11 @@ destroyed, but local temporaries and globals are preserved.
 * Helpers:
 
 Using the tcg_gen_helper_x_y it is possible to call any function
-taking i32, i64 or pointer types. By default, before calling an helper,
+taking i32, i64 or pointer types. By default, before calling a helper,
 all globals are stored at their canonical location and it is assumed
-that the function can modify them. This can be overriden by the
+that the function can modify them. This can be overridden by the
 TCG_CALL_CONST function modifier. By default, the helper is allowed to
-modify the CPU state or raise an exception. This can be overriden by
+modify the CPU state or raise an exception. This can be overridden by
 the TCG_CALL_PURE function modifier, in which case the call to the
 function is removed if the return value is not used.
 
@@ -285,6 +285,20 @@ the four high order bytes are set to zero.
 Indicate that the value of t0 won't be used later. It is useful to
 force dead code elimination.
 
+* deposit_i32/i64 dest, t1, t2, pos, len
+
+Deposit T2 as a bitfield into T1, placing the result in DEST.
+The bitfield is described by POS/LEN, which are immediate values:
+
+  LEN - the length of the bitfield
+  POS - the position of the first bit, counting from the LSB
+
+For example, pos=8, len=4 indicates a 4-bit field at bit 8.
+This operation would be equivalent to
+
+  dest = (t1 & ~0x0f00) | ((t2 << 8) & 0x0f00)
+
+
 ********* Conditional moves
 
 * setcond_i32/i64 cond, dest, t1, t2
@@ -364,7 +378,7 @@ formed from two 32-bit arguments.  The result is a 32-bit value.
 
 ********* QEMU specific operations
 
-* tb_exit t0
+* exit_tb t0
 
 Exit the current TB and return the value t0 (word type).
 
@@ -488,7 +502,7 @@ register.
   the speed of the translation.
 
 - Don't hesitate to use helpers for complicated or seldom used target
-  intructions. There is little performance advantage in using TCG to
+  instructions. There is little performance advantage in using TCG to
   implement target instructions taking more than about twenty TCG
   instructions.
 

@@ -78,9 +78,10 @@ typedef struct DisasContext {
     unsigned int clear_imm;
     int is_jmp;
 
-#define JMP_NOJMP    0
-#define JMP_DIRECT   1
-#define JMP_INDIRECT 2
+#define JMP_NOJMP     0
+#define JMP_DIRECT    1
+#define JMP_DIRECT_CC 2
+#define JMP_INDIRECT  3
     unsigned int jmp;
     uint32_t jmp_pc;
 
@@ -152,6 +153,23 @@ static void gen_goto_tb(DisasContext *dc, int n, target_ulong dest)
     }
 }
 
+static void read_carry(DisasContext *dc, TCGv d)
+{
+    tcg_gen_shri_tl(d, cpu_SR[SR_MSR], 31);
+}
+
+static void write_carry(DisasContext *dc, TCGv v)
+{
+    TCGv t0 = tcg_temp_new();
+    tcg_gen_shli_tl(t0, v, 31);
+    tcg_gen_sari_tl(t0, t0, 31);
+    tcg_gen_andi_tl(t0, t0, (MSR_C | MSR_CC));
+    tcg_gen_andi_tl(cpu_SR[SR_MSR], cpu_SR[SR_MSR],
+                    ~(MSR_C | MSR_CC));
+    tcg_gen_or_tl(cpu_SR[SR_MSR], cpu_SR[SR_MSR], t0);
+    tcg_temp_free(t0);
+}
+
 /* True if ALU operand b is a small immediate that may deserve
    faster treatment.  */
 static inline int dec_alu_op_b_is_small_imm(DisasContext *dc)
@@ -175,6 +193,7 @@ static inline TCGv *dec_alu_op_b(DisasContext *dc)
 static void dec_add(DisasContext *dc)
 {
     unsigned int k, c;
+    TCGv cf;
 
     k = dc->opcode & 4;
     c = dc->opcode & 2;
@@ -183,22 +202,52 @@ static void dec_add(DisasContext *dc)
             dc->type_b ? "i" : "", k ? "k" : "", c ? "c" : "",
             dc->rd, dc->ra, dc->rb);
 
-    if (k && !c && dc->rd)
-        tcg_gen_add_tl(cpu_R[dc->rd], cpu_R[dc->ra], *(dec_alu_op_b(dc)));
-    else if (dc->rd)
-        gen_helper_addkc(cpu_R[dc->rd], cpu_R[dc->ra], *(dec_alu_op_b(dc)),
-                         tcg_const_tl(k), tcg_const_tl(c));
-    else {
-        TCGv d = tcg_temp_new();
-        gen_helper_addkc(d, cpu_R[dc->ra], *(dec_alu_op_b(dc)),
-                         tcg_const_tl(k), tcg_const_tl(c));
-        tcg_temp_free(d);
+    /* Take care of the easy cases first.  */
+    if (k) {
+        /* k - keep carry, no need to update MSR.  */
+        /* If rd == r0, it's a nop.  */
+        if (dc->rd) {
+            tcg_gen_add_tl(cpu_R[dc->rd], cpu_R[dc->ra], *(dec_alu_op_b(dc)));
+
+            if (c) {
+                /* c - Add carry into the result.  */
+                cf = tcg_temp_new();
+
+                read_carry(dc, cf);
+                tcg_gen_add_tl(cpu_R[dc->rd], cpu_R[dc->rd], cf);
+                tcg_temp_free(cf);
+            }
+        }
+        return;
     }
+
+    /* From now on, we can assume k is zero.  So we need to update MSR.  */
+    /* Extract carry.  */
+    cf = tcg_temp_new();
+    if (c) {
+        read_carry(dc, cf);
+    } else {
+        tcg_gen_movi_tl(cf, 0);
+    }
+
+    if (dc->rd) {
+        TCGv ncf = tcg_temp_new();
+        gen_helper_carry(ncf, cpu_R[dc->ra], *(dec_alu_op_b(dc)), cf);
+        tcg_gen_add_tl(cpu_R[dc->rd], cpu_R[dc->ra], *(dec_alu_op_b(dc)));
+        tcg_gen_add_tl(cpu_R[dc->rd], cpu_R[dc->rd], cf);
+        write_carry(dc, ncf);
+        tcg_temp_free(ncf);
+    } else {
+        gen_helper_carry(cf, cpu_R[dc->ra], *(dec_alu_op_b(dc)), cf);
+        write_carry(dc, cf);
+    }
+    tcg_temp_free(cf);
 }
 
 static void dec_sub(DisasContext *dc)
 {
     unsigned int u, cmp, k, c;
+    TCGv cf, na;
 
     u = dc->imm & 2;
     k = dc->opcode & 4;
@@ -213,24 +262,57 @@ static void dec_sub(DisasContext *dc)
             else
                 gen_helper_cmp(cpu_R[dc->rd], cpu_R[dc->ra], cpu_R[dc->rb]);
         }
-    } else {
-        LOG_DIS("sub%s%s r%d, r%d r%d\n",
-                 k ? "k" : "",  c ? "c" : "", dc->rd, dc->ra, dc->rb);
-
-        if (!k || c) {
-            TCGv t;
-            t = tcg_temp_new();
-            if (dc->rd)
-                gen_helper_subkc(cpu_R[dc->rd], cpu_R[dc->ra], *(dec_alu_op_b(dc)),
-                                 tcg_const_tl(k), tcg_const_tl(c));
-            else
-                gen_helper_subkc(t, cpu_R[dc->ra], *(dec_alu_op_b(dc)),
-                                 tcg_const_tl(k), tcg_const_tl(c));
-            tcg_temp_free(t);
-        }
-        else if (dc->rd)
-            tcg_gen_sub_tl(cpu_R[dc->rd], *(dec_alu_op_b(dc)), cpu_R[dc->ra]);
+        return;
     }
+
+    LOG_DIS("sub%s%s r%d, r%d r%d\n",
+             k ? "k" : "",  c ? "c" : "", dc->rd, dc->ra, dc->rb);
+
+    /* Take care of the easy cases first.  */
+    if (k) {
+        /* k - keep carry, no need to update MSR.  */
+        /* If rd == r0, it's a nop.  */
+        if (dc->rd) {
+            tcg_gen_sub_tl(cpu_R[dc->rd], *(dec_alu_op_b(dc)), cpu_R[dc->ra]);
+
+            if (c) {
+                /* c - Add carry into the result.  */
+                cf = tcg_temp_new();
+
+                read_carry(dc, cf);
+                tcg_gen_add_tl(cpu_R[dc->rd], cpu_R[dc->rd], cf);
+                tcg_temp_free(cf);
+            }
+        }
+        return;
+    }
+
+    /* From now on, we can assume k is zero.  So we need to update MSR.  */
+    /* Extract carry. And complement a into na.  */
+    cf = tcg_temp_new();
+    na = tcg_temp_new();
+    if (c) {
+        read_carry(dc, cf);
+    } else {
+        tcg_gen_movi_tl(cf, 1);
+    }
+
+    /* d = b + ~a + c. carry defaults to 1.  */
+    tcg_gen_not_tl(na, cpu_R[dc->ra]);
+
+    if (dc->rd) {
+        TCGv ncf = tcg_temp_new();
+        gen_helper_carry(ncf, na, *(dec_alu_op_b(dc)), cf);
+        tcg_gen_add_tl(cpu_R[dc->rd], na, *(dec_alu_op_b(dc)));
+        tcg_gen_add_tl(cpu_R[dc->rd], cpu_R[dc->rd], cf);
+        write_carry(dc, ncf);
+        tcg_temp_free(ncf);
+    } else {
+        gen_helper_carry(cf, na, *(dec_alu_op_b(dc)), cf);
+        write_carry(dc, cf);
+    }
+    tcg_temp_free(cf);
+    tcg_temp_free(na);
 }
 
 static void dec_pattern(DisasContext *dc)
@@ -335,25 +417,6 @@ static void dec_xor(DisasContext *dc)
     if (dc->rd)
         tcg_gen_xor_tl(cpu_R[dc->rd], cpu_R[dc->ra], *(dec_alu_op_b(dc)));
 }
-
-static void read_carry(DisasContext *dc, TCGv d)
-{
-    tcg_gen_shri_tl(d, cpu_SR[SR_MSR], 31);
-}
-
-static void write_carry(DisasContext *dc, TCGv v)
-{
-    TCGv t0 = tcg_temp_new();
-    tcg_gen_shli_tl(t0, v, 31);
-    tcg_gen_sari_tl(t0, t0, 31);
-    tcg_gen_mov_tl(env_debug, t0);
-    tcg_gen_andi_tl(t0, t0, (MSR_C | MSR_CC));
-    tcg_gen_andi_tl(cpu_SR[SR_MSR], cpu_SR[SR_MSR],
-                    ~(MSR_C | MSR_CC));
-    tcg_gen_or_tl(cpu_SR[SR_MSR], cpu_SR[SR_MSR], t0);
-    tcg_temp_free(t0);
-}
-
 
 static inline void msr_read(DisasContext *dc, TCGv d)
 {
@@ -751,10 +814,12 @@ static void dec_bit(DisasContext *dc)
 
 static inline void sync_jmpstate(DisasContext *dc)
 {
-    if (dc->jmp == JMP_DIRECT) {
-            dc->jmp = JMP_INDIRECT;
+    if (dc->jmp == JMP_DIRECT || dc->jmp == JMP_DIRECT_CC) {
+        if (dc->jmp == JMP_DIRECT) {
             tcg_gen_movi_tl(env_btaken, 1);
-            tcg_gen_movi_tl(env_btarget, dc->jmp_pc);
+        }
+        dc->jmp = JMP_INDIRECT;
+        tcg_gen_movi_tl(env_btarget, dc->jmp_pc);
     }
 }
 
@@ -785,7 +850,7 @@ static inline TCGv *compute_ldst_addr(DisasContext *dc, TCGv *t)
 {
     unsigned int extimm = dc->tb_flags & IMM_FLAG;
 
-    /* Treat the fast cases first.  */
+    /* Treat the common cases first.  */
     if (!dc->type_b) {
         /* If any of the regs is r0, return a ptr to the other.  */
         if (dc->ra == 0) {
@@ -814,12 +879,35 @@ static inline TCGv *compute_ldst_addr(DisasContext *dc, TCGv *t)
     return t;
 }
 
+static inline void dec_byteswap(DisasContext *dc, TCGv dst, TCGv src, int size)
+{
+    if (size == 4) {
+        tcg_gen_bswap32_tl(dst, src);
+    } else if (size == 2) {
+        TCGv t = tcg_temp_new();
+
+        /* bswap16 assumes the high bits are zero.  */
+        tcg_gen_andi_tl(t, src, 0xffff);
+        tcg_gen_bswap16_tl(dst, t);
+        tcg_temp_free(t);
+    } else {
+        /* Ignore.
+        cpu_abort(dc->env, "Invalid ldst byteswap size %d\n", size);
+        */
+    }
+}
+
 static void dec_load(DisasContext *dc)
 {
     TCGv t, *addr;
-    unsigned int size;
+    unsigned int size, rev = 0;
 
     size = 1 << (dc->opcode & 3);
+
+    if (!dc->type_b) {
+        rev = (dc->ir >> 9) & 1;
+    }
+
     if (size > 4 && (dc->tb_flags & MSR_EE_FLAG)
           && (dc->env->pvr.regs[2] & PVR2_ILL_OPCODE_EXC_MASK)) {
         tcg_gen_movi_tl(cpu_SR[SR_ESR], ESR_EC_ILLEGAL_OP);
@@ -827,9 +915,61 @@ static void dec_load(DisasContext *dc)
         return;
     }
 
-    LOG_DIS("l %x %d\n", dc->opcode, size);
+    LOG_DIS("l%d%s%s\n", size, dc->type_b ? "i" : "", rev ? "r" : "");
+
     t_sync_flags(dc);
     addr = compute_ldst_addr(dc, &t);
+
+    /*
+     * When doing reverse accesses we need to do two things.
+     *
+     * 1. Reverse the address wrt endianess.
+     * 2. Byteswap the data lanes on the way back into the CPU core.
+     */
+    if (rev && size != 4) {
+        /* Endian reverse the address. t is addr.  */
+        switch (size) {
+            case 1:
+            {
+                /* 00 -> 11
+                   01 -> 10
+                   10 -> 10
+                   11 -> 00 */
+                TCGv low = tcg_temp_new();
+
+                /* Force addr into the temp.  */
+                if (addr != &t) {
+                    t = tcg_temp_new();
+                    tcg_gen_mov_tl(t, *addr);
+                    addr = &t;
+                }
+
+                tcg_gen_andi_tl(low, t, 3);
+                tcg_gen_sub_tl(low, tcg_const_tl(3), low);
+                tcg_gen_andi_tl(t, t, ~3);
+                tcg_gen_or_tl(t, t, low);
+                tcg_gen_mov_tl(env_imm, t);
+                tcg_temp_free(low);
+                break;
+            }
+
+            case 2:
+                /* 00 -> 10
+                   10 -> 00.  */
+                /* Force addr into the temp.  */
+                if (addr != &t) {
+                    t = tcg_temp_new();
+                    tcg_gen_xori_tl(t, *addr, 2);
+                    addr = &t;
+                } else {
+                    tcg_gen_xori_tl(t, t, 2);
+                }
+                break;
+            default:
+                cpu_abort(dc->env, "Invalid reverse size\n");
+                break;
+        }
+    }
 
     /* If we get a fault on a dslot, the jmpstate better be in sync.  */
     sync_jmpstate(dc);
@@ -849,13 +989,22 @@ static void dec_load(DisasContext *dc)
         tcg_gen_movi_tl(cpu_SR[SR_PC], dc->pc);
         gen_helper_memalign(*addr, tcg_const_tl(dc->rd),
                             tcg_const_tl(0), tcg_const_tl(size - 1));
-        if (dc->rd)
-            tcg_gen_mov_tl(cpu_R[dc->rd], v);
+        if (dc->rd) {
+            if (rev) {
+                dec_byteswap(dc, cpu_R[dc->rd], v, size);
+            } else {
+                tcg_gen_mov_tl(cpu_R[dc->rd], v);
+            }
+        }
         tcg_temp_free(v);
     } else {
         if (dc->rd) {
             gen_load(dc, cpu_R[dc->rd], *addr, size);
+            if (rev) {
+                dec_byteswap(dc, cpu_R[dc->rd], cpu_R[dc->rd], size);
+            }
         } else {
+            /* We are loading into r0, no need to reverse.  */
             gen_load(dc, env_imm, *addr, size);
         }
     }
@@ -882,9 +1031,12 @@ static void gen_store(DisasContext *dc, TCGv addr, TCGv val,
 static void dec_store(DisasContext *dc)
 {
     TCGv t, *addr;
-    unsigned int size;
+    unsigned int size, rev = 0;
 
     size = 1 << (dc->opcode & 3);
+    if (!dc->type_b) {
+        rev = (dc->ir >> 9) & 1;
+    }
 
     if (size > 4 && (dc->tb_flags & MSR_EE_FLAG)
           && (dc->env->pvr.regs[2] & PVR2_ILL_OPCODE_EXC_MASK)) {
@@ -893,19 +1045,83 @@ static void dec_store(DisasContext *dc)
         return;
     }
 
-    LOG_DIS("s%d%s\n", size, dc->type_b ? "i" : "");
+    LOG_DIS("s%d%s%s\n", size, dc->type_b ? "i" : "", rev ? "r" : "");
     t_sync_flags(dc);
     /* If we get a fault on a dslot, the jmpstate better be in sync.  */
     sync_jmpstate(dc);
     addr = compute_ldst_addr(dc, &t);
 
-    gen_store(dc, *addr, cpu_R[dc->rd], size);
+    if (rev && size != 4) {
+        /* Endian reverse the address. t is addr.  */
+        switch (size) {
+            case 1:
+            {
+                /* 00 -> 11
+                   01 -> 10
+                   10 -> 10
+                   11 -> 00 */
+                TCGv low = tcg_temp_new();
+
+                /* Force addr into the temp.  */
+                if (addr != &t) {
+                    t = tcg_temp_new();
+                    tcg_gen_mov_tl(t, *addr);
+                    addr = &t;
+                }
+
+                tcg_gen_andi_tl(low, t, 3);
+                tcg_gen_sub_tl(low, tcg_const_tl(3), low);
+                tcg_gen_andi_tl(t, t, ~3);
+                tcg_gen_or_tl(t, t, low);
+                tcg_gen_mov_tl(env_imm, t);
+                tcg_temp_free(low);
+                break;
+            }
+
+            case 2:
+                /* 00 -> 10
+                   10 -> 00.  */
+                /* Force addr into the temp.  */
+                if (addr != &t) {
+                    t = tcg_temp_new();
+                    tcg_gen_xori_tl(t, *addr, 2);
+                    addr = &t;
+                } else {
+                    tcg_gen_xori_tl(t, t, 2);
+                }
+                break;
+            default:
+                cpu_abort(dc->env, "Invalid reverse size\n");
+                break;
+        }
+
+        if (size != 1) {
+            TCGv bs_data = tcg_temp_new();
+            dec_byteswap(dc, bs_data, cpu_R[dc->rd], size);
+            gen_store(dc, *addr, bs_data, size);
+            tcg_temp_free(bs_data);
+        } else {
+            gen_store(dc, *addr, cpu_R[dc->rd], size);
+        }
+    } else {
+        if (rev) {
+            TCGv bs_data = tcg_temp_new();
+            dec_byteswap(dc, bs_data, cpu_R[dc->rd], size);
+            gen_store(dc, *addr, bs_data, size);
+            tcg_temp_free(bs_data);
+        } else {
+            gen_store(dc, *addr, cpu_R[dc->rd], size);
+        }
+    }
 
     /* Verify alignment if needed.  */
     if ((dc->env->pvr.regs[2] & PVR2_UNALIGNED_EXC_MASK) && size > 1) {
         tcg_gen_movi_tl(cpu_SR[SR_PC], dc->pc);
         /* FIXME: if the alignment is wrong, we should restore the value
-         *        in memory.
+         *        in memory. One possible way to acheive this is to probe
+         *        the MMU prior to the memaccess, thay way we could put
+         *        the alignment checks in between the probe and the mem
+         *        access.
          */
         gen_helper_memalign(*addr, tcg_const_tl(dc->rd),
                             tcg_const_tl(1), tcg_const_tl(size - 1));
@@ -976,11 +1192,13 @@ static void dec_bcc(DisasContext *dc)
         int32_t offset = (int32_t)((int16_t)dc->imm); /* sign-extend.  */
 
         tcg_gen_movi_tl(env_btarget, dc->pc + offset);
+        dc->jmp = JMP_DIRECT_CC;
+        dc->jmp_pc = dc->pc + offset;
     } else {
+        dc->jmp = JMP_INDIRECT;
         tcg_gen_movi_tl(env_btarget, dc->pc);
         tcg_gen_add_tl(env_btarget, env_btarget, *(dec_alu_op_b(dc)));
     }
-    dc->jmp = JMP_INDIRECT;
     eval_cc(dc, cc, env_btaken, cpu_R[dc->ra], tcg_const_tl(0));
 }
 
@@ -1130,6 +1348,7 @@ static void dec_rts(DisasContext *dc)
     } else
         LOG_DIS("rts ir=%x\n", dc->ir);
 
+    dc->jmp = JMP_INDIRECT;
     tcg_gen_movi_tl(env_btaken, 1);
     tcg_gen_add_tl(env_btarget, cpu_R[dc->ra], *(dec_alu_op_b(dc)));
 }
@@ -1370,6 +1589,9 @@ gen_intermediate_code_internal(CPUState *env, TranslationBlock *tb,
     dc->is_jmp = DISAS_NEXT;
     dc->jmp = 0;
     dc->delayed_branch = !!(dc->tb_flags & D_FLAG);
+    if (dc->delayed_branch) {
+        dc->jmp = JMP_INDIRECT;
+    }
     dc->pc = pc_start;
     dc->singlestep_enabled = env->singlestep_enabled;
     dc->cpustate_changed = 0;
@@ -1441,9 +1663,25 @@ gen_intermediate_code_internal(CPUState *env, TranslationBlock *tb,
                 /* Clear the delay slot flag.  */
                 dc->tb_flags &= ~D_FLAG;
                 /* If it is a direct jump, try direct chaining.  */
-                if (dc->jmp != JMP_DIRECT) {
+                if (dc->jmp == JMP_INDIRECT) {
                     eval_cond_jmp(dc, env_btarget, tcg_const_tl(dc->pc));
                     dc->is_jmp = DISAS_JUMP;
+                } else if (dc->jmp == JMP_DIRECT) {
+                    t_sync_flags(dc);
+                    gen_goto_tb(dc, 0, dc->jmp_pc);
+                    dc->is_jmp = DISAS_TB_JUMP;
+                } else if (dc->jmp == JMP_DIRECT_CC) {
+                    int l1;
+
+                    t_sync_flags(dc);
+                    l1 = gen_new_label();
+                    /* Conditional jmp.  */
+                    tcg_gen_brcondi_tl(TCG_COND_NE, env_btaken, 0, l1);
+                    gen_goto_tb(dc, 1, dc->pc);
+                    gen_set_label(l1);
+                    gen_goto_tb(dc, 0, dc->jmp_pc);
+
+                    dc->is_jmp = DISAS_TB_JUMP;
                 }
                 break;
             }
@@ -1457,7 +1695,7 @@ gen_intermediate_code_internal(CPUState *env, TranslationBlock *tb,
                  && num_insns < max_insns);
 
     npc = dc->pc;
-    if (dc->jmp == JMP_DIRECT) {
+    if (dc->jmp == JMP_DIRECT || dc->jmp == JMP_DIRECT_CC) {
         if (dc->tb_flags & D_FLAG) {
             dc->is_jmp = DISAS_UPDATE;
             tcg_gen_movi_tl(cpu_SR[SR_PC], npc);

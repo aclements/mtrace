@@ -1022,7 +1022,7 @@ DEF("mtrace-all", 0, QEMU_OPTION_mtrace_all,
     "-mtrace-all     Log all memory accesses\n"
     "                (the default is only the shared cache lines)\n", QEMU_ARCH_I386)
 DEF("mtrace-locked", 0, QEMU_OPTION_mtrace_locked,
-    "-mtrace-locked    log all memory accesses by locked instructions\n", QEMU_ARCH_I386)
+    "-mtrace-locked  Log all memory accesses by locked instructions\n", QEMU_ARCH_I386)
 DEF("mtrace-calls", 0, QEMU_OPTION_mtrace_calls,
     "-mtrace-calls   Log all retired call and ret instructions\n"
     "                (the default is to ignore call and ret instructions)\n", QEMU_ARCH_I386)
@@ -1072,17 +1072,19 @@ DEF("net", HAS_ARG, QEMU_OPTION_net,
     "-net tap[,vlan=n][,name=str],ifname=name\n"
     "                connect the host TAP network interface to VLAN 'n'\n"
 #else
-    "-net tap[,vlan=n][,name=str][,fd=h][,ifname=name][,script=file][,downscript=dfile][,sndbuf=nbytes][,vnet_hdr=on|off][,vhost=on|off][,vhostfd=h]\n"
+    "-net tap[,vlan=n][,name=str][,fd=h][,ifname=name][,script=file][,downscript=dfile][,sndbuf=nbytes][,vnet_hdr=on|off][,vhost=on|off][,vhostfd=h][,vhostforce=on|off]\n"
     "                connect the host TAP network interface to VLAN 'n' and use the\n"
     "                network scripts 'file' (default=" DEFAULT_NETWORK_SCRIPT ")\n"
     "                and 'dfile' (default=" DEFAULT_NETWORK_DOWN_SCRIPT ")\n"
     "                use '[down]script=no' to disable script execution\n"
     "                use 'fd=h' to connect to an already opened TAP interface\n"
     "                use 'sndbuf=nbytes' to limit the size of the send buffer (the\n"
-    "                default of 'sndbuf=1048576' can be disabled using 'sndbuf=0')\n"
+    "                default is disabled 'sndbuf=0' to enable flow control set 'sndbuf=1048576')\n"
     "                use vnet_hdr=off to avoid enabling the IFF_VNET_HDR tap flag\n"
     "                use vnet_hdr=on to make the lack of IFF_VNET_HDR support an error condition\n"
     "                use vhost=on to enable experimental in kernel accelerator\n"
+    "                    (only has effect for virtio guests which use MSIX)\n"
+    "                use vhostforce=on to force vhost on for non-MSIX virtio guests\n"
     "                use 'vhostfd=h' to connect to an already opened vhost net device\n"
 #endif
     "-net socket[,vlan=n][,name=str][,fd=h][,listen=[host]:port][,connect=host:port]\n"
@@ -1390,6 +1392,9 @@ DEF("chardev", HAS_ARG, QEMU_OPTION_chardev,
 #if defined(__linux__) || defined(__FreeBSD__) || defined(__DragonFly__)
     "-chardev parport,id=id,path=path[,mux=on|off]\n"
 #endif
+#if defined(CONFIG_SPICE)
+    "-chardev spicevmc,id=id,name=name[,debug=debug]\n"
+#endif
     , QEMU_ARCH_ALL
 )
 
@@ -1414,7 +1419,8 @@ Backend is one of:
 @option{stdio},
 @option{braille},
 @option{tty},
-@option{parport}.
+@option{parport},
+@option{spicevmc}.
 The specific backend will determine the applicable options.
 
 All devices must have an id, which can be any string up to 127 characters long.
@@ -1589,6 +1595,16 @@ Connect to a local parallel port.
 
 @option{path} specifies the path to the parallel port device. @option{path} is
 required.
+
+#if defined(CONFIG_SPICE)
+@item -chardev spicevmc ,id=@var{id} ,debug=@var{debug}, name=@var{name}
+
+@option{debug} debug level for spicevmc
+
+@option{name} name of spice channel to connect to
+
+Connect to a spice virtual machine channel, such as vdiport.
+#endif
 
 @end table
 ETEXI

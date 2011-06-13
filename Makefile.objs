@@ -19,7 +19,7 @@ block-obj-$(CONFIG_POSIX) += posix-aio-compat.o
 block-obj-$(CONFIG_LINUX_AIO) += linux-aio.o
 
 block-nested-y += raw.o cow.o qcow.o vdi.o vmdk.o cloop.o dmg.o bochs.o vpc.o vvfat.o
-block-nested-y += qcow2.o qcow2-refcount.o qcow2-cluster.o qcow2-snapshot.o
+block-nested-y += qcow2.o qcow2-refcount.o qcow2-cluster.o qcow2-snapshot.o qcow2-cache.o
 block-nested-y += qed.o qed-gencb.o qed-l2-cache.o qed-table.o qed-cluster.o
 block-nested-y += qed-check.o
 block-nested-y += parallels.o nbd.o blkdebug.o sheepdog.o blkverify.o
@@ -88,7 +88,7 @@ common-obj-y += eeprom93xx.o
 common-obj-y += scsi-disk.o cdrom.o
 common-obj-y += scsi-generic.o scsi-bus.o
 common-obj-y += usb.o usb-hub.o usb-$(HOST_USB).o usb-hid.o usb-msd.o usb-wacom.o
-common-obj-y += usb-serial.o usb-net.o usb-bus.o
+common-obj-y += usb-serial.o usb-net.o usb-bus.o usb-desc.o
 common-obj-$(CONFIG_SSI) += ssi.o
 common-obj-$(CONFIG_SSI_SD) += ssi-sd.o
 common-obj-$(CONFIG_SD) += sd.o
@@ -105,7 +105,7 @@ common-obj-$(CONFIG_BRLAPI) += baum.o
 common-obj-$(CONFIG_POSIX) += migration-exec.o migration-unix.o migration-fd.o
 common-obj-$(CONFIG_WIN32) += version.o
 
-common-obj-$(CONFIG_SPICE) += ui/spice-core.o ui/spice-input.o ui/spice-display.o
+common-obj-$(CONFIG_SPICE) += ui/spice-core.o ui/spice-input.o ui/spice-display.o spice-qemu-char.o
 
 audio-obj-y = audio.o noaudio.o wavaudio.o mixeng.o
 audio-obj-$(CONFIG_SDL) += sdlaudio.o
@@ -169,9 +169,7 @@ hw-obj-y =
 hw-obj-y += vl.o loader.o
 hw-obj-$(CONFIG_VIRTIO) += virtio.o virtio-console.o
 hw-obj-y += fw_cfg.o
-# FIXME: Core PCI code and its direct dependencies are required by the
-# QMP query-pci command.
-hw-obj-y += pci.o pci_bridge.o
+hw-obj-$(CONFIG_PCI) += pci.o pci_bridge.o
 hw-obj-$(CONFIG_PCI) += msix.o msi.o
 hw-obj-$(CONFIG_PCI) += pci_host.o pcie_host.o
 hw-obj-$(CONFIG_PCI) += ioh3420.o xio3130_upstream.o xio3130_downstream.o
@@ -246,6 +244,7 @@ hw-obj-$(CONFIG_IDE_CMD646) += ide/cmd646.o
 hw-obj-$(CONFIG_IDE_MACIO) += ide/macio.o
 hw-obj-$(CONFIG_IDE_VIA) += ide/via.o
 hw-obj-$(CONFIG_AHCI) += ide/ahci.o
+hw-obj-$(CONFIG_AHCI) += ide/ich.o
 
 # SCSI layer
 hw-obj-$(CONFIG_LSI_SCSI_PCI) += lsi53c895a.o

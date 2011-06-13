@@ -93,7 +93,7 @@ def sudo(args):
     args.insert(0, 'sudo')
     return ProcessHelper(args)
 
-class DiskImage:
+class Root(object):
     def __init__(self, filepath):
         self.filepath = filepath
         self.tmp = 'tmp.%u' % os.getpid()
@@ -102,6 +102,47 @@ class DiskImage:
         args.insert(0, self.tmp)
         args.insert(0, 'chroot')
         return sudo(args)
+
+    def mount(self, quiet = False):
+        pass
+
+    def umount(self, quiet = False):
+        pass
+
+    def create(self, img_size):
+        pass
+
+    def format(self):
+        pass
+
+    def bootstrap(self, include):
+        sudo(['debootstrap',
+              '--arch',
+              'amd64',
+              '--include=' + include,
+              '--exclude=udev',
+              '--variant=minbase',
+              'squeeze',
+              self.tmp,
+              'http://mirrors.xmission.com/debian/']).run()
+
+    def cleanup(self):
+        try:
+            os.rmdir(self.tmp)
+        except:
+            pass
+
+    def run_cmds(self, cmds):
+        for cmd in cmds:
+            cmd.run(self)
+
+    def finish(self):
+        shutil.move(self.tmp, self.filepath)
+
+class DiskImage(Root):
+    def __init__(self, filepath):
+        self.filepath = filepath
+        self.tmp = 'tmp.%u' % os.getpid()
 
     def mount(self, quiet = False):
         if os.path.exists(self.tmp):
@@ -135,15 +176,7 @@ class DiskImage:
 
     def bootstrap(self, include):
         self.mount()
-        sudo(['debootstrap',
-              '--arch',
-              'amd64',
-              '--include=' + include,
-              '--exclude=udev',
-              '--variant=minbase',
-              'squeeze',
-              self.tmp,
-              'http://mirrors.xmission.com/debian/']).run()
+        super(DiskImage, self).bootstrap(include)
         self.umount()
 
     def cleanup(self):
@@ -159,13 +192,17 @@ class DiskImage:
 
     def run_cmds(self, cmds):
         self.mount()
-        for cmd in cmds:
-            cmd.run(self)
+        super(DiskImage, self).run_cmds(cmds)
         self.umount()
+
+    def finish(self):
+        pass
+
+default_root_type = Root
 
 def usage():
     print """Usage: make-img.py output-file [ -size size -fixup fixup -copy src,dst 
-                      -include pkg0,pkg1,... -mosbench mosbenchsrc ]
+                      -include pkg0,pkg1,... -mosbench mosbenchsrc -imgtype imgtype ]
 
     'size' is the disk image size in kilobytes. Optional suffixes
       'M' (megabyte, 1024 * 1024) and 'G' (gigabyte, 1024 * 1024 * 1024) are
@@ -180,6 +217,9 @@ def usage():
     'pkg0,pkg1,...' is a comma separated list of Debian package names
 
     'mosbenchsrc' is the path to your mosbench source tree
+
+    'imgtype' is the type of disk image to create.  'ext3' is the only supported
+      option.  The default is to create a root directory and not a disk image.
 """
     exit(1)
 
@@ -217,12 +257,20 @@ def parse_args(argv):
         include_handler(mosbench_includes)
         copy_handler('/etc/hosts,/etc/hosts')
 
+    def imgtype_handler(val):
+        global default_root_type
+        if val == 'ext3':
+            default_root_type = DiskImage
+        else:
+            raise Exception('Unknown image type: ' + val)
+
     handler = {
         '-size': size_handler,
         '-fixup': fixup_handler,
         '-copy': copy_handler,
         '-include': include_handler,
-        '-mosbench': mosbench_handler
+        '-mosbench': mosbench_handler,
+        '-imgtype' : imgtype_handler
     }
 
     args = argv[2:]
@@ -234,22 +282,23 @@ def main(argv=None):
         argv = sys.argv
     
     parse_args(argv)
-    img = DiskImage(argv[1])
+    root = default_root_type(argv[1])
 
     def on_sigint(signum, frame):
-        img.cleanup()
+        root.cleanup()
     signal.signal(signal.SIGINT, on_sigint)
 
     try:
-        img.create(default_img_size)
-        img.format()
-        img.bootstrap(default_includes)
-        img.run_cmds(default_cmds)
+        root.create(default_img_size)
+        root.format()
+        root.bootstrap(default_includes)
+        root.run_cmds(default_cmds)
+        root.finish()
     except Exception as ex:
         print_err('\n[failed]')
         traceback.print_exc(file=sys.stdout)
 
-    img.cleanup()
+    root.cleanup()
     exit(0)
 
 if __name__ == "__main__":

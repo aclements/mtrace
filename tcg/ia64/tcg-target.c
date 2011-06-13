@@ -871,6 +871,9 @@ static void tcg_out_br(TCGContext *s, int label_index)
 {
     TCGLabel *l = &s->labels[label_index];
 
+    /* We pay attention here to not modify the branch target by reading
+       the existing value and using it again. This ensure that caches and
+       memory are kept coherent during retranslation. */
     tcg_out_bundle(s, mmB,
                    tcg_opc_m48(TCG_REG_P0, OPC_NOP_M48, 0),
                    tcg_opc_m48(TCG_REG_P0, OPC_NOP_M48, 0),
@@ -1329,7 +1332,7 @@ static inline void tcg_out_bswap32(TCGContext *s, TCGArg ret, TCGArg arg)
 
 static inline void tcg_out_bswap64(TCGContext *s, TCGArg ret, TCGArg arg)
 {
-    tcg_out_bundle(s, mII,
+    tcg_out_bundle(s, miI,
                    tcg_opc_m48(TCG_REG_P0, OPC_NOP_M48, 0),
                    tcg_opc_i18(TCG_REG_P0, OPC_NOP_I18, 0),
                    tcg_opc_i3 (TCG_REG_P0, OPC_MUX1_I3, ret, arg, 0xb));

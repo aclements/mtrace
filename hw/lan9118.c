@@ -187,7 +187,7 @@ typedef struct {
     uint32_t phy_int_mask;
 
     int eeprom_writable;
-    uint8_t eeprom[8];
+    uint8_t eeprom[128];
 
     int tx_fifo_size;
     LAN9118Packet *txp;
@@ -785,6 +785,12 @@ static void do_mac_write(lan9118_state *s, int reg, uint32_t val)
     case MAC_FLOW:
         s->mac_flow = val & 0xffff0000;
         break;
+    case MAC_VLAN1:
+        /* Writing to this register changes a condition for
+         * FrameTooLong bit in rx_status.  Since we do not set
+         * FrameTooLong anyway, just ignore write to this.
+         */
+        break;
     default:
         hw_error("lan9118: Unimplemented MAC register write: %d = 0x%x\n",
                  s->mac_cmd & 0xf, val);
@@ -1003,7 +1009,7 @@ static void lan9118_writel(void *opaque, target_phys_addr_t offset,
         s->afc_cfg = val & 0x00ffffff;
         break;
     case CSR_E2P_CMD:
-        lan9118_eeprom_cmd(s, (val >> 28) & 7, val & 0xff);
+        lan9118_eeprom_cmd(s, (val >> 28) & 7, val & 0x7f);
         break;
     case CSR_E2P_DATA:
         s->e2p_data = val & 0xff;
