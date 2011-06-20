@@ -424,9 +424,11 @@ private:
 				MtraceObject object;
 				SerialSectionKey key;
 
-				if (!mtrace_label_map.object(l->lock, object))
-					die("SerialSections::handle: missing %"PRIx64" %s", 
-					    l->lock, l->str);
+				if (!mtrace_label_map.object(l->lock, object)) {
+					fprintf(stderr, "SerialSections::handle: missing %"PRIx64" %s\n", 
+						l->lock, l->str);
+					return;
+				}
 
 				key.lock_id = l->lock;
 				key.obj_id = object.id_;
