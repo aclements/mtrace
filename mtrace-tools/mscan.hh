@@ -57,7 +57,7 @@ struct MtraceObject {
 class MtraceLabelMap {
 public:
 	void add_label(const struct mtrace_label_entry *l) {
-		static uint64_t object_count;
+		extern uint64_t mtrace_object_count;
 		MtraceObject *o;
 		object_id_t id;
 		
@@ -66,12 +66,8 @@ public:
 
 		if (object_first_.find(l->guest_addr) != object_first_.end())
 			die("MtraceLabelMap::add_label: overlapping labels");
-		
-		// XXX ignore for now
-		if (l->label_type == mtrace_label_block)
-			return;
-		
-		id = ++object_count;
+				
+		id = ++mtrace_object_count;
 		o = new MtraceObject(id, l);
 
 		if (l->bytes == 0)
@@ -83,10 +79,6 @@ public:
 
 	void rem_label(const struct mtrace_label_entry *l) {
 		static uint64_t misses[mtrace_label_end];
-
-		// XXX ignore for now
-		if (l->label_type == mtrace_label_block)
-			return;
 
 		auto it = object_first_.find(l->guest_addr);
 		if (it == object_first_.end()) {
@@ -159,6 +151,40 @@ public:
 private:
 	map<guest_addr_t, MtraceObject *> object_first_;
 	map<guest_addr_t, MtraceObject *> object_last_;
+};
+
+class MtraceAddr2label {
+public:
+	void add_label(const struct mtrace_label_entry *l) {
+		if (l->label_type == mtrace_label_block)
+			blocks_.add_label(l);
+		else
+			types_.add_label(l);
+	}
+
+	void rem_label(const struct mtrace_label_entry *l) {
+		if (l->label_type == mtrace_label_block)
+			blocks_.rem_label(l);
+		else
+			types_.rem_label(l);
+	}
+
+	
+	bool last_lower_bound(guest_addr_t addr, MtraceObject &ret) const {
+		return types_.last_lower_bound(addr, ret);
+	}
+
+	bool object(guest_addr_t addr, MtraceObject &ret) const {
+		return types_.object(addr, ret);
+	}
+
+	list<MtraceObject> objects_on_cline(guest_addr_t addr) const {
+		return types_.objects_on_cline(addr);
+	}
+
+private:
+	MtraceLabelMap blocks_;
+	MtraceLabelMap types_;
 };
 
 class MtraceAddr2line{
@@ -234,6 +260,6 @@ extern pc_t mtrace_call_pc[MAX_CPUS];
 // The current task ID
 extern tid_t mtrace_tid[MAX_CPUS];
 // A map from guest address to kernel object
-extern MtraceLabelMap mtrace_label_map;
+extern MtraceAddr2label mtrace_label_map;
 
 #endif // _MSCAN_HH_

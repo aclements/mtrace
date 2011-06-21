@@ -32,7 +32,8 @@ MtraceAddr2line *addr2line;
 MtraceSummary mtrace_summary;
 pc_t mtrace_call_pc[MAX_CPUS];
 tid_t mtrace_tid[MAX_CPUS];
-MtraceLabelMap mtrace_label_map;
+MtraceAddr2label mtrace_label_map;
+uint64_t mtrace_object_count;
 
 static LabelMap labels;
 static list<struct mtrace_label_entry> percpu_labels;
