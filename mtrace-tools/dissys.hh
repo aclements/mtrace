@@ -175,6 +175,10 @@ public:
 			"sys_unmap",
 			"sys_wait"
 		};
+		appname_to_syscalls_["xv6-dirbench"] = {
+			"sys_open",
+			"sys_close",
+		};
 	}
 
 	virtual void exit(void) {
