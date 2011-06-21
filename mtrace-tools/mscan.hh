@@ -175,7 +175,11 @@ public:
 	}
 
 	bool object(guest_addr_t addr, MtraceObject &ret) const {
-		return types_.object(addr, ret);
+		bool r;
+		r = types_.object(addr, ret);
+		if (!r)
+			r = blocks_.object(addr, ret);
+		return r;
 	}
 
 	list<MtraceObject> objects_on_cline(guest_addr_t addr) const {
