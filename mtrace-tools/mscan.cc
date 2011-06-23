@@ -261,6 +261,7 @@ static void init_static_syms(const char *sym_file)
 			l.host_addr = 0;
 			l.guest_addr = addr;
 			l.bytes = size;
+			l.pc = 0;
 
 			tmp.push_back(l);
 			continue;
