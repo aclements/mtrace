@@ -35,7 +35,18 @@ m2text: m2text.c $(HDRS)
 	@echo "  CC       $@"
 	$(Q)$(CC) -o $@ $< $(CFLAGS) $(LDFLAGS)
 
-.PHONY: install clean
+.PHONY: install clean astyle
+
+ASTYLE = astyle
+ASTYLE_OPTS = --suffix=none \
+	      --style=stroustrup \
+	      --align-pointer=type \
+	      --convert-tabs \
+	      --pad-header \
+	      --lineend=linux \
+	      --min-conditional-indent=4
+astyle:
+	$(ASTYLE) $(ASTYLE_OPTS) $(MSCAN_HDRS) mscan.cc addr2line.cc
 
 install: mscan
 	@echo "  INSTALL  $(INSTDIR)"

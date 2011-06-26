@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 
-uint64_t bb_hash(register uintptr_t *k, register uint64_t length);
+     uint64_t bb_hash(register uintptr_t* k, register uint64_t length);
 
 #ifdef __cplusplus
 }
