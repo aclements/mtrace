@@ -79,6 +79,7 @@ struct mtrace_fcall_entry {
 
     uint64_t tid;
     uint64_t pc;
+    uint64_t tag;
     uint16_t depth;
     mtrace_call_state_t state;
 } __pack__;
@@ -317,12 +318,14 @@ static inline void mtrace_segment_register(unsigned long baseaddr,
 
 static inline void mtrace_fcall_register(unsigned long tid,
 					 unsigned long pc,
+					 unsigned long tag,
 					 unsigned int depth,
 					 mtrace_call_state_t state)
 {
     volatile struct mtrace_fcall_entry entry;
     entry.tid = tid;
     entry.pc = pc;
+    entry.tag = tag;
     entry.depth = depth;
     entry.state = state;
 
