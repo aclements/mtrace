@@ -15,6 +15,7 @@ extern "C" {
 
 #include "addr2line.hh"
 #include "mscan.hh"
+#include "calltrace.hh"
 #include "dissys.hh"
 #include "sersec.hh"
 #include "sysaccess.hh"
@@ -32,6 +33,7 @@ pc_t mtrace_call_pc[MAX_CPUS];
 tid_t mtrace_tid[MAX_CPUS];
 MtraceAddr2label mtrace_label_map;
 uint64_t mtrace_object_count;
+CallTrace *mtrace_call_trace;
 
 static LabelMap labels;
 static list<struct mtrace_label_entry> percpu_labels;
@@ -194,6 +196,10 @@ static void init_handlers(void)
 	entry_handler[mtrace_entry_label].push_front(new DefaultLabelHandler());
 	entry_handler[mtrace_entry_segment].push_front(new DefaultSegmentHandler());
 	entry_handler[mtrace_entry_machine].push_front(new DefaultMachineHandler());
+	CallTrace *call_trace = new CallTrace();
+	mtrace_call_trace = call_trace;
+	entry_handler[mtrace_entry_call].push_back(call_trace);
+	entry_handler[mtrace_entry_fcall].push_back(call_trace);
 
 	//
 	// Extra handlers come next
@@ -215,6 +221,10 @@ static void init_handlers(void)
 	entry_handler[mtrace_entry_access].push_back(false_sharing);
 	exit_handler.push_back(false_sharing);
 
+	CallTraceFilter *call_trace_filter = new CallTraceFilter();
+	call_trace_filter->filter_pc_ = 0xffffffff81037643;
+	entry_handler[mtrace_entry_access].push_back(call_trace_filter);
+	exit_handler.push_back(call_trace_filter);
 #if 0
 	SyscallAccesses *sysaccesses = new SyscallAccesses();
 	entry_handler[mtrace_entry_access].push_back(sysaccesses);

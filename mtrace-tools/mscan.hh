@@ -265,5 +265,17 @@ extern pc_t mtrace_call_pc[MAX_CPUS];
 extern tid_t mtrace_tid[MAX_CPUS];
 // A map from guest address to kernel object
 extern MtraceAddr2label mtrace_label_map;
+// The current call stack
+class CallTrace;
+extern CallTrace *mtrace_call_trace;
+
+//
+// Some helpers
+//
+
+static inline bool guest_enabled_mtrace(void)
+{
+    return mtrace_enable.access.value != 0;
+}
 
 #endif // _MSCAN_HH_
