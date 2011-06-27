@@ -16,6 +16,7 @@ LDFLAGS = -lz
 
 HDRS	= $(QEMUDIR)/mtrace-magic.h util.h
 MSCAN_HDRS = addr2line.hh \
+	     argparse.hh \
 	     calltrace.hh \
 	     dissys.hh \
 	     false.hh \

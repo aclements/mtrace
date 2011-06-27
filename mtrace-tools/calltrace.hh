@@ -1,3 +1,4 @@
+#include <set>
 #include "json.hh"
 
 //
@@ -5,7 +6,7 @@
 //
 class CallTrace : public EntryHandler {
 public:
-     class CallStack;
+    class CallStack;
 
      virtual void handle(const union mtrace_entry* entry) {
           if (entry->h.type == mtrace_entry_call)
@@ -120,8 +121,20 @@ private:
 // Appends (to the JSON output) call traces that match the specified criteria
 //
 class CallTraceFilter : public EntryHandler {
+    struct CallStackSummary {
+        CallStackSummary(void)
+            : filter_pc_(0), call_stack_() {}
+        CallStackSummary(pc_t filter_pc, CallTrace::CallStack* call_stack)
+            : filter_pc_(filter_pc), call_stack_(call_stack) {}
+        ~CallStackSummary(void) {
+            delete call_stack_;
+        }
+
+        pc_t                       filter_pc_;
+        CallTrace::CallStack*      call_stack_;
+    };
+
 public:
-     pc_t filter_pc_;
 
      virtual void handle(const union mtrace_entry* entry) {
           if (entry->h.type == mtrace_entry_access)
@@ -135,33 +148,37 @@ public:
 
           auto it = stack_.begin();
           for (; it != stack_.end(); ++it) {
-               CallTrace::CallStack* call_stack;
+               CallStackSummary* summary;
                JsonDict* dict;
 
                dict = JsonDict::create();
-               call_stack = *it;
-               dict->put("call-stack", call_stack->new_json());
-               dict->put("filter-pc", new JsonHex(filter_pc_));
+               summary = *it;
+               dict->put("call-stack", summary->call_stack_->new_json());
+               dict->put("filter-pc", new JsonHex(summary->filter_pc_));
                list->append(dict);
           }
           json_file->put("call-stacks", list);
      }
 
-     ~CallTraceFilter(void) {
-          auto it = stack_.begin();
-          for (; it != stack_.end(); ++it) {
-               delete *it;
-          }
-     }
+    CallTraceFilter(set<pc_t> filter_pc) 
+        : filter_pc_(filter_pc) {}
+
+    ~CallTraceFilter(void) {
+        auto it = stack_.begin();
+        for (; it != stack_.end(); ++it) {
+            delete *it;
+        }
+    }
 
 private:
-     void handle(const struct mtrace_access_entry* a, int cpu) {
-          if (a->pc == filter_pc_) {
-               CallTrace::CallStack* cs = mtrace_call_trace->new_current(a->h.cpu);
-               if (cs)
-                    stack_.push_back(cs);
-          }
-     }
-
-     list<CallTrace::CallStack*> stack_;
+    void handle(const struct mtrace_access_entry* a, int cpu) {
+        if (filter_pc_.find(a->pc) != filter_pc_.end()) {
+            CallTrace::CallStack* cs = mtrace_call_trace->new_current(a->h.cpu);
+            if (cs)
+                stack_.push_back(new CallStackSummary(a->pc, cs));
+        }
+    }
+    
+    set<pc_t> filter_pc_;
+    list<CallStackSummary*> stack_;
 };

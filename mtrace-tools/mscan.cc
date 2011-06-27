@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include <fcntl.h>
+#include <getopt.h>
 
 #include <map>
 #include <list>
@@ -20,6 +21,7 @@ extern "C" {
 #include "sersec.hh"
 #include "sysaccess.hh"
 #include "false.hh"
+#include "argparse.hh"
 
 using namespace::std;
 
@@ -37,6 +39,10 @@ CallTrace* mtrace_call_trace;
 
 static LabelMap labels;
 static list<struct mtrace_label_entry> percpu_labels;
+
+static struct {
+    set<pc_t> stack_trace_pc;
+} mtrace_options;
 
 class DefaultHostHandler : public EntryHandler {
 public:
@@ -219,8 +225,7 @@ static void init_handlers(void)
      entry_handler[mtrace_entry_access].push_back(false_sharing);
      exit_handler.push_back(false_sharing);
 
-     CallTraceFilter* call_trace_filter = new CallTraceFilter();
-     call_trace_filter->filter_pc_ = 0xffffffff81037643;
+     CallTraceFilter* call_trace_filter = new CallTraceFilter(mtrace_options.stack_trace_pc);
      entry_handler[mtrace_entry_access].push_back(call_trace_filter);
      exit_handler.push_back(call_trace_filter);
 #if 0
@@ -303,12 +308,31 @@ static void init_static_syms(const char* sym_file)
      fi.close();
 }
 
+static void handle_arg(const ArgParse *parser, string option, string val)
+{
+    if (option == "stack-trace-pc") {
+        uint64_t x;
+        stringstream ss;
+
+        ss << hex << val;
+        ss >> x;
+        mtrace_options.stack_trace_pc.insert(x);
+    } else {
+        die("handle_arg: unexpected");
+    }
+}
+
 int main(int ac, char** av)
 {
      char sym_file[128] = "mscan.syms";
      char elf_file[128] = "mscan.kern";
      char log_file[128] = "mtrace.out";
      gzFile log;
+
+     ArgParse parse(ac, av);
+     parse.add_option("stack-trace-pc", "PC", 
+                      "Include stack traces for access at PC");
+     parse.parse(handle_arg);
 
      log = gzopen(log_file, "rb");
      if (!log)
