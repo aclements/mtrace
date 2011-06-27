@@ -45,7 +45,8 @@ ASTYLE_OPTS = --suffix=none \
 	      --convert-tabs \
 	      --pad-header \
 	      --lineend=linux \
-	      --min-conditional-indent=4
+	      --min-conditional-indent=4 \
+	      --indent=spaces=4
 astyle:
 	$(ASTYLE) $(ASTYLE_OPTS) $(MSCAN_HDRS) mscan.cc addr2line.cc
 

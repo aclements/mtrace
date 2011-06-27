@@ -2,16 +2,15 @@
 
 class ArgParse {
 public:
-    ArgParse(int ac, char **av) 
-        : ac_(ac), av_(av), num_long_options_(0) 
-    {
+    ArgParse(int ac, char** av)
+        : ac_(ac), av_(av), num_long_options_(0) {
         memset(long_options_, 0, sizeof(long_options_));
     }
 
     void add_option(string option, string val_description, string description) {
-        struct option *o;
+        struct option* o;
         int i = num_long_options_++;
-        
+
         o = &long_options_[i];
         o->name = strdup(option.c_str());
         o->has_arg = 1;
@@ -23,7 +22,7 @@ public:
     }
 
     void add_option(string option, string description) {
-        struct option *o;
+        struct option* o;
         int i = num_long_options_++;
 
         o = &long_options_[i];
@@ -35,10 +34,9 @@ public:
         description_[i].description = description;
     }
 
-    void parse(void (*handle)(const ArgParse *parser,
+    void parse(void (*handle)(const ArgParse* parser,
                               string option,
-                              string val))
-    {
+                              string val)) {
         int c;
         int option_index;
 
@@ -73,7 +71,7 @@ public:
             if (long_options_[i].has_arg)
                 fprintf(stderr, "=%-12s", description_[i].val_description.c_str());
             else
-                fprintf(stderr, " %-12s", ""); 
+                fprintf(stderr, " %-12s", "");
 
             fprintf(stderr, " %s\n", description_[i].description.c_str());
         }
@@ -86,7 +84,7 @@ private:
     char**              av_;
     int                 num_long_options_;
     struct option       long_options_[32];
-    
+
     struct {
         string val_description;
         string description;
