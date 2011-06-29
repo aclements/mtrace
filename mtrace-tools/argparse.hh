@@ -66,13 +66,14 @@ public:
         fprintf(stderr, "usage: %s [options]\n\n", basename(av_[0]));
 
         for (i = 0; i < num_long_options_; i++) {
-            fprintf(stderr, "  --%s", long_options_[i].name);
+            string flag;
 
+            flag = long_options_[i].name;
+            flag = "--" + flag;
             if (long_options_[i].has_arg)
-                fprintf(stderr, "=%-12s", description_[i].val_description.c_str());
-            else
-                fprintf(stderr, " %-12s", "");
-
+                flag += "=" + description_[i].val_description;
+            
+            fprintf(stderr, "  %-22s", flag.c_str());
             fprintf(stderr, " %s\n", description_[i].description.c_str());
         }
 
