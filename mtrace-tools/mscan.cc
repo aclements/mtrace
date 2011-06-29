@@ -40,8 +40,14 @@ CallTrace* mtrace_call_trace;
 static LabelMap labels;
 static list<struct mtrace_label_entry> percpu_labels;
 
-static struct {
-    set<pc_t> stack_trace_pc;
+static struct MtraceOptions {
+    set<pc_t>   stack_trace_pc;
+    bool        syscall_accesses;
+    bool        syscall_accesses_pc;
+    bool        false_sharing;
+    bool        serial_sections;
+    bool        distinct_ops;
+    bool        distinct_sys;
 } mtrace_options;
 
 class DefaultHostHandler : public EntryHandler {
@@ -208,34 +214,48 @@ static void init_handlers(void)
     //
     // Extra handlers come next
     //
-    DistinctSyscalls* dissys = new DistinctSyscalls();
-    entry_handler[mtrace_entry_access].push_back(dissys);
-    entry_handler[mtrace_entry_fcall].push_back(dissys);
-    exit_handler.push_back(dissys);
+    
+    if (mtrace_options.distinct_sys) {
+        DistinctSyscalls* dissys = new DistinctSyscalls();
+        entry_handler[mtrace_entry_access].push_back(dissys);
+        entry_handler[mtrace_entry_fcall].push_back(dissys);
+        exit_handler.push_back(dissys);
 
-    DistinctOps* disops = new DistinctOps(dissys);
-    exit_handler.push_back(disops);
+        if (mtrace_options.distinct_ops) {
+            DistinctOps* disops = new DistinctOps(dissys);
+            exit_handler.push_back(disops);
+        }
+    }
 
-    SerialSections* sersecs = new SerialSections();
-    entry_handler[mtrace_entry_lock].push_back(sersecs);
-    entry_handler[mtrace_entry_access].push_back(sersecs);
-    exit_handler.push_back(sersecs);
+    if (mtrace_options.serial_sections) {
+        SerialSections* sersecs = new SerialSections();
+        entry_handler[mtrace_entry_lock].push_back(sersecs);
+        entry_handler[mtrace_entry_access].push_back(sersecs);
+        exit_handler.push_back(sersecs);
+    }
 
-    FalseSharing* false_sharing = new FalseSharing();
-    entry_handler[mtrace_entry_access].push_back(false_sharing);
-    exit_handler.push_back(false_sharing);
+    if (mtrace_options.false_sharing) {
+        FalseSharing* false_sharing = new FalseSharing();
+        entry_handler[mtrace_entry_access].push_back(false_sharing);
+        exit_handler.push_back(false_sharing);
+    }
 
-    CallTraceFilter* call_trace_filter = new CallTraceFilter(mtrace_options.stack_trace_pc);
-    entry_handler[mtrace_entry_access].push_back(call_trace_filter);
-    exit_handler.push_back(call_trace_filter);
-#if 0
-    SyscallAccesses* sysaccesses = new SyscallAccesses();
-    entry_handler[mtrace_entry_access].push_back(sysaccesses);
-    exit_handler.push_back(sysaccesses);
+    if (!mtrace_options.stack_trace_pc.empty()) {
+        CallTraceFilter* call_trace_filter = new CallTraceFilter(mtrace_options.stack_trace_pc);
+        entry_handler[mtrace_entry_access].push_back(call_trace_filter);
+        exit_handler.push_back(call_trace_filter);
+    }
 
-    SyscallAccessesPC* sys_accesses_pc = new SyscallAccessesPC(sysaccesses);
-    exit_handler.push_back(sys_accesses_pc);
-#endif
+    if (mtrace_options.syscall_accesses) {
+        SyscallAccesses* sysaccesses = new SyscallAccesses();
+        entry_handler[mtrace_entry_access].push_back(sysaccesses);
+        exit_handler.push_back(sysaccesses);
+        
+        if (mtrace_options.syscall_accesses_pc) {
+            SyscallAccessesPC* sys_accesses_pc = new SyscallAccessesPC(sysaccesses);
+            exit_handler.push_back(sys_accesses_pc);
+        }
+    }
 }
 
 static void init_static_syms(const char* sym_file)
@@ -317,6 +337,20 @@ static void handle_arg(const ArgParse* parser, string option, string val)
         ss << hex << val;
         ss >> x;
         mtrace_options.stack_trace_pc.insert(x);
+    } else if (option == "syscall-accesses") {
+        mtrace_options.syscall_accesses = true;
+    } else if (option == "syscall-accesses-pc") {
+        mtrace_options.syscall_accesses = true;
+        mtrace_options.syscall_accesses_pc = true;        
+    } else if (option == "false-sharing")  {
+        mtrace_options.false_sharing = true;
+    } else if (option == "serial-sections") {
+        mtrace_options.serial_sections = true;
+    } else if (option == "distinct-ops") {
+        mtrace_options.distinct_ops = true;
+        mtrace_options.distinct_sys = true;
+    } else if (option == "distinct-sys") {
+        mtrace_options.distinct_sys = true;
     } else {
         die("handle_arg: unexpected");
     }
@@ -331,8 +365,28 @@ int main(int ac, char** av)
 
     ArgParse parse(ac, av);
     parse.add_option("stack-trace-pc", "PC",
-                     "Include stack traces for access at PC");
+                     "Stack traces for access at PC");
+    parse.add_option("syscall-accesses",
+                     "Every access, organized by syscall");
+    parse.add_option("syscall-accesses-pc",
+                     "The PC of every access, organized by syscall");
+    parse.add_option("false-sharing",
+                     "False sharing");
+    parse.add_option("serial-sections",
+                     "Serial sections");
+    parse.add_option("distinct-ops",
+                     "Average distinct cache lines per operation");
+    parse.add_option("distinct-sys",
+                     "Average distinct cache lines per syscall");
     parse.parse(handle_arg);
+
+    // The default if no arguments
+    if (ac == 1) {
+        mtrace_options.distinct_sys = true;
+        mtrace_options.distinct_ops = true;
+        mtrace_options.false_sharing = true;
+        mtrace_options.serial_sections = true;
+    }
 
     log = gzopen(log_file, "rb");
     if (!log)
