@@ -356,6 +356,24 @@ public:
         json_file->put("serial-sections", list);
     }
 
+    timestamp_t total_cycles(void) const {
+        timestamp_t sum = 0;
+
+        auto it = stat_.begin();
+        for (; it != stat_.end(); ++it)
+            sum += it->second.summary.total_cycles();
+        return sum;
+    }
+
+    uint64_t coherence_misses(void) const {
+        uint64_t sum = 0;
+
+        auto it = stat_.begin();
+        for (; it != stat_.end(); ++it)
+            sum += it->second.summary.coherence_misses();
+        return sum;
+    }
+
 private:
     LockManager lock_manager_;
 
