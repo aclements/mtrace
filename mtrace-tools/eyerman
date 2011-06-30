@@ -1,0 +1,47 @@
+#!/usr/bin/python
+
+import os
+import sys
+import json
+import math
+
+if len(sys.argv) != 3:
+    print >> sys.stderr, 'usage: %s number-of-cores mscan-json' % \
+        os.path.basename(sys.argv[0])
+    exit(2)
+
+N_cores = int(sys.argv[1])
+raw = json.loads(open(sys.argv[2]).read())['eyerman']
+
+# Fraction of sequential code
+F_seq = 0.0
+print 'F_seq %.2f' % F_seq
+# Fraction of parallel code, broken down into two terms:
+#  - Indefinitely parallelizable (No Critial Sections)
+F_par_ncs = (float(raw['total']) - float(raw['critical'])) / float(raw['total'])
+print 'F_par_ncs %.2f' % F_par_ncs
+#  - Parallelizable but requires synchronization (Critical Sections)
+F_par_cs = 1 - F_par_ncs
+print 'F_par_cs %.2f' % F_par_cs
+
+# Probability of executing a critical section given a core is executing in
+# a parallel section (since F_seq == 0, equal to P_cs)
+P_cs = (F_par_cs) / (F_par_cs + F_par_ncs)
+print 'P_cs %.2f' % P_cs
+
+# The probability that two randomly choosen critical sections contend
+# XXX we need more information from mscan
+P_ctn = 0.1
+print 'P_ctn %.2f' % P_ctn
+
+T_seq = F_seq
+print 'T_seq %.2f' % T_seq
+
+T_par_ncs = F_par_ncs / N_cores
+print 'T_par_ncs %.2f' % T_par_ncs
+
+T_par_cs = F_par_cs * ((P_cs * P_ctn) + (1 - (P_cs * P_ctn)) * (1 / N_cores))
+print 'T_par_cs %.2f' % T_par_cs
+
+T = T_seq + T_par_ncs + T_par_cs
+print 'T %.2f' % T
