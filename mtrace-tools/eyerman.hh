@@ -17,9 +17,9 @@ public:
             die("Eyerman::exit: CPU mismatch");
 
         //
-        // XXX compute sequential execution as one cores execution time
-        // the number of cores.  Better would be the sum of all cores
-        // execution times.
+        // XXX compute sequential execution as one core's execution times
+        // the number of cores.  Better would be to sum all cores execution 
+        // times.
         //
         total = mtrace_enable.h.ts - mtrace_first.h.ts;
         total *= mtrace_summary.num_cpus;
