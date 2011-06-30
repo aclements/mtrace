@@ -21,6 +21,7 @@ extern "C" {
 #include "sersec.hh"
 #include "sysaccess.hh"
 #include "false.hh"
+#include "eyerman.hh"
 #include "argparse.hh"
 
 using namespace::std;
@@ -48,6 +49,7 @@ static struct MtraceOptions {
     bool        serial_sections;
     bool        distinct_ops;
     bool        distinct_sys;
+    bool        eyerman;
 } mtrace_options;
 
 class DefaultHostHandler : public EntryHandler {
@@ -214,7 +216,6 @@ static void init_handlers(void)
     //
     // Extra handlers come next
     //
-    
     if (mtrace_options.distinct_sys) {
         DistinctSyscalls* dissys = new DistinctSyscalls();
         entry_handler[mtrace_entry_access].push_back(dissys);
@@ -255,6 +256,11 @@ static void init_handlers(void)
             SyscallAccessesPC* sys_accesses_pc = new SyscallAccessesPC(sysaccesses);
             exit_handler.push_back(sys_accesses_pc);
         }
+    }
+
+    if (mtrace_options.eyerman) {
+        Eyerman* eyerman = new Eyerman();
+        exit_handler.push_back(eyerman);
     }
 }
 
@@ -351,6 +357,8 @@ static void handle_arg(const ArgParse* parser, string option, string val)
         mtrace_options.distinct_sys = true;
     } else if (option == "distinct-sys") {
         mtrace_options.distinct_sys = true;
+    } else if (option == "eyerman") {
+        mtrace_options.eyerman = true;
     } else {
         die("handle_arg: unexpected");
     }
@@ -378,6 +386,8 @@ int main(int ac, char** av)
                      "Average distinct cache lines per operation");
     parse.add_option("distinct-sys",
                      "Average distinct cache lines per syscall");
+    parse.add_option("eyerman",
+                     "Input to \"Eyerman's law\"");
     parse.parse(handle_arg);
 
     // The default if no arguments
