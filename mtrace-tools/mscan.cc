@@ -29,6 +29,7 @@ using namespace::std;
 typedef map<uint64_t, struct mtrace_label_entry> LabelMap;
 
 // A bunch of global state the default handlers update
+struct mtrace_host_entry mtrace_first;
 struct mtrace_host_entry mtrace_enable;
 MtraceAddr2line* addr2line;
 MtraceSummary mtrace_summary;
@@ -65,6 +66,9 @@ public:
         if (!mtrace_summary.app_name[0])
             strncpy(mtrace_summary.app_name, e->access.str,
                     sizeof(mtrace_summary.app_name));
+
+        if (mtrace_first.h.ts == 0)
+            mtrace_first = *e;
         mtrace_enable = *e;
     }
 };
@@ -228,8 +232,9 @@ static void init_handlers(void)
         }
     }
 
+    SerialSections* sersecs = NULL;
     if (mtrace_options.serial_sections) {
-        SerialSections* sersecs = new SerialSections();
+        sersecs = new SerialSections();
         entry_handler[mtrace_entry_lock].push_back(sersecs);
         entry_handler[mtrace_entry_access].push_back(sersecs);
         exit_handler.push_back(sersecs);
@@ -259,7 +264,16 @@ static void init_handlers(void)
     }
 
     if (mtrace_options.eyerman) {
-        Eyerman* eyerman = new Eyerman();
+        SerialSections* eyerman_sersecs;
+        if (!mtrace_options.serial_sections) {
+            eyerman_sersecs = new SerialSections();
+            entry_handler[mtrace_entry_lock].push_back(eyerman_sersecs);
+            entry_handler[mtrace_entry_access].push_back(eyerman_sersecs);
+        } else {
+            eyerman_sersecs = sersecs;
+        }
+
+        Eyerman* eyerman = new Eyerman(eyerman_sersecs);
         exit_handler.push_back(eyerman);
     }
 }

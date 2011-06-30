@@ -252,7 +252,9 @@ private:
 // A bunch of global state the default handlers update
 //
 
-// The last mtrace_host_entry
+// The first mtrace_host_entry
+extern struct mtrace_host_entry mtrace_first;
+// The current mtrace_host_entry
 extern struct mtrace_host_entry mtrace_enable;
 // An addr2line instance for the ELF file
 extern MtraceAddr2line* addr2line;

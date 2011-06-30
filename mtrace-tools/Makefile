@@ -19,6 +19,7 @@ MSCAN_HDRS = addr2line.hh \
 	     argparse.hh \
 	     calltrace.hh \
 	     dissys.hh \
+	     eyerman.hh \
 	     false.hh \
 	     hash.h \
 	     json.hh \
