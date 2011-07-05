@@ -269,6 +269,7 @@ static void init_handlers(void)
             eyerman_sersecs = new SerialSections();
             entry_handler[mtrace_entry_lock].push_back(eyerman_sersecs);
             entry_handler[mtrace_entry_access].push_back(eyerman_sersecs);
+            exit_handler.push_back(eyerman_sersecs);
         } else {
             eyerman_sersecs = sersecs;
         }
