@@ -1,20 +1,18 @@
 #!/usr/bin/python
 
-#
-# Run make-img.py with no arguments for usage
-#
-
 import sys
 import os.path
 import subprocess
 import signal
 import shutil
 import traceback
+import optparse
+import tempfile
 
-default_img_size = '300M'
-default_includes = 'python,makedev'
+DEFAULT_IMG_SIZE = '300M'
+DEFAULT_INCLUDES = 'python,makedev'
 
-mosbench_includes = 'make,rsync,libpcre3,numactl,procps,sudo,ifupdown,netbase'
+MOSBENCH_INCLUDES = 'make,rsync,libpcre3,numactl,procps,sudo,ifupdown,netbase'
 
 # colors differentiate subprocess output from make-img.py
 text_log_color   = '\033[95m'       # purplish
@@ -30,13 +28,8 @@ def print_err(string):
 class CopyCmd:
     # (relative path to script location, absolute path in disk image)
     def __init__(self, src, dst):
-        self.src = src
-        self.dst = dst
-
-        if self.src.startswith('/') == False:
-            self.src = sys.path[0] + '/' + self.src
-        if self.dst.startswith('/') == False:
-            self.src = sys.path[0] + '/' + self.src
+        self.src = os.path.abspath(os.path.expanduser(src))
+        self.dst = os.path.abspath(os.path.expanduser(dst))
 
     def run(self, img):
         src = self.src
@@ -55,12 +48,17 @@ class FixupCmd:
     def run(self, img):
         img.chroot(['sh', '-c', self.cmd]).run()
 
-default_cmds = [ 
-                 CopyCmd('img-files/shadow', '/etc/shadow'),
-                 CopyCmd('img-files/inittab', '/etc/inittab'),
-                 CopyCmd('img-files/run-cmdline', '/etc/init.d/run-cmdline'),
-                 CopyCmd('img-files/run-cmdline.py', '/usr/bin/run-cmdline.py'),
-                 CopyCmd('img-files/interfaces', '/etc/network/interfaces'),
+DEFAULT_CMDS = [ 
+                 CopyCmd(os.path.join(sys.path[0],'img-files/shadow'), 
+                         '/etc/shadow'),
+                 CopyCmd(os.path.join(sys.path[0],'img-files/inittab'), 
+                         '/etc/inittab'),
+                 CopyCmd(os.path.join(sys.path[0],'img-files/run-cmdline'), 
+                         '/etc/init.d/run-cmdline'),
+                 CopyCmd(os.path.join(sys.path[0],'img-files/run-cmdline.py'), 
+                         '/usr/bin/run-cmdline.py'),
+                 CopyCmd(os.path.join(sys.path[0],'img-files/interfaces'), 
+                         '/etc/network/interfaces'),
                  FixupCmd('cd /dev && /sbin/MAKEDEV ttyS'),
                  FixupCmd('cd /etc/init.d && update-rc.d run-cmdline defaults')
                ]
@@ -96,7 +94,7 @@ def sudo(args):
 class Root(object):
     def __init__(self, filepath):
         self.filepath = filepath
-        self.tmp = 'tmp.%u' % os.getpid()
+        self.tmp = tempfile.mkdtemp(prefix='new-mtrace-image-')
 
     def chroot(self, args):
         args.insert(0, self.tmp)
@@ -142,7 +140,7 @@ class Root(object):
 class DiskImage(Root):
     def __init__(self, filepath):
         self.filepath = filepath
-        self.tmp = 'tmp.%u' % os.getpid()
+        self.tmp = tempfile.mkdtemp(prefix='new-mtrace-image-')
 
     def mount(self, quiet = False):
         if os.path.exists(self.tmp):
@@ -198,101 +196,107 @@ class DiskImage(Root):
     def finish(self):
         pass
 
-default_root_type = Root
+DEFAULT_ROOT_TYPE = Root
 
-def usage():
-    print """Usage: make-img.py output-file [ -size size -fixup fixup -copy src,dst 
-                      -include pkg0,pkg1,... -mosbench mosbenchsrc -imgtype imgtype ]
+def parse_args(args):
+    def size_handler(option, opt, value, parser):
+        global DEFAULT_IMG_SIZE
+        DEFAULT_IMG_SIZE = value
 
-    'size' is the disk image size in kilobytes. Optional suffixes
-      'M' (megabyte, 1024 * 1024) and 'G' (gigabyte, 1024 * 1024 * 1024) are
-      supported any 'k' or 'K' is ignored
+    def fixup_handler(option, opt, value, parser):
+        global DEFAULT_CMDS
+        DEFAULT_CMDS.append(FixupCmd(value))
 
-    'fixup' is a string of shell command to execute while chrooted into the
-      disk image
+    def include_handler(option, opt, value, parser):
+        global DEFAULT_INCLUDES
+        DEFAULT_INCLUDES = DEFAULT_INCLUDES + ',' + value
 
-    'src,dst' is a source file on the host file system to copy to the 
-      destination on the disk image
+    def copy_handler(option, opt, value, parser):
+        global DEFAULT_CMDS
+        split = value.partition(',')
+        DEFAULT_CMDS.append(CopyCmd(split[0], split[2]))
 
-    'pkg0,pkg1,...' is a comma separated list of Debian package names
-
-    'mosbenchsrc' is the path to your mosbench source tree
-
-    'imgtype' is the type of disk image to create.  'ext3' is the only supported
-      option.  The default is to create a root directory and not a disk image.
-"""
-    exit(1)
-
-def parse_args(argv):
-    if len(argv) < 2:
-        usage()
-
-    def size_handler(val):
-        global default_img_size
-        default_img_size = val
-
-    def fixup_handler(val):
-        global default_cmds
-        default_cmds.append(FixupCmd(val))
-
-    def include_handler(val):
-        global default_includes
-        default_includes = default_includes + ',' + val
-
-    def copy_handler(val):
-        global default_cmds
-        split = val.partition(',')
-        default_cmds.append(CopyCmd(split[0], split[2]))
-
-    def mosbench_handler(val):
-        global mosbench_includes
+    def mosbench_handler(option, opt, value, parser):
+        global MOSBENCH_INCLUDES
 
         # Copy the mosbench tree to the same absolute path in the image
-        src = val
-        chroot_dst = os.path.abspath(val)
+        src = value
+        chroot_dst = os.path.abspath(os.path.expanduser(value))
         chroot_dir = os.path.dirname(chroot_dst)
-        fixup_handler('mkdir -p ' + chroot_dir)
-        copy_handler(src + ',' + chroot_dst)
+        fixup_handler(None, None, 'mkdir -p ' + chroot_dir, None)
+        copy_handler(None, None, src + ',' + chroot_dst, None)
 
-        include_handler(mosbench_includes)
-        copy_handler('/etc/hosts,/etc/hosts')
+        include_handler(None, None, MOSBENCH_INCLUDES, None)
+        copy_handler(None, None, '/etc/hosts,/etc/hosts', None)
 
-    def imgtype_handler(val):
-        global default_root_type
-        if val == 'ext3':
-            default_root_type = DiskImage
+    def imgtype_handler(option, opt, value, parser):
+        global DEFAULT_ROOT_TYPE
+        if value == 'ext3':
+            DEFAULT_ROOT_TYPE = DiskImage
         else:
-            raise Exception('Unknown image type: ' + val)
+            raise Exception('Unknown image type: ' + value)
 
-    handler = {
-        '-size': size_handler,
-        '-fixup': fixup_handler,
-        '-copy': copy_handler,
-        '-include': include_handler,
-        '-mosbench': mosbench_handler,
-        '-imgtype' : imgtype_handler
-    }
+    parser = optparse.OptionParser('''Usage: %prog [options] directory | file
 
-    args = argv[2:]
-    for i in range(0, len(args), 2):
-        handler[args[i]](args[i + 1])
+Examples:
+    %prog linux-root
+    %prog --mosbench-src=~/mosbench linux-root''',
+    description = 'Build a root image suitable for running Linux on mtrace')
     
-def main(argv=None):
-    if argv is None:
-        argv = sys.argv
-    
-    parse_args(argv)
-    root = default_root_type(argv[1])
+    parser.add_option('--mosbench-src',
+                      type='string',
+                      action='callback',
+                      callback=mosbench_handler,
+                      metavar='PATH',
+                      help='Path to your MOSBENCH tree')
+    parser.add_option('--size',
+                      type='string',
+                      action='callback',
+                      callback=size_handler,
+                      help='Disk image size (optional suffixes: K, M, G)')
+    parser.add_option('--image-type',
+                      type='string',
+                      action='callback',
+                      callback=imgtype_handler,
+                      help='The type of disk image to create (ext3 only).' +
+                      '  The default is to create a root directory')
+    parser.add_option('--fixup',
+                      type='string',
+                      action='callback',
+                      callback=fixup_handler,
+                      metavar='SHELL_CMD',
+                      help='Execute SHELL_CMD while chrooted in the image')
+    parser.add_option('--copy',
+                      type='string',
+                      action='callback',
+                      callback=copy_handler,
+                      metavar='SRC,DST',
+                      help='Copy SRC from host to DST in image')
+    parser.add_option('--include',
+                      type='string',
+                      action='callback',
+                      callback=include_handler,
+                      metavar='PKG0,PKG1..',
+                      help='Install PKG0,PKG1.. in the image')
+
+    (opts, args) = parser.parse_args(args=args)
+    if len(args) != 1:
+        parser.error('You must specify an output directory or file')
+    return args[0]
+
+def main(args):
+    output = parse_args(args)
+    root = DEFAULT_ROOT_TYPE(output)
 
     def on_sigint(signum, frame):
         root.cleanup()
     signal.signal(signal.SIGINT, on_sigint)
 
     try:
-        root.create(default_img_size)
+        root.create(DEFAULT_IMG_SIZE)
         root.format()
-        root.bootstrap(default_includes)
-        root.run_cmds(default_cmds)
+        root.bootstrap(DEFAULT_INCLUDES)
+        root.run_cmds(DEFAULT_CMDS)
         root.finish()
     except Exception as ex:
         print_err('\n[failed]')
@@ -302,4 +306,4 @@ def main(argv=None):
     exit(0)
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main(sys.argv[1:])
