@@ -686,6 +686,10 @@ void mtrace_init(void)
 
     entry.num_cpus = smp_cpus;
     entry.num_ram = ram_size;
+    entry.quantum = mtrace_quantum;
+    entry.sample = mtrace_sample;
+    entry.locked = mtrace_lock_trace;
+    entry.calls = mtrace_call_trace;
     mtrace_log_entry((union mtrace_entry *)&entry);
     
     atexit(mtrace_cleanup);

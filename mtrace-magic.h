@@ -204,6 +204,10 @@ struct mtrace_machine_entry {
 
     uint16_t num_cpus;
     uint64_t num_ram;
+    uint64_t quantum;
+    uint64_t sample;
+    uint8_t  locked:1;
+    uint8_t  calls:1;
 } __pack__;
 
 /*
