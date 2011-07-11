@@ -12,7 +12,8 @@ import subprocess
 class QemuMtrace(object):
     def __init__(self, opts):
         self.o = opts
-        self.__test_for_mtrace()
+        if not self.o.no_mtrace:
+            self.__test_for_mtrace()
 
     def __test_for_mtrace(self):
         null = open('/dev/null', 'w+')
@@ -21,7 +22,7 @@ class QemuMtrace(object):
                                    self.o.qemu + ' -h | grep mtrace'],
                                   stdout=null)
         except subprocess.CalledProcessError:
-            print >> sys.stderr, self.o.cmd + \
+            print >> sys.stderr, self.o.qemu + \
                 ' is not installed or does not support mtrace'
             exit(2)
         null.close()
