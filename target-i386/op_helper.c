@@ -5684,3 +5684,8 @@ void helper_mtrace_inst_ret(target_ulong target_pc)
 {
     mtrace_inst_call(target_pc, 0, 1);
 }
+
+void helper_mtrace_insn_count(void) 
+{
+    mtrace_inst_inc();
+}
