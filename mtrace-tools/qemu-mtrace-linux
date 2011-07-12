@@ -85,7 +85,8 @@ class QemuMtrace(object):
         runString = ''
         for cmd in self.o.run:
             runString += ' run-cmdline="' + cmd + '"'
-        runString += ' run-cmdline="reboot"'
+        if not self.o.no_reboot:
+            runString += ' run-cmdline="reboot"'
         appendString += runString
         args.extend(['-append', appendString])
 
@@ -108,6 +109,11 @@ def main(args):
                       default=False,
                       dest='no_mtrace',
                       help='Disable mtrace [default: %default]')
+    parser.add_option('--no-reboot',
+                      action='store_true',
+                      default=False,
+                      dest='no_reboot',
+                      help='Disable automatic reboot [default: %default]')
     parser.add_option('--bzImage',
                       type='string',
                       action='callback',
