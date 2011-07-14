@@ -298,7 +298,7 @@ def main(args):
         root.bootstrap(DEFAULT_INCLUDES)
         root.run_cmds(DEFAULT_CMDS)
         root.finish()
-    except Exception as ex:
+    except:
         print_err('\n[failed]')
         traceback.print_exc(file=sys.stdout)
 
