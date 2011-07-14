@@ -2,6 +2,7 @@ Q = @
 
 QEMUDIR = ..
 INSTDIR = /usr/local/bin
+PYFLAKES = $(shell which pyflakes)
 
 CXX  = g++
 CC   = gcc
@@ -27,7 +28,7 @@ MSCAN_HDRS = addr2line.hh \
 	     sersec.hh \
 	     sysaccess.hh
 
-all: mscan m2text
+all: mscan m2text check-py
 
 mscan: mscan.cc addr2line.cc hash.c $(HDRS) $(MSCAN_HDRS)
 	@echo "  CXX      $@"
@@ -37,7 +38,7 @@ m2text: m2text.c $(HDRS)
 	@echo "  CC       $@"
 	$(Q)$(CC) -o $@ $< $(CFLAGS) $(LDFLAGS)
 
-.PHONY: install clean astyle
+.PHONY: install clean astyle check-py
 
 ASTYLE = astyle
 ASTYLE_OPTS = --suffix=none \
@@ -50,6 +51,12 @@ ASTYLE_OPTS = --suffix=none \
 	      --indent=spaces=4
 astyle:
 	$(ASTYLE) $(ASTYLE_OPTS) $(MSCAN_HDRS) mscan.cc addr2line.cc
+
+check-py:
+ifneq ($(PYFLAKES),)
+	$(Q)pyflakes new-mtrace-image
+	$(Q)pyflakes qemu-mtrace-linux
+endif
 
 install: mscan
 	@echo "  INSTALL  $(INSTDIR)"
