@@ -61,12 +61,12 @@ class QemuMtrace(object):
         args.extend(['-smp', str(self.o.cores)])
         args.extend(['-m', str(self.o.ram)])
         args.extend(['-kernel', self.o.bzImage])
+        if not self.o.host_clock:
+            args.extend(['-rtc', 'clock=vm']);
         if not self.o.no_mtrace:
             args.extend(['-mtrace-enable',
                          '-mtrace-file', self.o.mtrace_file,
                          '-mtrace-quantum', str(self.o.mtrace_quantum)])
-        if not self.o.no_icount:
-            args.extend(['-icount', '0', '-rtc', 'clock=vm'])
         if self.o.gdb:
             args.extend(['-s'])
 
@@ -123,11 +123,11 @@ def main(args):
                       dest='bzImage',
                       default='mscan.bzImage',
                       help='Kernel bzImage [default: %default]')
-    parser.add_option('--no-icount',
+    parser.add_option('--host-clock',
                       action='store_true',
                       default=False,
-                      dest='no_icount',
-                      help='Disable precise instruction counting [default: %default]')
+                      dest='host_clock',
+                      help='Use the host\'s clock instead of a virtual one [default: %default]')
     parser.add_option('--cores',
                       type='int',
                       dest='cores',
