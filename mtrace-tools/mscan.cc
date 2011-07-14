@@ -408,7 +408,6 @@ int main(int ac, char** av)
     // The default if no arguments
     if (ac == 1) {
         mtrace_options.distinct_sys = true;
-        mtrace_options.distinct_ops = true;
         mtrace_options.false_sharing = true;
         mtrace_options.serial_sections = true;
     }
