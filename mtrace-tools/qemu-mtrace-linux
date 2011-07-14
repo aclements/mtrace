@@ -67,6 +67,8 @@ class QemuMtrace(object):
                          '-mtrace-quantum', str(self.o.mtrace_quantum)])
         if not self.o.no_icount:
             args.extend(['-icount', '0', '-rtc', 'clock=vm'])
+        if self.o.gdb:
+            args.extend(['-s'])
 
         # Build the kernel boot command-line
         appendString = ''
@@ -169,6 +171,11 @@ def main(args):
                       metavar='MINS',
                       default=0,
                       help='Kill QEMU after %metavar [default: %default]')
+    parser.add_option('--gdb',
+                      action='store_true',
+                      dest='gdb',
+                      default=False,
+                      help='Enable gdb server [default: %default]')
     (opts, x) = parser.parse_args(args=args)
 
     qemu = QemuMtrace(opts)
