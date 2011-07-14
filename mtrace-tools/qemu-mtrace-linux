@@ -136,7 +136,7 @@ def main(args):
     parser.add_option('--ram',
                       type='int',
                       dest='ram',
-                      default=1024,
+                      default=2048,
                       help='Amount of RAM [default: %default]')
     parser.add_option('--root',
                       type='string',
@@ -162,8 +162,8 @@ def main(args):
     parser.add_option('--mtrace-quantum',
                       type='int',
                       dest='mtrace_quantum',
-                      metavar='CYCLES',
-                      default=10000,
+                      metavar='NUM',
+                      default=100,
                       help='Mtrace time quantum [default: %default]')
     parser.add_option('--timeout',
                       type='int',
