@@ -54,8 +54,8 @@ astyle:
 
 check-py:
 ifneq ($(PYFLAKES),)
-	$(Q)pyflakes new-mtrace-image
-	$(Q)pyflakes qemu-mtrace-linux
+	$(Q)pyflakes new-mtrace-image qemu-mtrace-linux mtrace-mosbench \
+		     sersec-summary sersec-sort
 endif
 
 install: mscan
