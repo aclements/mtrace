@@ -417,7 +417,13 @@ static inline uint64_t mtrace_get_percore_tsc(CPUX86State *env)
 
 static inline uint64_t mtrace_get_global_tsc(CPUX86State *env)
 {
-    return 0;
+    uint64_t t;
+    int i;
+
+    t = 0;
+    for (i = 0; i < smp_cpus; i++)
+	t += mtrace_inst_count[i];
+    return t;
 }
 
 void mtrace_lock_start(CPUX86State *env)
