@@ -61,10 +61,11 @@ def run_all(opts):
     args = [ 'qemu-mtrace-linux', '--root=' + opts.root ]
 
     benchmark = []
-    if opts.benchmark == 'all':
-        benchmark = BENCHMARK
-    else:
-        benchmark = opts.benchmark
+    for b in opts.benchmark:
+        if b == 'all':
+            benchmark.extend(BENCHMARK)
+        else:
+            benchmark.append(b)
 
     for b in benchmark:
         a = list(args)
