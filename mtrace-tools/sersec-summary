@@ -2,10 +2,15 @@
 
 import sys
 import json
+import numpy
 
 # Input is from sersec-sort
 serials = json.loads(sys.stdin.read())
 summary = []
 for s in serials:
-    summary.append({'name' : s['name'], 'total-cycles' : s['total-cycles']})
+    summary.append({
+            'name'              : s['name'], 
+            'total-cycles'      : s['total-cycles'],
+            'load-std'          : numpy.std(s['per-cpu-percent'])
+            })
 print json.dumps(summary, indent=4)
