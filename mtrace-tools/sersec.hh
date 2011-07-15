@@ -397,11 +397,14 @@ private:
 
     void populateSummaryDict(JsonDict* dict, SerialSectionSummary* sum) {
         timestamp_t tot;
+        float bench_frac;
         JsonList* list;
         int i;
 
         tot = sum->total_cycles();
         dict->put("total-cycles",  tot);
+        bench_frac = (float)tot / (float)total_instructions();
+        dict->put("benchmark-fraction", bench_frac);
         list = JsonList::create();
         for (i = 0; i < mtrace_summary.num_cpus; i++) {
             float percent;

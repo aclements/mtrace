@@ -279,4 +279,11 @@ static inline bool guest_enabled_mtrace(void)
     return mtrace_enable.access.value != 0;
 }
 
+static inline uint64_t total_instructions(void)
+{
+    if (!mtrace_first.access.value || mtrace_enable.access.value)
+        die("total_instructions: still processing log?");
+    return mtrace_enable.global_ts - mtrace_first.global_ts;
+}
+
 #endif // _MSCAN_HH_
