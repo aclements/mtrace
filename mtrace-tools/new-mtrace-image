@@ -59,6 +59,8 @@ DEFAULT_CMDS = [
                          '/usr/bin/run-cmdline.py'),
                  CopyCmd(os.path.join(sys.path[0],'img-files/interfaces'), 
                          '/etc/network/interfaces'),
+                 CopyCmd(os.path.join(sys.path[0],'mtrace-magic'), 
+                         '/usr/bin/mtrace-magic'),
                  FixupCmd('cd /dev && /sbin/MAKEDEV ttyS'),
                  FixupCmd('cd /etc/init.d && update-rc.d run-cmdline defaults')
                ]
