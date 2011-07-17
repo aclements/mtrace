@@ -1,8 +1,9 @@
-#include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
+#include <errno.h>
 #include <zlib.h>
 #include <mtrace-magic.h>
 
