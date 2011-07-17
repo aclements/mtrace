@@ -28,13 +28,17 @@ MSCAN_HDRS = addr2line.hh \
 	     sersec.hh \
 	     sysaccess.hh
 
-all: mscan m2text check-py
+all: mscan m2text mtrace-magic check-py
 
 mscan: mscan.cc addr2line.cc hash.c $(HDRS) $(MSCAN_HDRS)
 	@echo "  CXX      $@"
 	$(Q)$(CXX) -o $@ $< addr2line.cc hash.c $(CFLAGS) -std=c++0x $(LDFLAGS)
 
 m2text: m2text.c $(HDRS)
+	@echo "  CC       $@"
+	$(Q)$(CC) -o $@ $< $(CFLAGS) $(LDFLAGS)
+
+mtrace-magic: mtrace-magic.c $(HDRS)
 	@echo "  CC       $@"
 	$(Q)$(CC) -o $@ $< $(CFLAGS) $(LDFLAGS)
 
