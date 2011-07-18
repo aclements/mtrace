@@ -1,0 +1,40 @@
+[ You might want to add qemu/mtrace-tools to your PATH ]
+
+Mtrace'ing MOSBENCH
+-------------------
+* Setup qemu-mtrace:
+  $ git clone git+ssh://amsterdam.csail.mit.edu/home/am6/mpdev/qemu.git
+  $ cd qemu
+  $ git checkout mtrace
+  $ ../qemu/configure --prefix=PREFIX \
+  --target-list="x86_64-softmmu" --disable-kvm --audio-card-list="" \
+  --disable-vnc-jpeg --disable-vnc-png --disable-strip
+  $ make && make install
+  [ You might want to add PREFIX/bin to your PATH ]
+
+* Build qemu/mtrace-tools:
+  $ (cd qemu/mtrace-tools && make)
+
+* Build a Linux kernel with MTRACE support:
+  $ git clone git+ssh://amsterdam.csail.mit.edu/home/am6/mpdev/scale-linux.git
+  $ cd scale-linux
+  $ git checkout mtrace
+  $ mkdir obj-mtrace
+  $ cp ../qemu/mtrace-tools/config_mtrace obj-mtrace/.config
+  $ make O=obj-mtrace mtrace
+
+* Build MOSBENCH:
+  $ git clone git+ssh://amsterdam.csail.mit.edu/home/am6/mpdev/mosbench.git
+  $ cd mosbench
+  $ git checkout sbw
+  $ make all && (cd exim && make exim-mod-0)
+
+TODO
+----
+* Mount the current user's home dir should with an AUFS overlay at
+  mtrace-root/home/user.  
+  * NFS3 doesn't seem to like crossmnt, maybe try NFS4?
+* MOSBENCH should really be built in the chroot, not in the host.
+  perhaps new-mtrace-image should git clone MOSBENCH then build it.
+* mtrace-mosbench should (git pull MOSBENCH && make all) in the chroot
+  before running?
