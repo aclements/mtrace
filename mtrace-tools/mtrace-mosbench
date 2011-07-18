@@ -10,7 +10,7 @@ import shutil
 import optparse
 import subprocess
 
-BENCHMARK = [ 'exim', 'metis', 'gmake', 'psearchy' ]
+BENCHMARK = [ 'exim', 'metis', 'gmake', 'psearchy', 'postgres' ]
 
 def save_objs(objs, dst):
     files = [ 'mscan.kern', 'mscan.syms', 'mscan.bzImage' ]
