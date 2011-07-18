@@ -60,7 +60,7 @@ def run_all(logDst, b, opts):
     args = [ 'qemu-mtrace-linux', '--root=' + opts.root ]
 
     a = list(args)
-    run = '--run=' + opts.run_cmd + ' ' + b
+    run = '--run=sudo -u ' + os.getlogin() + ' ' + opts.run_cmd + ' ' + b
     a.append(run)
     a.append('--mtrace-file=' + os.path.join(logDst, 'mtrace.out'))
     # Save qemu-mtrace-linux command
