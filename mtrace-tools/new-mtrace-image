@@ -12,7 +12,9 @@ import tempfile
 DEFAULT_IMG_SIZE = '300M'
 DEFAULT_INCLUDES = 'python,makedev'
 
-MOSBENCH_INCLUDES = 'make,rsync,libpcre3,numactl,procps,sudo,ifupdown,netbase,libdb4.6,build-essential,libpq-dev,libtcmalloc-minimal0'
+MOSBENCH_INCLUDES = 'make,rsync,libpcre3,numactl,procps,sudo,ifupdown,netbase' + \
+                    ',libdb4.6,build-essential,libpq-dev,libtcmalloc-minimal0' + \
+                    ',libreadline5'
 
 # colors differentiate subprocess output from make-img.py
 text_log_color   = '\033[95m'       # purplish
