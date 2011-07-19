@@ -34,16 +34,27 @@ def run_mscan(logDst, b):
     mscanJson.close()
     mscanErr.close()
 
+def run_sersec_model(logDst, b):
+    print '[%s] running sersec-model' % b
+    modelJson = open(os.path.join(logDst, 'model.json'), 'w+')
+    modelErr = open(os.path.join(logDst, 'model.err'), 'w+')
+    mscanJson = open(os.path.join(logDst, 'mscan.json'), 'r')
+    subprocess.check_call(['sersec-model'], stdout=modelJson, stderr=modelErr,
+                          stdin=mscanJson)
+    modelJson.close()
+    modelErr.close()
+    mscanJson.close()
+
 def run_sersec_sort(logDst, b):
     print '[%s] running sersec-sort' % b
     sortJson = open(os.path.join(logDst, 'sort.json'), 'w+')
     sortErr = open(os.path.join(logDst, 'sort.err'), 'w+')
-    mscanJson = open(os.path.join(logDst, 'mscan.json'), 'r')
+    modelJson = open(os.path.join(logDst, 'model.json'), 'r')
     subprocess.check_call(['sersec-sort'], stdout=sortJson, stderr=sortErr,
-                          stdin=mscanJson)
+                          stdin=modelJson)
     sortJson.close()
     sortErr.close()
-    mscanJson.close()
+    modelJson.close()
 
 def run_sersec_summary(logDst, b):
     print '[%s] running sersec-summary ' % b
@@ -77,6 +88,7 @@ def run_mtrace(logDst, b, opts):
 def run_all(logDst, b, opts):
     run_mtrace(logDst, b, opts)
     run_mscan(logDst, b)
+    run_sersec_model(logDst, b)
     run_sersec_sort(logDst, b)
     run_sersec_summary(logDst, b)
 
@@ -150,6 +162,7 @@ def main(args):
             run_mtrace(logDst, b, opts)
         elif opts.process == 'mscan':
             run_mscan(logDst, b)
+            run_sersec_model(logDst, b)
             run_sersec_sort(logDst, b)
             run_sersec_summary(logDst, b)
         else:

@@ -26,7 +26,7 @@ Mtrace'ing MOSBENCH
 * Build MOSBENCH:
   $ git clone git+ssh://amsterdam.csail.mit.edu/home/am6/mpdev/mosbench.git
   $ cd mosbench
-  $ git checkout sbw
+  $ git checkout mtrace
   $ make all && (cd exim && make exim-mod-0)
 
 * Setup your /etc/exports.  Add something like:
@@ -43,3 +43,4 @@ TODO
 * mtrace-mosbench should (git pull MOSBENCH && make all) in the chroot
   before running?
 * fix (cd exim && make exim-mod-0)
+* fix copy-paste code in mtrace-mosbench
