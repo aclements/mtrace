@@ -51,6 +51,7 @@ static struct MtraceOptions {
     bool        distinct_ops;
     bool        distinct_sys;
     bool        eyerman;
+    bool        summary;
 } mtrace_options;
 
 class DefaultHostHandler : public EntryHandler {
@@ -158,6 +159,16 @@ public:
 
         // XXX Oops, we leak the mtrace_label_entry in percpu_labels after
         // we handle the final segment.
+    }
+};
+
+class DefaultSummary : public EntryHandler {
+public:
+    virtual void exit(JsonDict* json_file) {
+        JsonDict* dict = JsonDict::create();
+        
+        dict->put("total-instructions", total_instructions());
+        json_file->put("summary", dict);
     }
 };
 
@@ -277,6 +288,9 @@ static void init_handlers(void)
         Eyerman* eyerman = new Eyerman(eyerman_sersecs);
         exit_handler.push_back(eyerman);
     }
+
+    if (mtrace_options.summary)
+        exit_handler.push_back(new DefaultSummary());
 }
 
 static void init_static_syms(const char* sym_file)
@@ -374,6 +388,8 @@ static void handle_arg(const ArgParse* parser, string option, string val)
         mtrace_options.distinct_sys = true;
     } else if (option == "eyerman") {
         mtrace_options.eyerman = true;
+    } else if (option == "summary") {
+        mtrace_options.summary = true;
     } else {
         die("handle_arg: unexpected");
     }
@@ -403,6 +419,8 @@ int main(int ac, char** av)
                      "Average distinct cache lines per syscall");
     parse.add_option("eyerman",
                      "Input to \"Eyerman's law\"");
+    parse.add_option("summary",
+                     "Workload summary");
     parse.parse(handle_arg);
 
     // The default if no arguments
@@ -410,6 +428,7 @@ int main(int ac, char** av)
         mtrace_options.distinct_sys = true;
         mtrace_options.false_sharing = true;
         mtrace_options.serial_sections = true;
+        mtrace_options.summary = true;
     }
 
     log = gzopen(log_file, "rb");
