@@ -18,8 +18,8 @@ totalCycles = summary["total-instructions"] + extra
 summary["total-cycles"] = totalCycles
 
 for s in j["serial-sections"]:
-    s["benchmark-fraction"] = s["total-cycles"] / totalCycles
+    s["benchmark-fraction"] = float(s["total-cycles"]) / float(totalCycles)
     for p in s["per-acquire-pc"]:
-        p["benchmark-fraction"] = p["total-cycles"] / totalCycles
+        p["benchmark-fraction"] = float(p["total-cycles"]) / float(totalCycles)
 
-json.dump(j, sys.stdout, indent=4)
+json.dump(j, sys.stdout, indent=2)
