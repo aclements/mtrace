@@ -59,7 +59,7 @@ astyle:
 check-py:
 ifneq ($(PYFLAKES),)
 	$(Q)pyflakes new-mtrace-image qemu-mtrace-linux mtrace-mosbench \
-		     sersec-summary sersec-sort
+		     sersec-summary sersec-sort sersec-model
 endif
 
 install: mscan
@@ -68,4 +68,4 @@ install: mscan
 
 clean:
 	@echo "  CLEAN"
-	$(Q)rm -f mscan
+	$(Q)rm -f mscan m2text mtrace-magic
