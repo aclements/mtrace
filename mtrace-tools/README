@@ -29,6 +29,10 @@ Mtrace'ing MOSBENCH
   $ git checkout sbw
   $ make all && (cd exim && make exim-mod-0)
 
+* Setup your /etc/exports.  Add something like:
+  # "insecure" is necessary because QEMU's NAT scrambles the source port 
+  /home/ 127.0.0.1(rw,no_subtree_check,no_root_squash,no_all_squash,insecure)
+
 TODO
 ----
 * Mount the current user's home dir should with an AUFS overlay at
@@ -38,3 +42,4 @@ TODO
   perhaps new-mtrace-image should git clone MOSBENCH then build it.
 * mtrace-mosbench should (git pull MOSBENCH && make all) in the chroot
   before running?
+* fix (cd exim && make exim-mod-0)
