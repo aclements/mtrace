@@ -14,4 +14,4 @@ for s in serials:
             'load-std'           : numpy.std(s['per-cpu-percent']),
             'benchmark-fraction' : s['benchmark-fraction']
             })
-print json.dumps(summary, indent=4)
+print json.dumps(summary, indent=2)

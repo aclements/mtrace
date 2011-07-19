@@ -17,4 +17,4 @@ for s in serials:
         p["coherence-miss-list"] = sorted(p["coherence-miss-list"],
 					  key=lambda sec: sec["count"],
 					  reverse=True)
-print json.dumps(serials, indent=4)
+print json.dumps(serials, indent=2)
