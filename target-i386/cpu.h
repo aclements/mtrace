@@ -978,6 +978,8 @@ static inline void cpu_get_tb_cpu_state(CPUState *env, target_ulong *pc,
 {
     *cs_base = env->segs[R_CS].base;
     *pc = *cs_base + env->eip;
+    if (!(env->hflags & HF_CS64_MASK))
+        *pc &= 0xffffffff;
     *flags = env->hflags |
         (env->eflags & (IOPL_MASK | TF_MASK | RF_MASK | VM_MASK));
 }

@@ -56,10 +56,12 @@ static volatile int mtrace_lock_active[255];
 
 static pid_t child_pid;
 
-static struct {
-    uint64_t offset;
-    uint64_t start;
-} mtrace_tsc[255];
+static uint64_t mtrace_inst_count[255];
+
+void mtrace_inst_inc(void)
+{
+    mtrace_inst_count[cpu_single_env->cpu_index]++;
+}
 
 void mtrace_cline_trace_set(int b)
 {
@@ -410,24 +412,18 @@ void mtrace_io_read(void *cb, target_phys_addr_t ram_addr,
 
 static inline uint64_t mtrace_get_percore_tsc(CPUX86State *env)
 {
-    return (cpu_get_tsc(env) - mtrace_tsc[env->cpu_index].start) + 
-	mtrace_tsc[env->cpu_index].offset;
+    return mtrace_inst_count[env->cpu_index];
 }
 
 static inline uint64_t mtrace_get_global_tsc(CPUX86State *env)
 {
-    return cpu_get_tsc(env);
-}
+    uint64_t t;
+    int i;
 
-void mtrace_exec_start(CPUX86State *env)
-{
-    mtrace_tsc[env->cpu_index].start = cpu_get_tsc(env);
-}
-
-void mtrace_exec_stop(CPUX86State *env)
-{
-    mtrace_tsc[env->cpu_index].offset += 
-	(cpu_get_tsc(env) - mtrace_tsc[env->cpu_index].start);
+    t = 0;
+    for (i = 0; i < smp_cpus; i++)
+	t += mtrace_inst_count[i];
+    return t;
 }
 
 void mtrace_lock_start(CPUX86State *env)
@@ -686,6 +682,10 @@ void mtrace_init(void)
 
     entry.num_cpus = smp_cpus;
     entry.num_ram = ram_size;
+    entry.quantum = mtrace_quantum;
+    entry.sample = mtrace_sample;
+    entry.locked = mtrace_lock_trace;
+    entry.calls = mtrace_call_trace;
     mtrace_log_entry((union mtrace_entry *)&entry);
     
     atexit(mtrace_cleanup);

@@ -27,6 +27,7 @@
 #include "exec-all.h"
 #include "disas.h"
 #include "tcg-op.h"
+#include "mtrace.h"
 
 #include "helper.h"
 #define GEN_HELPER 1
@@ -4192,6 +4193,9 @@ static target_ulong disas_insn(DisasContext *s, target_ulong pc_start)
     /* lock generation */
     if (prefixes & PREFIX_LOCK)
         gen_helper_lock();
+
+    if (mtrace_system_enable_get())
+	gen_helper_mtrace_insn_count();
 
     /* now check op code */
  reswitch:

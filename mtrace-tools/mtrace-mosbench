@@ -1,0 +1,160 @@
+#!/usr/bin/python
+
+# The easiest way to run this:
+#   $ cd obj-linux-2.6
+#   $ mtrace-mosbench --benchmark=all --log-dir=../mtrace-log
+
+import os
+import sys
+import shutil
+import optparse
+import subprocess
+
+BENCHMARK = [ 'exim', 'metis', 'gmake', 'psearchy', 'postgres' ]
+
+def save_objs(objs, dst):
+    files = [ 'mscan.kern', 'mscan.syms', 'mscan.bzImage' ]
+    for f in files:
+        shutil.copy(os.path.join(objs, f), dst)
+
+def setup_log(root, name):
+    dst = os.path.join(root, name)
+    if not os.path.exists(dst):
+        os.mkdir(dst)
+    elif not os.path.isdir(dst):
+        raise Exception('Oops %s is not a dir' % dst)
+    return dst
+
+def run_mscan(logDst, b):
+    print '[%s] running mscan' % b
+    mscanJson = open(os.path.join(logDst, 'mscan.json'), 'w+')
+    mscanErr = open(os.path.join(logDst, 'mscan.err'), 'w+')
+    subprocess.check_call(['mscan'], stdout=mscanJson, stderr=mscanErr,
+                          cwd=logDst)
+    mscanJson.close()
+    mscanErr.close()
+
+def run_sersec_sort(logDst, b):
+    print '[%s] running sersec-sort' % b
+    sortJson = open(os.path.join(logDst, 'sort.json'), 'w+')
+    sortErr = open(os.path.join(logDst, 'sort.err'), 'w+')
+    mscanJson = open(os.path.join(logDst, 'mscan.json'), 'r')
+    subprocess.check_call(['sersec-sort'], stdout=sortJson, stderr=sortErr,
+                          stdin=mscanJson)
+    sortJson.close()
+    sortErr.close()
+    mscanJson.close()
+
+def run_sersec_summary(logDst, b):
+    print '[%s] running sersec-summary ' % b
+    summaryJson = open(os.path.join(logDst, 'summary.json'), 'w+')
+    summaryErr = open(os.path.join(logDst, 'summary.err'), 'w+')
+    sortJson = open(os.path.join(logDst, 'sort.json'), 'r')
+    subprocess.check_call(['sersec-summary'], stdout=summaryJson, stderr=summaryErr,
+                          stdin=sortJson)
+    summaryJson.close()
+    summaryErr.close()
+    sortJson.close()
+
+def run_mtrace(logDst, b, opts):
+    args = [ 'qemu-mtrace-linux', '--root=' + opts.root ]
+
+    a = list(args)
+    run = '--run=sudo -u ' + os.getenv("LOGNAME") + ' ' + opts.run_cmd + ' ' + b
+    a.append(run)
+    a.append('--mtrace-file=' + os.path.join(logDst, 'mtrace.out'))
+    # Save qemu-mtrace-linux command
+    qemuCmd = open(os.path.join(logDst, 'qemu.cmd'), 'w+')
+    qemuCmd.write(str(a) + '\n')
+    qemuCmd.close()
+    qemuLog = open(os.path.join(logDst, 'qemu.out'), 'w+')
+    print '[%s] running qemu-mtrace' % b
+    subprocess.check_call(a, stdout=qemuLog, stderr=qemuLog, 
+                              cwd=opts.obj_dir)
+    qemuLog.close()
+    save_objs(opts.obj_dir, logDst)
+
+def run_all(logDst, b, opts):
+    run_mtrace(logDst, b, opts)
+    run_mscan(logDst, b)
+    run_sersec_sort(logDst, b)
+    run_sersec_summary(logDst, b)
+
+def main(args):
+    def pathHandler(option, opt, value, parser):
+        setattr(parser.values, option.dest, 
+                os.path.abspath(os.path.expanduser(value)))
+
+    parser = optparse.OptionParser('Usage: %prog [options]',
+                                   description = 'Run mosbench with mtrace')
+    parser.add_option('--root',
+                      type='string',
+                      action='callback',
+                      callback=pathHandler,
+                      dest='root',
+                      default=os.path.expanduser('~/mtrace-root'),
+                      help='Linux root.  If a directory, use NFS root, else use disk image [default: %default]')
+    parser.add_option('--log-dir',
+                      type='string',
+                      action='callback',
+                      callback=pathHandler,
+                      dest='log_dir',
+                      metavar='DIR',
+                      default=os.getcwd(),
+                      help='Directory to store results [default: %default]')
+    parser.add_option('--obj-dir',
+                      type='string',
+                      action='callback',
+                      callback=pathHandler,
+                      dest='obj_dir',
+                      metavar='DIR',
+                      default=os.getcwd(),
+                      help='Directory with mscan.* files [default: %default]')
+    parser.add_option('--run-cmd',
+                      type='string',
+                      dest='run_cmd',
+                      default=os.path.join(os.path.expanduser('~/mosbench'), 'run.sh'),
+                      help='Command to run MOSBENCH in QEMU [default: %default]')
+    parser.add_option('--benchmark',
+                      action='append',
+                      type='string',
+                      default=[],
+                      dest='benchmark',
+                      help='Benchmark to run (or "all")')
+    parser.add_option('--process',
+                      type='string',
+                      default='all',
+                      dest='process',
+                      help='Processing to perform <all|mtrace|mscan>  [default: %default]')
+    (opts, x) = parser.parse_args(args=args)
+
+    if not os.path.exists(opts.log_dir) or not os.path.isdir(opts.log_dir):
+        print >> sys.stderr, 'Bad log-dir %s' % opts.log_dir
+        exit(2)
+    if len(opts.benchmark) == 0:
+        print >> sys.stderr, 'Specify a benchmark to run'
+        exit(2)
+
+    benchmark = []
+    for b in opts.benchmark:
+        if b == 'all':
+            benchmark.extend(BENCHMARK)
+        else:
+            benchmark.append(b)
+
+    for b in benchmark:
+        logDst = setup_log(opts.log_dir, b)
+        if opts.process == 'all':
+            run_all(logDst, b, opts)
+        elif opts.process == 'mtrace':
+            run_mtrace(logDst, b, opts)
+        elif opts.process == 'mscan':
+            run_mscan(logDst, b)
+            run_sersec_sort(logDst, b)
+            run_sersec_summary(logDst, b)
+        else:
+            print >> sys.stderr, 'Unknown process: ' + opts.process
+            exit(2)
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

@@ -22,6 +22,7 @@
 #include "tcg.h"
 #include "kvm.h"
 #include "qemu-barrier.h"
+#include "mtrace.h"
 
 #if !defined(CONFIG_SOFTMMU)
 #undef EAX
@@ -221,6 +222,7 @@ static void cpu_handle_debug_exception(CPUState *env)
 /* main execution loop */
 
 volatile sig_atomic_t exit_request;
+static int mtrace_tb_count;
 
 int cpu_exec(CPUState *env1)
 {
@@ -242,6 +244,8 @@ int cpu_exec(CPUState *env1)
     saved_env_reg = (host_reg_t) env;
     barrier();
     env = env1;
+
+    mtrace_tb_count = 0;
 
     if (unlikely(exit_request)) {
         env->exit_request = 1;
@@ -339,6 +343,13 @@ int cpu_exec(CPUState *env1)
 #endif
                 }
             }
+
+	    if (mtrace_enable_get() && mtrace_quantum_get()) {
+		if (mtrace_tb_count >= mtrace_quantum_get()) {
+		    ret = 0;
+		    break;
+		}
+	    }		
 
             if (kvm_enabled()) {
                 kvm_cpu_exec(env);
@@ -612,6 +623,7 @@ int cpu_exec(CPUState *env1)
 #define env cpu_single_env
 #endif
                     next_tb = tcg_qemu_tb_exec(tc_ptr);
+		    mtrace_tb_count++;
                     if ((next_tb & 3) == 2) {
                         /* Instruction counter expired.  */
                         int insns_left;
@@ -638,7 +650,13 @@ int cpu_exec(CPUState *env1)
                             next_tb = 0;
                             cpu_loop_exit();
                         }
-                    }
+                    } else {
+			if (mtrace_enable_get() && mtrace_quantum_get()) {
+			    if (mtrace_tb_count >= mtrace_quantum_get()) {
+				cpu_loop_exit();
+			    }
+			}
+		    }
                 }
                 env->current_tb = NULL;
                 /* reset soft MMU for next block (it can currently

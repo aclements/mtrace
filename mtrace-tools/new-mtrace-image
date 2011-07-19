@@ -1,0 +1,343 @@
+#!/usr/bin/python
+
+import sys
+import os.path
+import subprocess
+import signal
+import shutil
+import traceback
+import optparse
+import tempfile
+
+DEFAULT_IMG_SIZE = '300M'
+DEFAULT_INCLUDES = 'python,makedev'
+
+MOSBENCH_INCLUDES = 'make,rsync,libpcre3,numactl,procps,sudo,ifupdown,netbase' + \
+                    ',libdb4.6,build-essential,libpq-dev,libtcmalloc-minimal0' + \
+                    ',libreadline5'
+
+# colors differentiate subprocess output from make-img.py
+text_log_color   = '\033[95m'       # purplish
+text_err_color   = '\033[91m'       # redish
+text_end_color   = '\033[0m' 
+
+def print_log(string):
+    print text_log_color + string + text_end_color
+
+def print_err(string):
+    print text_err_color + string + text_end_color
+
+class CopyCmd:
+    # (relative path to script location, absolute path in disk image)
+    def __init__(self, src, dst):
+        self.src = os.path.abspath(os.path.expanduser(src))
+        self.dst = os.path.abspath(os.path.expanduser(dst))
+
+    def run(self, img):
+        src = self.src
+        chroot_dst = self.dst
+        chroot_src = '/tmp/' + os.path.basename(self.src)
+        # Copy once, chroot, and move to avoid accidentally overwriting
+        # the host system files
+        sudo(['cp', '-r', src, img.tmp + '/tmp']).run()
+        img.chroot(['sh', '-c', 'mv ' + chroot_src + ' ' + chroot_dst ]).run()
+
+class FixupCmd:
+    # chroot into the disk image and run cmd shell command
+    def __init__(self, cmd):
+        self.cmd = cmd
+
+    def run(self, img):
+        img.chroot(['sh', '-c', self.cmd]).run()
+
+# XXX how does schroot sync users?
+class CopyUserCmd(object):
+    def __init__(self, login):
+        self.login = login
+
+    def run(self, img):
+        # Copy each line that starts with self.login to the chroot version
+        fixups = [ '/etc/passwd', '/etc/group' ]
+        for fix in fixups:
+            f = open(fix)
+            line = None
+            for l in f:
+                if self.login == l.split(':')[0]:
+                    line = l.rstrip()
+                    break
+            if line == None:
+                raise Exception('CopyUserCmd unable to find %s in %s: ' % (self.login, fix))
+            f.close()
+            img.chroot(['sh', '-c', 'echo ' + line + ' >> ' + fix]).run()
+        img.chroot(['sh', '-c', 'echo ' + self.login + '::14909:0:99999:7::: >> /etc/shadow']).run()
+        img.chroot(['sh', '-c', 'echo ' + self.login + ' ALL=\(ALL\) NOPASSWD: ALL >> /etc/sudoers']).run()
+
+DEFAULT_CMDS = [ 
+                 CopyCmd(os.path.join(sys.path[0],'img-files/shadow'), 
+                         '/etc/shadow'),
+                 CopyCmd(os.path.join(sys.path[0],'img-files/inittab'), 
+                         '/etc/inittab'),
+                 CopyCmd(os.path.join(sys.path[0],'img-files/run-cmdline'), 
+                         '/etc/init.d/run-cmdline'),
+                 CopyCmd(os.path.join(sys.path[0],'img-files/run-cmdline.py'), 
+                         '/usr/bin/run-cmdline.py'),
+                 CopyCmd(os.path.join(sys.path[0],'img-files/interfaces'), 
+                         '/etc/network/interfaces'),
+                 CopyCmd('/etc/hosts', '/etc/hosts'),
+                 CopyCmd(os.path.join(sys.path[0],'mtrace-magic'), 
+                         '/usr/bin/mtrace-magic'),
+                 FixupCmd('cd /dev && /sbin/MAKEDEV ttyS'),
+                 FixupCmd('cd /etc/init.d && update-rc.d run-cmdline defaults'),
+               ]
+
+class ProcessHelper:
+    def __init__(self, args):
+        self.args = args
+
+    def run(self, quiet = False):
+        s = self.args[0]
+        for a in self.args[1:]:
+            s = s + ' ' + a
+
+        if quiet:
+            f = open('/dev/null', 'r+')
+            p = subprocess.Popen(self.args, stdout = f, stderr = f)
+            p.wait()
+            return
+
+        print_log('[running]  ' + s)
+        p = subprocess.Popen(self.args)
+        self.process = p
+        p.wait()
+        if p.returncode:
+            raise Exception('Failed: %s returned %u' % (s, p.returncode))
+
+        #print_log('[complete] ' + s)
+
+def sudo(args):
+    args.insert(0, 'sudo')
+    return ProcessHelper(args)
+
+class Root(object):
+    def __init__(self, filepath):
+        self.filepath = filepath
+        self.tmp = tempfile.mkdtemp(prefix='new-mtrace-image-', dir=os.path.dirname(filepath))
+
+    def chroot(self, args):
+        args.insert(0, self.tmp)
+        args.insert(0, 'chroot')
+        return sudo(args)
+
+    def mount(self, quiet = False):
+        pass
+
+    def umount(self, quiet = False):
+        pass
+
+    def create(self, img_size):
+        pass
+
+    def format(self):
+        pass
+
+    def bootstrap(self, include):
+        sudo(['debootstrap',
+              '--arch',
+              'amd64',
+              '--include=' + include,
+              '--exclude=udev',
+              '--variant=minbase',
+              'squeeze',
+              self.tmp,
+              'http://mirrors.xmission.com/debian/']).run()
+
+    def cleanup(self):
+        try:
+            os.rmdir(self.tmp)
+        except:
+            pass
+
+    def run_cmds(self, cmds):
+        for cmd in cmds:
+            cmd.run(self)
+
+    def finish(self):
+        shutil.move(self.tmp, self.filepath)
+
+class DiskImage(Root):
+    def __init__(self, filepath):
+        self.filepath = filepath
+        self.tmp = tempfile.mkdtemp(prefix='new-mtrace-image-', dir=os.path.dirname(filepath))
+
+    def mount(self, quiet = False):
+        if os.path.exists(self.tmp):
+            raise Exception('Failed: temporary directory exists: %s' % self.tmp)               
+        else:
+            os.mkdir(self.tmp)
+
+        sudo(['mount',
+              '-o',
+              'loop',
+              self.filepath,
+              self.tmp]).run(quiet)
+
+    def umount(self, quiet = False):
+        sudo(['umount',
+              self.tmp]).run(quiet)
+        os.rmdir(self.tmp)
+
+    def create(self, img_size):
+        if os.path.isfile(self.filepath):
+            raise Exception('Failed: File \'%s\' exists' % self.filepath)
+        ProcessHelper(['qemu-img', 
+                       'create', 
+                       self.filepath,
+                       img_size]).run()
+
+    def format(self):
+        ProcessHelper(['/sbin/mkfs.ext3', 
+                       '-F', 
+                       self.filepath]).run()
+
+    def bootstrap(self, include):
+        self.mount()
+        super(DiskImage, self).bootstrap(include)
+        self.umount()
+
+    def cleanup(self):
+        try:
+            self.umount(True)
+        except:
+            pass
+        
+        try:
+            os.rmdir(self.tmp)
+        except:
+            pass
+
+    def run_cmds(self, cmds):
+        self.mount()
+        super(DiskImage, self).run_cmds(cmds)
+        self.umount()
+
+    def finish(self):
+        pass
+
+DEFAULT_ROOT_TYPE = Root
+
+def parse_args(args):
+    def size_handler(option, opt, value, parser):
+        global DEFAULT_IMG_SIZE
+        DEFAULT_IMG_SIZE = value
+
+    def fixup_handler(option, opt, value, parser):
+        global DEFAULT_CMDS
+        DEFAULT_CMDS.append(FixupCmd(value))
+
+    def include_handler(option, opt, value, parser):
+        global DEFAULT_INCLUDES
+        DEFAULT_INCLUDES = DEFAULT_INCLUDES + ',' + value
+
+    def copy_handler(option, opt, value, parser):
+        global DEFAULT_CMDS
+        split = value.partition(',')
+        DEFAULT_CMDS.append(CopyCmd(split[0], split[2]))
+
+    def mosbench_handler(option, opt, value, parser):
+        global MOSBENCH_INCLUDES
+        global DEFAULT_CMDS
+
+        login = os.getlogin()
+        DEFAULT_CMDS.append(CopyUserCmd(login))
+
+        # Copy the mosbench tree to the same absolute path in the image
+        src = value
+        chroot_dst = os.path.abspath(os.path.expanduser(value))
+        chroot_dir = os.path.dirname(chroot_dst)
+        fixup_handler(None, None, 'mkdir -p ' + chroot_dir, None)
+        copy_handler(None, None, src + ',' + chroot_dst, None)
+        fixup_handler(None, None, 'chown -R %s:%s %s' % (login, login, chroot_dir), None)
+        include_handler(None, None, MOSBENCH_INCLUDES, None)
+
+        fixup_handler(None, None,
+                      'ln -s /usr/lib/libtcmalloc_minimal.so.0.0.0 /usr/lib/libtcmalloc_minimal.so',
+                      None)
+        
+    def imgtype_handler(option, opt, value, parser):
+        global DEFAULT_ROOT_TYPE
+        if value == 'ext3':
+            DEFAULT_ROOT_TYPE = DiskImage
+        else:
+            raise Exception('Unknown image type: ' + value)
+
+    parser = optparse.OptionParser('''Usage: %prog [options] directory | file
+
+Examples:
+    %prog linux-root
+    %prog --mosbench-src=~/mosbench linux-root''',
+    description = 'Build a root image suitable for running Linux on mtrace')
+    
+    parser.add_option('--mosbench-src',
+                      type='string',
+                      action='callback',
+                      callback=mosbench_handler,
+                      metavar='PATH',
+                      help='Path to your MOSBENCH tree')
+    parser.add_option('--size',
+                      type='string',
+                      action='callback',
+                      callback=size_handler,
+                      help='Disk image size (optional suffixes: K, M, G)')
+    parser.add_option('--image-type',
+                      type='string',
+                      action='callback',
+                      callback=imgtype_handler,
+                      help='The type of disk image to create (ext3 only).' +
+                      '  The default is to create a root directory')
+    parser.add_option('--fixup',
+                      type='string',
+                      action='callback',
+                      callback=fixup_handler,
+                      metavar='SHELL_CMD',
+                      help='Execute SHELL_CMD while chrooted in the image')
+    parser.add_option('--copy',
+                      type='string',
+                      action='callback',
+                      callback=copy_handler,
+                      metavar='SRC,DST',
+                      help='Copy SRC from host to DST in image')
+    parser.add_option('--include',
+                      type='string',
+                      action='callback',
+                      callback=include_handler,
+                      metavar='PKG0,PKG1..',
+                      help='Install PKG0,PKG1.. in the image')
+
+    (opts, args) = parser.parse_args(args=args)
+    if len(args) != 1:
+        parser.error('You must specify an output directory or file')
+    return args[0]
+
+def main(args):
+    output = parse_args(args)
+    root = DEFAULT_ROOT_TYPE(output)
+
+    def on_sigint(signum, frame):
+        root.cleanup()
+    signal.signal(signal.SIGINT, on_sigint)
+
+    try:
+        root.create(DEFAULT_IMG_SIZE)
+        root.format()
+        root.bootstrap(DEFAULT_INCLUDES)
+        root.run_cmds(DEFAULT_CMDS)
+        root.finish()
+    except:
+        print_err('\n[failed]')
+        traceback.print_exc(file=sys.stdout)
+
+    root.cleanup()
+    exit(0)
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

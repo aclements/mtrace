@@ -1,0 +1,187 @@
+#!/usr/bin/python
+
+import os
+import sys
+import time
+import errno
+import signal
+import os.path
+import optparse
+import subprocess
+
+class QemuMtrace(object):
+    def __init__(self, opts):
+        self.o = opts
+        if not self.o.no_mtrace:
+            self.__test_for_mtrace()
+
+    def __test_for_mtrace(self):
+        null = open('/dev/null', 'w+')
+        try:
+            subprocess.check_call(['sh', '-c', 
+                                   self.o.qemu + ' -h | grep mtrace'],
+                                  stdout=null)
+        except subprocess.CalledProcessError:
+            print >> sys.stderr, self.o.qemu + \
+                ' is not installed or does not support mtrace'
+            exit(2)
+        null.close()
+
+    def __run(self, args):
+        p = subprocess.Popen(args)
+        expired = [False]
+        if self.o.timeout:
+            def onAlarm(signum, frame):
+                expired[0] = True
+            signal.signal(signal.SIGALRM, onAlarm)
+            signal.alarm(self.o.timeout * 60)
+
+        status = 0
+        try:
+            (x, status) = os.wait()
+        except OSError, e:
+            if e.errno != errno.EINTR or not expired[0]:
+                raise
+
+            print >> sys.stderr, 'QEMU timed out'
+            os.kill(p.pid, signal.SIGTERM)
+            status = signal.SIGTERM
+            time.sleep(2)
+            if p.poll() is None:
+                print >> sys.stderr, 'QEMU ignored SIGTERM, trying SIGKILL'
+                os.kill(p.pid, signal.SIGKILL)
+                status = signal.SIGKILL
+                time.sleep(2)
+            if p.poll() is None:
+                raise Exception('QEMU (%u) will not die' % p.pid)
+        return status
+
+    def run(self):
+        args = [ self.o.qemu, '-nographic', '-no-reboot' ]
+        args.extend(['-smp', str(self.o.cores)])
+        args.extend(['-m', str(self.o.ram)])
+        args.extend(['-kernel', self.o.bzImage])
+        if not self.o.host_clock:
+            args.extend(['-rtc', 'clock=vm']);
+        if not self.o.no_mtrace:
+            args.extend(['-mtrace-enable',
+                         '-mtrace-file', self.o.mtrace_file,
+                         '-mtrace-quantum', str(self.o.mtrace_quantum)])
+        if self.o.gdb:
+            args.extend(['-s'])
+
+        # Build the kernel boot command-line
+        appendString = ''
+        if os.path.isfile(self.o.root):
+            args.extend(['-hda', self.o.root])            
+            appendString += 'root=/dev/hda'
+        elif os.path.isdir(self.o.root):
+            appendString += 'root=/dev/nfs nfsroot=10.0.2.2:' + self.o.root
+            appendString += ' rw ip=dhcp'
+        else:
+            raise Exception('Bad root: ' + self.o.root)
+        appendString += ' clock=pit'
+        appendString += ' console=ttyS0'        
+        appendString += ' nume=fake=' + str(self.o.cores)
+        # Build run-cmdline command-line option
+        runString = ''
+        for cmd in self.o.run:
+            runString += ' run-cmdline="' + cmd + '"'
+        if not self.o.no_reboot:
+            runString += ' run-cmdline="reboot"'
+        appendString += runString
+        args.extend(['-append', appendString])
+
+        return self.__run(args)
+
+def main(args):
+    def pathHandler(option, opt, value, parser):
+        setattr(parser.values, option.dest, 
+                os.path.abspath(os.path.expanduser(value)))
+
+    parser = optparse.OptionParser('Usage: %prog [options]',
+                                   description = 'Boot Linux on qemu with mtrace and run commands.')
+    parser.add_option('--qemu',
+                      type='string',
+                      dest='qemu',
+                      default='qemu-system-x86_64',
+                      help='QEMU mtrace command [default: %default]')
+    parser.add_option('--no-mtrace',
+                      action='store_true',
+                      default=False,
+                      dest='no_mtrace',
+                      help='Disable mtrace [default: %default]')
+    parser.add_option('--no-reboot',
+                      action='store_true',
+                      default=False,
+                      dest='no_reboot',
+                      help='Disable automatic reboot [default: %default]')
+    parser.add_option('--bzImage',
+                      type='string',
+                      action='callback',
+                      callback=pathHandler,
+                      dest='bzImage',
+                      default='mscan.bzImage',
+                      help='Kernel bzImage [default: %default]')
+    parser.add_option('--host-clock',
+                      action='store_true',
+                      default=False,
+                      dest='host_clock',
+                      help='Use the host\'s clock instead of a virtual one [default: %default]')
+    parser.add_option('--cores',
+                      type='int',
+                      dest='cores',
+                      default=4,
+                      help='Number of cores [default: %default]')
+    parser.add_option('--ram',
+                      type='int',
+                      dest='ram',
+                      default=2048,
+                      help='Amount of RAM [default: %default]')
+    parser.add_option('--root',
+                      type='string',
+                      action='callback',
+                      callback=pathHandler,
+                      dest='root',
+                      default=os.path.expanduser('~/mtrace-root'),
+                      help='Linux root.  If a directory, use NFS root, else use disk image [default: %default]')
+    parser.add_option('--run',
+                      action='append',
+                      type='string',
+                      default=[],
+                      dest='run',
+                      help='Command to run after Linux boot.  You can pass --run multiple times.')
+    parser.add_option('--mtrace-file',
+                      type='string',
+                      action='callback',
+                      callback=pathHandler,
+                      dest='mtrace_file',
+                      metavar='FILE',
+                      default=os.path.join(os.getcwd(), 'mtrace.out'),
+                      help='Mtrace log file [default: %default]')
+    parser.add_option('--mtrace-quantum',
+                      type='int',
+                      dest='mtrace_quantum',
+                      metavar='NUM',
+                      default=100,
+                      help='Mtrace time quantum [default: %default]')
+    parser.add_option('--timeout',
+                      type='int',
+                      dest='timeout',
+                      metavar='MINS',
+                      default=0,
+                      help='Kill QEMU after %metavar [default: %default]')
+    parser.add_option('--gdb',
+                      action='store_true',
+                      dest='gdb',
+                      default=False,
+                      help='Enable gdb server [default: %default]')
+    (opts, x) = parser.parse_args(args=args)
+
+    qemu = QemuMtrace(opts)
+    status = qemu.run()
+    if status:
+        print >> sys.stderr, 'QEMU status code %x' % status
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
