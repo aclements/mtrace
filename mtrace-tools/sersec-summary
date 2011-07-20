@@ -12,6 +12,8 @@ for s in serials:
             'name'               : s['name'], 
             'total-cycles'       : s['total-cycles'],
             'load-std'           : numpy.std(s['per-cpu-percent']),
-            'benchmark-fraction' : s['benchmark-fraction']
+            'benchmark-fraction' : s['benchmark-fraction'],
+            'coherence-miss'     : s['coherence-miss'],
+            'acquires'           : s['acquires']
             })
 print json.dumps(summary, indent=2)
