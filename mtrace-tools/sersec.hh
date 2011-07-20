@@ -402,7 +402,7 @@ private:
         int i;
 
         tot = sum->total_cycles();
-        dict->put("total-cycles",  tot);
+        dict->put("total-instructions",  tot);
         bench_frac = (float)tot / (float)total_instructions();
         dict->put("benchmark-fraction", bench_frac);
         list = JsonList::create();

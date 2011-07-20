@@ -9,9 +9,11 @@ j = json.load(sys.stdin)
 extra = 0
 for s in j["serial-sections"]:
     extra += s["coherence-miss"] * MISS_PENALTY
-    s["total-cycles"] += s["coherence-miss"] * MISS_PENALTY
+    s["total-cycles"] = (s["total-instructions"] +
+                         (s["coherence-miss"] * MISS_PENALTY))
     for p in s["per-acquire-pc"]:
-        p["total-cycles"] += p["coherence-miss"] * MISS_PENALTY
+        p["total-cycles"] = (p["total-instructions"] +
+                             (p["coherence-miss"] * MISS_PENALTY))
 
 summary = j["summary"]
 totalCycles = summary["total-instructions"] + extra

@@ -11,12 +11,14 @@ class Combiner(object):
         self.d = {}
         self.d['name'] = s['name']
         self.d['total-cycles'] = s['total-cycles']
+        self.d['total-instructions'] = s['total-instructions']
         self.d['benchmark-fraction'] = s['benchmark-fraction']
         self.d['coherence-miss'] = s['coherence-miss']
         self.d['acquires'] = s['acquires']
 
     def combine(self, s):
         self.d['total-cycles'] += s['total-cycles']
+        self.d['total-instructions'] += s['total-instructions']
         self.d['benchmark-fraction'] += s['benchmark-fraction']
         self.d['coherence-miss'] += s['coherence-miss']
         self.d['acquires'] += s['acquires']

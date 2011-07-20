@@ -10,6 +10,7 @@ summary = []
 for s in serials:
     summary.append({
             'name'               : s['name'], 
+            'total-instructions' : s['total-instructions'],
             'total-cycles'       : s['total-cycles'],
             'load-std'           : numpy.std(s['per-cpu-percent']),
             'benchmark-fraction' : s['benchmark-fraction'],
