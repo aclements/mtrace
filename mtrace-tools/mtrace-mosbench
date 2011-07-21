@@ -67,6 +67,17 @@ def run_sersec_summary(logDst, b):
     summaryErr.close()
     sortJson.close()
 
+def run_sersec_combine(logDst, b):
+    print '[%s] running sersec-combine ' % b
+    combineJson = open(os.path.join(logDst, 'combine.json'), 'w+')
+    combineErr = open(os.path.join(logDst, 'combine.err'), 'w+')
+    summaryJson = open(os.path.join(logDst, 'summary.json'), 'r')
+    subprocess.check_call(['sersec-combine'], stdout=combineJson, stderr=combineErr,
+                          stdin=summaryJson)
+    combineJson.close()
+    combineErr.close()
+    summaryJson.close()
+
 def run_mtrace(logDst, b, opts):
     args = [ 'qemu-mtrace-linux', '--root=' + opts.root ]
 
@@ -91,6 +102,7 @@ def run_all(logDst, b, opts):
     run_sersec_model(logDst, b)
     run_sersec_sort(logDst, b)
     run_sersec_summary(logDst, b)
+    run_sersec_combine(logDst, b)
 
 def main(args):
     def pathHandler(option, opt, value, parser):
@@ -165,6 +177,7 @@ def main(args):
             run_sersec_model(logDst, b)
             run_sersec_sort(logDst, b)
             run_sersec_summary(logDst, b)
+            run_sersec_combine(logDst, b)
         else:
             print >> sys.stderr, 'Unknown process: ' + opts.process
             exit(2)
