@@ -59,7 +59,9 @@ public:
     virtual void handle(const union mtrace_entry* entry) {
         const struct mtrace_host_entry* e = &entry->host;
         if (e->host_type == mtrace_call_clear_cpu ||
-            e->host_type == mtrace_call_set_cpu) {
+            e->host_type == mtrace_call_set_cpu ||
+            e->host_type == mtrace_disable_count_cpu ||
+            e->host_type == mtrace_enable_count_cpu) {
             return;
         } else if (e->host_type != mtrace_access_all_cpu)
             die("handle_host: unhandled type %u", e->host_type);
