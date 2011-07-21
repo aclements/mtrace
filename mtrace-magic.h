@@ -37,6 +37,9 @@ typedef enum {
     
     mtrace_call_clear_cpu,
     mtrace_call_set_cpu,
+
+    mtrace_disable_count_cpu,
+    mtrace_enable_count_cpu,
 } mtrace_host_t;
 
 #define __pack__ __attribute__((__packed__))
@@ -281,6 +284,22 @@ static inline void mtrace_call_set(unsigned long b, int cpu)
     entry.host_type = b ? mtrace_call_set_cpu : mtrace_call_clear_cpu;
     entry.call.cpu = cpu;
 
+    mtrace_entry_register(&entry.h, mtrace_entry_host, sizeof(entry));
+}
+
+static inline void mtrace_enable_count(void)
+{
+    volatile struct mtrace_host_entry entry;
+
+    entry.host_type = mtrace_enable_count_cpu;
+    mtrace_entry_register(&entry.h, mtrace_entry_host, sizeof(entry));
+}
+
+static inline void mtrace_disable_count(void)
+{
+    volatile struct mtrace_host_entry entry;
+
+    entry.host_type = mtrace_disable_count_cpu;
     mtrace_entry_register(&entry.h, mtrace_entry_host, sizeof(entry));
 }
 

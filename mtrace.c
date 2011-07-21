@@ -57,9 +57,12 @@ static volatile int mtrace_lock_active[255];
 static pid_t child_pid;
 
 static uint64_t mtrace_inst_count[255];
+static int mtrace_count_disable[255];
 
 void mtrace_inst_inc(void)
 {
+    if (mtrace_count_disable[cpu_single_env->cpu_index])
+        return;
     mtrace_inst_count[cpu_single_env->cpu_index]++;
 }
 
@@ -561,6 +564,12 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
 	    /* Only enable call traces when mtrace_enable */
 	    mtrace_call_stack_active[entry.host.call.cpu] = mtrace_enable;
 	    break;
+        case mtrace_disable_count_cpu:
+            mtrace_count_disable[cpu_single_env->cpu_index] = 1;
+            break;
+        case mtrace_enable_count_cpu:
+            mtrace_count_disable[cpu_single_env->cpu_index] = 0;
+            break;
 	default:
 	    fprintf(stderr, "bad mtrace_entry_host type %u\n", 
 		    entry.host.host_type);
