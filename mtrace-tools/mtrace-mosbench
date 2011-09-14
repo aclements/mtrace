@@ -25,58 +25,37 @@ def setup_log(root, name):
         raise Exception('Oops %s is not a dir' % dst)
     return dst
 
-def run_mscan(logDst, b):
-    print '[%s] running mscan' % b
-    mscanJson = open(os.path.join(logDst, 'mscan.json'), 'w+')
-    mscanErr = open(os.path.join(logDst, 'mscan.err'), 'w+')
-    subprocess.check_call(['mscan'], stdout=mscanJson, stderr=mscanErr,
+def run_pass(logDst, b, name, stdinFile='/dev/null'):
+    print '[%s] running %s' % (b, name)
+    stdout = open(os.path.join(logDst, name + '.json'), 'w+')
+    stderr = open(os.path.join(logDst, name + '.err'), 'w+')
+    stdin = open(stdinFile, 'r')
+    subprocess.check_call([name], stdout=stdout, stderr=stderr,
+                          stdin=stdin,
                           cwd=logDst)
-    mscanJson.close()
-    mscanErr.close()
+    stdout.close()
+    stderr.close()
+    stdin.close()
+
+def run_mscan(logDst, b):
+    run_pass(logDst, b, 'mscan')
+    return
 
 def run_sersec_model(logDst, b):
-    print '[%s] running sersec-model' % b
-    modelJson = open(os.path.join(logDst, 'model.json'), 'w+')
-    modelErr = open(os.path.join(logDst, 'model.err'), 'w+')
-    mscanJson = open(os.path.join(logDst, 'mscan.json'), 'r')
-    subprocess.check_call(['sersec-model'], stdout=modelJson, stderr=modelErr,
-                          stdin=mscanJson)
-    modelJson.close()
-    modelErr.close()
-    mscanJson.close()
+    run_pass(logDst, b, 'sersec-model', os.path.join(logDst, 'mscan.json'))
+    return
 
 def run_sersec_sort(logDst, b):
-    print '[%s] running sersec-sort' % b
-    sortJson = open(os.path.join(logDst, 'sort.json'), 'w+')
-    sortErr = open(os.path.join(logDst, 'sort.err'), 'w+')
-    modelJson = open(os.path.join(logDst, 'model.json'), 'r')
-    subprocess.check_call(['sersec-sort'], stdout=sortJson, stderr=sortErr,
-                          stdin=modelJson)
-    sortJson.close()
-    sortErr.close()
-    modelJson.close()
+    run_pass(logDst, b, 'sersec-sort', os.path.join(logDst, 'sersec-model.json'))
+    return
 
 def run_sersec_summary(logDst, b):
-    print '[%s] running sersec-summary ' % b
-    summaryJson = open(os.path.join(logDst, 'summary.json'), 'w+')
-    summaryErr = open(os.path.join(logDst, 'summary.err'), 'w+')
-    sortJson = open(os.path.join(logDst, 'sort.json'), 'r')
-    subprocess.check_call(['sersec-summary'], stdout=summaryJson, stderr=summaryErr,
-                          stdin=sortJson)
-    summaryJson.close()
-    summaryErr.close()
-    sortJson.close()
+    run_pass(logDst, b, 'sersec-summary', os.path.join(logDst, 'sersec-sort.json'))
+    return
 
 def run_sersec_combine(logDst, b):
-    print '[%s] running sersec-combine ' % b
-    combineJson = open(os.path.join(logDst, 'combine.json'), 'w+')
-    combineErr = open(os.path.join(logDst, 'combine.err'), 'w+')
-    summaryJson = open(os.path.join(logDst, 'summary.json'), 'r')
-    subprocess.check_call(['sersec-combine'], stdout=combineJson, stderr=combineErr,
-                          stdin=summaryJson)
-    combineJson.close()
-    combineErr.close()
-    summaryJson.close()
+    run_pass(logDst, b, 'sersec-combine', os.path.join(logDst, 'sersec-summary.json'))
+    return
 
 def run_mtrace(logDst, b, opts):
     args = [ 'qemu-mtrace-linux', '--root=' + opts.root ]
