@@ -33,6 +33,17 @@ Mtrace'ing MOSBENCH
   # "insecure" is necessary because QEMU's NAT scrambles the source port 
   /home/ 127.0.0.1(rw,no_subtree_check,no_root_squash,no_all_squash,insecure)
 
+* Build a Linux root:
+  $ new-mtrace-image --mosbench-src=~/mosbench mtrace-root
+
+* Run MTRACE:
+  From the Linux obj dir (e.g. obj-linux-mtrace)
+  $ qemu-mtrace-linux --run="sudo -u sbw /home/sbw/mosbench/run.sh exim"
+  OR
+  $ mtrace-mosbench --benchmark=exim --process=all
+    Produces an exim directory that contains various logs and 
+    interesting JSON files.
+
 TODO
 ----
 * Mount the current user's home dir should with an AUFS overlay at
