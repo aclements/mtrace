@@ -4,7 +4,7 @@ import sys
 import json
 
 def secsort(sec):
-    return sec["total-cycles"]*min(sec["per-cpu-percent"])
+    return sec["total-instructions"]*min(sec["per-cpu-percent"])
 
 serials = json.loads(sys.stdin.read())["serial-sections"]
 serials = sorted(serials, key=secsort, reverse=True)
