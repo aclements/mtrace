@@ -558,11 +558,17 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
 	    mtrace_enable = !!entry.host.access.value;
 	    break;
 	case mtrace_call_clear_cpu:
-	    mtrace_call_stack_active[entry.host.call.cpu] = 0;
+            if (entry.host.call.cpu == ~0UL)
+                mtrace_call_stack_active[cpu_single_env->cpu_index] = 0;
+            else
+                mtrace_call_stack_active[entry.host.call.cpu] = 0;
 	    break;
 	case mtrace_call_set_cpu:
 	    /* Only enable call traces when mtrace_enable */
-	    mtrace_call_stack_active[entry.host.call.cpu] = mtrace_enable;
+            if (entry.host.call.cpu == ~0UL)
+                mtrace_call_stack_active[cpu_single_env->cpu_index] = mtrace_enable;
+            else
+                mtrace_call_stack_active[entry.host.call.cpu] = mtrace_enable;
 	    break;
         case mtrace_disable_count_cpu:
             mtrace_count_disable[cpu_single_env->cpu_index] = 1;

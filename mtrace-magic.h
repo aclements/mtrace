@@ -277,7 +277,7 @@ static inline void mtrace_enable_set(unsigned long b, const char *str)
     mtrace_entry_register(&entry.h, mtrace_entry_host, sizeof(entry));
 }
 
-static inline void mtrace_call_set(unsigned long b, int cpu)
+static inline void mtrace_call_set(unsigned long b, uint64_t cpu)
 {
     volatile struct mtrace_host_entry entry;
 
