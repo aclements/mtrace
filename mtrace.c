@@ -669,7 +669,7 @@ static void mtrace_cleanup(void)
 	close(mtrace_file);
 	if (child_pid) {
 	    if (waitpid(child_pid, NULL, 0) < 0) {
-		if (errno != ECHILD) {
+		if (errno != ECHILD && errno != EINTR) {
 		    perror("mtrace_cleanup: waitpid");
 		    abort();
 		}
