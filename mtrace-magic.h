@@ -413,10 +413,12 @@ static inline void mtrace_appdata_register(struct mtrace_appdata_entry *appdata)
     mtrace_entry_register(&entry.h, mtrace_entry_appdata, sizeof(entry));
 }
 
-static inline void mtrace_avar_register(struct mtrace_avar_entry *avar)
+static inline void mtrace_avar_register(int is_write, const char *avar)
 {
     volatile struct mtrace_avar_entry entry;
-    memcpy((void *)&entry, avar, sizeof(entry));
+
+    entry.write = is_write;
+    strncpy((char*)entry.name, avar, sizeof(entry.name));
 
     mtrace_entry_register(&entry.h, mtrace_entry_avar, sizeof(entry));
 }
