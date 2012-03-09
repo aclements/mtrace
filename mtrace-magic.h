@@ -18,6 +18,8 @@ typedef enum {
     mtrace_entry_machine,
     mtrace_entry_appdata,
     
+    mtrace_entry_avar,          /* for abstract variables */
+    
     mtrace_entry_num		/* NB actually num + 1 */
 } mtrace_entry_t;
 
@@ -225,6 +227,13 @@ struct mtrace_appdata_entry {
     };
 } __pack__;
 
+
+struct mtrace_avar_entry {
+    struct mtrace_entry_header h;
+    char str[32];
+} __pack__;
+
+
 union mtrace_entry {
     struct mtrace_entry_header h;
 
@@ -401,6 +410,14 @@ static inline void mtrace_appdata_register(struct mtrace_appdata_entry *appdata)
     memcpy((void *)&entry, appdata, sizeof(entry));
 
     mtrace_entry_register(&entry.h, mtrace_entry_appdata, sizeof(entry));
+}
+
+static inline void mtrace_avar_register(struct mtrace_avar_entry *avar)
+{
+    volatile struct mtrace_avar_entry entry;
+    memcpy((void *)&entry, avar, sizeof(entry));
+
+    mtrace_entry_register(&entry.h, mtrace_entry_avar, sizeof(entry));
 }
 
 #endif /* QEMU_MTRACE */
