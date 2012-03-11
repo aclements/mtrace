@@ -249,6 +249,7 @@ union mtrace_entry {
     struct mtrace_sched_entry sched;
     struct mtrace_machine_entry machine;
     struct mtrace_appdata_entry appdata;
+    struct mtrace_avar_entry avar;
 } __pack__;
 
 #ifndef QEMU_MTRACE
