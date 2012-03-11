@@ -1,3 +1,4 @@
+// -*- mode: c; indent-tabs-mode: t; c-file-style: "bsd" -*-
 #define __STDC_FORMAT_MACROS
 #include <stdint.h>
 #include <stdio.h>
