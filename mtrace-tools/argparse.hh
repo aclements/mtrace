@@ -52,7 +52,8 @@ public:
         }
     }
 
-    void __noret__ usage(const char* errstr, ...) const {
+    void __noret__ usage(const char* errstr, ...) const
+        __attribute__((format(gnu_printf, 2, 3))) {
         int i;
 
         if (errstr) {

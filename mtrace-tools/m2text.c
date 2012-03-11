@@ -1,5 +1,7 @@
+#define __STDC_FORMAT_MACROS
 #include <stdint.h>
 #include <stdio.h>
+#include <inttypes.h>
 #include "util.h"
 
 static void print_entry(union mtrace_entry *entry)
@@ -32,7 +34,7 @@ static void print_entry(union mtrace_entry *entry)
 		       entry->access.guest_addr);
 		break;
 	case mtrace_entry_host:
-		printf("%-3s [%u]\n", 
+		printf("%-3s [%"PRIu64"]\n",
 		       "E", entry->host.access.value);
 		break;
 	case mtrace_entry_fcall:
@@ -73,7 +75,7 @@ static void print_entry(union mtrace_entry *entry)
 		       entry->lock.str);
 		break;
         case mtrace_entry_sched:
-		printf("%-3s [%-3u  pid %5u]\n",
+		printf("%-3s [%-3u  pid %5"PRIu64"]\n",
 		       "sch",
 		       entry->h.cpu,
 		       entry->sched.tid);

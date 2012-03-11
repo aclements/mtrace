@@ -307,7 +307,7 @@ public:
             SerialSectionStat* stat = &it->second;
             printf(" %s  %lu  %lu\n",
                    stat->name.c_str(),
-                   stat->summary.ts_cycles,
+                   stat->summary.total_cycles(),
                    stat->summary.acquires);
         }
     }
