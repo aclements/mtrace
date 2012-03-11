@@ -113,6 +113,12 @@ static void print_entry(union mtrace_entry *entry)
 		       entry->appdata.appdata_type,
 		       entry->appdata.u64);
 		break;
+	case mtrace_entry_avar:
+		printf("%-3s [%-3u  %s]\n",
+		       entry->avar.write ? "Aw" : "Ar",
+		       entry->h.cpu,
+		       entry->avar.name);
+		break;
 	default:
 		fprintf(stderr, "print_entry: bad type %u\n", entry->h.type);
 	}
