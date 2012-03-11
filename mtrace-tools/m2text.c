@@ -12,7 +12,12 @@ static void print_entry(union mtrace_entry *entry)
 		[mtrace_access_st] = "st",
 		[mtrace_access_iw] = "iw",
 	};
-	
+	static const char *task_to_str[] = {
+		[mtrace_task_init]   = "init",
+		[mtrace_task_update] = "update",
+		[mtrace_task_exit]   = "exit",
+	};
+
 	switch(entry->h.type) {
 	case mtrace_entry_label:
 		printf("%-3s [%-3u  %16s  %016lx  %016lx  %016lx  %016lx  %016lx]\n",
@@ -75,11 +80,38 @@ static void print_entry(union mtrace_entry *entry)
 		       entry->lock.lock,
 		       entry->lock.str);
 		break;
+	case mtrace_entry_task:
+		printf("%-3s [%-3u %-6s  tid %16"PRIu64"  tgid  %16"PRIu64"  %s]\n",
+		       "tsk",
+		       entry->h.cpu,
+		       task_to_str[entry->task.task_type],
+		       entry->task.tid,
+		       entry->task.tgid,
+		       entry->task.str);
+		break;
         case mtrace_entry_sched:
 		printf("%-3s [%-3u  pid %5"PRIu64"]\n",
 		       "sch",
 		       entry->h.cpu,
 		       entry->sched.tid);
+		break;
+	case mtrace_entry_machine:
+		printf("%-3s [cpus %"PRIu16"  ram %"PRIu64"  quantum %"PRIu64
+		       "  sample %"PRIu64"  locked %c  calls %c]\n",
+		       "mac",
+		       entry->machine.num_cpus,
+		       entry->machine.num_ram,
+		       entry->machine.quantum,
+		       entry->machine.sample,
+		       entry->machine.locked ? 't' : 'f',
+		       entry->machine.calls ? 't' : 'f');
+		break;
+	case mtrace_entry_appdata:
+		printf("%-3s [%-3u  type %"PRIu16"  u64 %"PRIu64"]\n",
+		       "app",
+		       entry->h.cpu,
+		       entry->appdata.appdata_type,
+		       entry->appdata.u64);
 		break;
 	default:
 		fprintf(stderr, "print_entry: bad type %u\n", entry->h.type);
