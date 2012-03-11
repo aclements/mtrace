@@ -230,7 +230,8 @@ struct mtrace_appdata_entry {
 
 struct mtrace_avar_entry {
     struct mtrace_entry_header h;
-    char str[32];
+    uint8_t write:1;
+    char name[32];
 } __pack__;
 
 
