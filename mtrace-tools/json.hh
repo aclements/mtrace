@@ -159,6 +159,14 @@ public:
         return new JsonList();
     }
 
+    template<typename InputIterator>
+    static JsonList* create(InputIterator first, InputIterator last) {
+        JsonList *lst = create();
+        for (InputIterator it = first; it != last; it++)
+            lst->append(*it);
+        return lst;
+    }
+
     void append(JsonObject* value) {
         list_.push_back(value);
     }
