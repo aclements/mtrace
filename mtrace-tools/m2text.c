@@ -18,6 +18,17 @@ static void print_entry(union mtrace_entry *entry)
 		[mtrace_resume] = "resume",
 		[mtrace_pause]  = "pause",
 	};
+	static const char *host_to_str[] = {
+		[mtrace_access_clear_cpu]  = "access_clear_cpu",
+		[mtrace_access_set_cpu]    = "access_set_cpu",
+		[mtrace_access_all_cpu]    = "access_all_cpu",
+
+		[mtrace_call_clear_cpu]    = "call_clear_cpu",
+		[mtrace_call_set_cpu]      = "call_set_cpu",
+
+		[mtrace_disable_count_cpu] = "disable_count_cpu",
+		[mtrace_enable_count_cpu]  = "enable_count_cpu",
+	};
 	static const char *task_to_str[] = {
 		[mtrace_task_init]   = "init",
 		[mtrace_task_update] = "update",
@@ -46,8 +57,28 @@ static void print_entry(union mtrace_entry *entry)
 		       entry->access.guest_addr);
 		break;
 	case mtrace_entry_host:
-		printf("%-3s [%"PRIu64"]\n",
-		       "E", entry->host.access.value);
+		printf("%-3s [%-3u  %s",
+		       "E",
+		       entry->h.cpu,
+		       host_to_str[entry->host.host_type]);
+		switch (entry->host.host_type) {
+		case mtrace_access_all_cpu:
+			printf("  enable %c  %s",
+			       entry->host.access.value ? 't' : 'f',
+			       entry->host.access.str);
+			break;
+		case mtrace_call_clear_cpu:
+		case mtrace_call_set_cpu:
+			printf("  cpu");
+			if (entry->host.call.cpu == ~0UL)
+				printf(" cur");
+			else
+				printf(" %"PRIu64, entry->host.call.cpu);
+			break;
+		default:
+			break;
+		}
+		printf("]\n");
 		break;
 	case mtrace_entry_fcall:
 		printf("%-3s [%-3u  %16"PRIu64"  tid %"PRIu64"  pc %016"PRIx64
