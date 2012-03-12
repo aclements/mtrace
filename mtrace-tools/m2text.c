@@ -12,6 +12,12 @@ static void print_entry(union mtrace_entry *entry)
 		[mtrace_access_st] = "st",
 		[mtrace_access_iw] = "iw",
 	};
+	static const char *call_state_to_str[] = {
+		[mtrace_start]  = "start",
+		[mtrace_done]   = "done",
+		[mtrace_resume] = "resume",
+		[mtrace_pause]  = "pause",
+	};
 	static const char *task_to_str[] = {
 		[mtrace_task_init]   = "init",
 		[mtrace_task_update] = "update",
@@ -44,15 +50,15 @@ static void print_entry(union mtrace_entry *entry)
 		       "E", entry->host.access.value);
 		break;
 	case mtrace_entry_fcall:
-		printf("%-3s [%-3u  %16lu  %16lu  %016lx"
-		       "  %4u  %1u]\n",
+		printf("%-3s [%-3u  %16"PRIu64"  tid %"PRIu64"  pc %016"PRIx64
+		       "  depth %"PRIu16"  %s]\n",
 		       "C",
 		       entry->h.cpu,
 		       entry->h.access_count,
 		       entry->fcall.tid,
 		       entry->fcall.pc,
 		       entry->fcall.depth,
-		       entry->fcall.state);
+		       call_state_to_str[entry->fcall.state]);
 		break;
 	case mtrace_entry_segment:
 		printf("%-3s [%-3u  %3u  %16lx %16lx]\n",
