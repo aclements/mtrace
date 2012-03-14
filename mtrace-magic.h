@@ -73,9 +73,21 @@ struct mtrace_segment_entry {
  * The guest specified the begining or end to a function call
  */
 typedef enum {
+    /* Start a new call stack at with the function at 'pc', identified
+     * by a unique tag.  A given tid may have nested call stacks
+     * (e.g., during interrupt handling) and this nesting level is
+     * recorded in 'depth'.  Subsequent call_entries with the same cpu
+     * apply to this call stack. */
     mtrace_start = 1,
+    /* Terminate the call stack identified by 'tag'. */
     mtrace_done,
+    /* Resume execution on the paused call stack identified by 'tag'.
+     * A call stack may be resumed on a different cpu than it was
+     * paused on. */
     mtrace_resume,
+    /* Pause execution on the call stack identified by 'tag'.  This is
+     * typically done just before starting a new call stack or
+     * resuming another call stack. */
     mtrace_pause,
 } mtrace_call_state_t;
 
