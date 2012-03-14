@@ -553,7 +553,7 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
 	entry.host.global_ts = mtrace_get_global_tsc(cpu_single_env);
 	switch (entry.host.host_type) {
 	case mtrace_access_all_cpu:
-	    if (entry.host.access.value ^ mtrace_enable)
+	    if (!!entry.host.access.value ^ mtrace_enable)
 		mtrace_reset_cline_track();
 	    mtrace_enable = !!entry.host.access.value;
 	    break;
