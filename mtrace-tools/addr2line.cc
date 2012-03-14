@@ -57,7 +57,7 @@ Addr2line::Addr2line(const char* path)
 
         for (i = 0; i < sizeof(addr2line_exe) / sizeof(addr2line_exe[0]); i++)
             r = execlp(addr2line_exe[i], addr2line_exe[i],
-                       "-f", "-e", path, NULL);
+                       "-fC", "-e", path, NULL);
         r = 1;
         assert(sizeof(r) == write(check[1], &r, sizeof(r)));
         exit(0);
