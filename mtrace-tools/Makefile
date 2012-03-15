@@ -26,7 +26,9 @@ MSCAN_HDRS = addr2line.hh \
 	     json.hh \
 	     mscan.hh \
 	     sersec.hh \
-	     sysaccess.hh
+	     sysaccess.hh \
+	     percallstack.hh \
+	     asharing.hh
 
 all: mscan m2text mtrace-magic check-py
 

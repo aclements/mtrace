@@ -22,6 +22,7 @@ extern "C" {
 #include "sysaccess.hh"
 #include "false.hh"
 #include "eyerman.hh"
+#include "asharing.hh"
 #include "argparse.hh"
 
 using namespace::std;
@@ -51,6 +52,8 @@ static struct MtraceOptions {
     bool        distinct_ops;
     bool        distinct_sys;
     bool        eyerman;
+    bool        abstract_scopes;
+    bool        unexpected_sharing;
     bool        summary;
 } mtrace_options;
 
@@ -291,6 +294,17 @@ static void init_handlers(void)
         exit_handler.push_back(eyerman);
     }
 
+    if (mtrace_options.abstract_scopes ||
+        mtrace_options.unexpected_sharing) {
+        AbstractSharing *ashare = new AbstractSharing(mtrace_options.abstract_scopes,
+                                                      mtrace_options.unexpected_sharing);
+        entry_handler[mtrace_entry_ascope].push_back(ashare);
+        entry_handler[mtrace_entry_avar].push_back(ashare);
+        entry_handler[mtrace_entry_access].push_back(ashare);
+        entry_handler[mtrace_entry_fcall].push_back(ashare);
+        exit_handler.push_back(ashare);
+    }
+
     if (mtrace_options.summary)
         exit_handler.push_back(new DefaultSummary());
 }
@@ -392,6 +406,10 @@ static void handle_arg(const ArgParse* parser, string option, string val)
         mtrace_options.eyerman = true;
     } else if (option == "summary") {
         mtrace_options.summary = true;
+    } else if (option == "abstract-scopes") {
+        mtrace_options.abstract_scopes = true;
+    } else if (option == "unexpected-sharing") {
+        mtrace_options.unexpected_sharing = true;
     } else {
         die("handle_arg: unexpected");
     }
@@ -421,6 +439,10 @@ int main(int ac, char** av)
                      "Average distinct cache lines per syscall");
     parse.add_option("eyerman",
                      "Input to \"Eyerman's law\"");
+    parse.add_option("abstract-scopes",
+                     "Abstract sharing scopes");
+    parse.add_option("unexpected-sharing",
+                     "Unexpected abstract sharing");
     parse.add_option("summary",
                      "Workload summary");
     parse.parse(handle_arg);
