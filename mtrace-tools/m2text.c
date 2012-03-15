@@ -87,12 +87,13 @@ static void print_entry(union mtrace_entry *entry)
 		break;
 	case mtrace_entry_fcall:
 		printf("%-3s [%-3u  %16"PRIu64"  tid %"PRIu64"  pc %016"PRIx64
-		       "  depth %"PRIu16"  %s]\n",
+		       "  tag 0x%"PRIx64"  depth %"PRIu16"  %s]\n",
 		       "C",
 		       entry->h.cpu,
 		       entry->h.access_count,
 		       entry->fcall.tid,
 		       entry->fcall.pc,
+		       entry->fcall.tag,
 		       entry->fcall.depth,
 		       call_state_to_str[entry->fcall.state]);
 		break;
