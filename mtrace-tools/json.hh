@@ -10,8 +10,6 @@
 using namespace::std;
 using namespace::__gnu_cxx;
 
-class JsonList;
-
 typedef enum { json_string, json_u64, json_list } value_type_t;
 
 static string
@@ -28,9 +26,11 @@ public:
     virtual string str(int level) const = 0;
 };
 
+static JsonObject *jsonify(JsonObject *value) {
+    return value;
+}
+
 class JsonString : public JsonObject {
-    friend class JsonDict;
-    friend class JsonList;
 public:
     virtual string str(int level) const {
         return string("\"") + value_ + string("\"");
@@ -38,11 +38,15 @@ public:
 private:
     JsonString(string value) : value_(value) {}
     string value_;
+
+    friend JsonObject *jsonify(string value);
 };
 
+JsonObject *jsonify(string value) {
+    return new JsonString(value);
+}
+
 class JsonUint : public JsonObject {
-    friend class JsonDict;
-    friend class JsonList;
 public:
     virtual string str(int level) const {
         char buf[64];
@@ -52,7 +56,17 @@ public:
 private:
     JsonUint(uint64_t value) : value_(value) {}
     uint64_t value_;
+
+    friend JsonObject *jsonify(uint64_t value);
 };
+
+JsonObject *jsonify(uint64_t value) {
+    return new JsonUint(value);
+}
+
+static JsonObject *jsonify(uint8_t value) {
+    return jsonify((uint64_t)value);
+}
 
 class JsonHex : public JsonObject {
 public:
@@ -69,8 +83,6 @@ private:
 };
 
 class JsonFloat : public JsonObject {
-    friend class JsonDict;
-    friend class JsonList;
 public:
     virtual string str(int level) const {
         char buf[64];
@@ -80,7 +92,13 @@ public:
 private:
     JsonFloat(float value) : value_(value) {}
     float value_;
+
+    friend JsonObject *jsonify(float value);
 };
+
+JsonObject *jsonify(float value) {
+    return new JsonFloat(value);
+}
 
 class JsonDict : public JsonObject {
 public:
@@ -99,24 +117,9 @@ public:
         return new JsonDict();
     }
 
-    void put(string key, string value) {
-        put(key, new JsonString(value));
-    }
-
-    void put(string key, uint64_t value) {
-        put(key, new JsonUint(value));
-    }
-
-    void put(string key, uint8_t value) {
-        put(key, new JsonUint((uint64_t)value));
-    }
-
-    void put(string key, float value) {
-        put(key, new JsonFloat(value));
-    }
-
-    void put(string key, JsonObject* value) {
-        table_[strdup(key.c_str())] = value;
+    template<typename T>
+    void put(string key, T value) {
+        table_[strdup(key.c_str())] = jsonify(value);
     }
 
     virtual string str(int level) const {
@@ -167,16 +170,9 @@ public:
         return lst;
     }
 
-    void append(JsonObject* value) {
-        list_.push_back(value);
-    }
-
-    void append(float value) {
-        append(new JsonFloat(value));
-    }
-
-    void append(string value) {
-        append(new JsonString(value));
+    template<typename T>
+    void append(T value) {
+        list_.push_back(jsonify(value));
     }
 
     virtual string str(int level) const {
