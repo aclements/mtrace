@@ -65,6 +65,7 @@ public:
 
 private:
     void handle(const struct mtrace_fcall_entry* e, int cpu) {
+        // XXX Could use PerCallStack
         switch (e->state) {
         case mtrace_resume: {
             auto it = call_stack_.find(e->tag);
