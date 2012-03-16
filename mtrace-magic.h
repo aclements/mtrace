@@ -18,8 +18,9 @@ typedef enum {
     mtrace_entry_machine,
     mtrace_entry_appdata,
     
-    mtrace_entry_avar,          /* for abstract variables */
-    
+    mtrace_entry_ascope,        /* abstract variable scope */
+    mtrace_entry_avar,          /* abstract variables */
+
     mtrace_entry_num		/* NB actually num + 1 */
 } mtrace_entry_t;
 
@@ -240,6 +241,19 @@ struct mtrace_appdata_entry {
 } __pack__;
 
 
+/*
+ * Abstract variable scope entry/exit.  Note that abstract variable
+ * scopes live on the same call stacks that regular function calls do.
+ */
+struct mtrace_ascope_entry {
+    struct mtrace_entry_header h;
+    uint8_t exit:1;
+    char name[32];
+} __pack__;
+
+/*
+ * Abstract variable read/write
+ */
 struct mtrace_avar_entry {
     struct mtrace_entry_header h;
     uint8_t write:1;
@@ -261,6 +275,7 @@ union mtrace_entry {
     struct mtrace_sched_entry sched;
     struct mtrace_machine_entry machine;
     struct mtrace_appdata_entry appdata;
+    struct mtrace_ascope_entry ascope;
     struct mtrace_avar_entry avar;
 } __pack__;
 
@@ -434,6 +449,16 @@ static inline void mtrace_avar_register(int is_write, const char *avar)
     strncpy((char*)entry.name, avar, sizeof(entry.name));
 
     mtrace_entry_register(&entry.h, mtrace_entry_avar, sizeof(entry));
+}
+
+static inline void mtrace_ascope_register(int is_exit, const char *name)
+{
+    volatile struct mtrace_ascope_entry entry;
+
+    entry.exit = is_exit;
+    strncpy((char*)entry.name, name, sizeof(entry.name));
+
+    mtrace_entry_register(&entry.h, mtrace_entry_ascope, sizeof(entry));
 }
 
 #endif /* QEMU_MTRACE */

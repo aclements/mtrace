@@ -156,6 +156,13 @@ static void print_entry(union mtrace_entry *entry)
 		       entry->appdata.appdata_type,
 		       entry->appdata.u64);
 		break;
+	case mtrace_entry_ascope:
+		printf("%-3s [%-3u  %-5s %s]\n",
+		       "Asc",
+		       entry->h.cpu,
+		       entry->ascope.exit ? "exit" : "enter",
+		       entry->ascope.name);
+		break;
 	case mtrace_entry_avar:
 		printf("%-3s [%-3u  %s]\n",
 		       entry->avar.write ? "Aw" : "Ar",
