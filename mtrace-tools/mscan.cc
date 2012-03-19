@@ -300,10 +300,10 @@ static void init_static_syms(const char* sym_file)
     list<struct mtrace_label_entry> tmp;
     uint64_t percpu_start = 0;
     uint64_t percpu_end = 0;
-    char line[256];
+    char line[512];
     uint64_t addr;
     uint64_t size;
-    char str[128];
+    char str[512];
     char type;
     int r;
 
@@ -315,7 +315,7 @@ static void init_static_syms(const char* sym_file)
     while (fi.good()) {
         fi.getline(line, sizeof(line));
 
-        r = sscanf(line, "%lx %lx %c %s", &addr, &size, &type, str);
+        r = sscanf(line, "%lx %lx %c %[^\n]", &addr, &size, &type, str);
         if (r == 4 && (type == 'D' || type == 'd' || // .data
                        type == 'B' || type == 'b' || // .bbs
                        type == 'r' || type == 'R' || // .ro
