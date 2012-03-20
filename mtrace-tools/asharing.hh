@@ -77,6 +77,11 @@ public:
                 for (auto &s2 : scopes_) {
                     if (&s1 == &s2)
                         continue;
+                    // If the two scopes ran on the same CPU, we'll
+                    // get lots of "sharing" on per-CPU data, so don't
+                    // compare scopes from the same CPU
+                    if (s1.cpu_ == s2.cpu_)
+                        continue;
 
                     bool abstract_sharing =
                         shares(s1.aread_.begin(),  s1.aread_.end(),
@@ -119,10 +124,11 @@ public:
 
     class Ascope {
     public:
-        Ascope(string name)
-            : name_(name) { }
+        Ascope(string name, int cpu)
+            : name_(name), cpu_(cpu) { }
 
         string name_;
+        int cpu_;
         set<string> aread_;
         set<string> awrite_;
         map<uint64_t, string> read_;
@@ -145,6 +151,7 @@ private:
                     a_->scopes_.push_back(*cur);
                 stack_.pop();
         }
+
     public:
         CallStack(const mtrace_fcall_entry *fcall, AbstractSharing *a)
             : a_(a) {}
@@ -159,7 +166,7 @@ private:
             if (ascope->exit)
                 pop();
             else
-                stack_.push(Ascope(ascope->name));
+                stack_.push(Ascope(ascope->name, ascope->h.cpu));
         }
 
         void handle(const mtrace_avar_entry *avar)
