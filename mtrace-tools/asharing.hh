@@ -194,8 +194,11 @@ private:
             // XXX Access apply to all abstract scopes on the stack
             MtraceObject obj;
             string name;
-            if (mtrace_label_map.object(access->guest_addr, obj))
-                name = obj.name_;
+            if (mtrace_label_map.object(access->guest_addr, obj)) {
+                ostringstream ss;
+                ss << obj.name_ << "+0x" << hex << (access->guest_addr - obj.guest_addr_);
+                name = ss.str();
+            }
             switch (access->access_type) {
             case mtrace_access_st:
             case mtrace_access_iw:
