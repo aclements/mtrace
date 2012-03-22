@@ -43,6 +43,15 @@ typedef enum {
     mtrace_enable_count_cpu,
 } mtrace_host_t;
 
+typedef enum {
+    /* Don't record accesses. */
+    mtrace_record_disable = 0,
+
+    /* Record accesses that cause cache line movement.  Initially, all
+     * cache lines will be considered shared by all CPUs. */
+    mtrace_record_movement,
+} mtrace_record_mode_t;
+
 #define __pack__ __attribute__((__packed__))
 
 /*
@@ -119,7 +128,9 @@ struct mtrace_host_entry {
     union {
 	/* Enable/disable access tracing */
 	struct {
-	    uint64_t value;
+	    /* Access recording mode */
+	    mtrace_record_mode_t mode;
+	    /* Name of trace */
 	    char str[32];
 	} access;
 
@@ -301,12 +312,12 @@ static inline void mtrace_entry_register(volatile struct mtrace_entry_header *h,
 		 type, len, 0, 0);
 }
 
-static inline void mtrace_enable_set(unsigned long b, const char *str)
+static inline void mtrace_enable_set(mtrace_record_mode_t mode, const char *str)
 {
     volatile struct mtrace_host_entry entry;
 
     entry.host_type = mtrace_access_all_cpu;
-    entry.access.value = b ? ~0UL : 0;
+    entry.access.mode = mode;
     strncpy((char*)entry.access.str, str, sizeof(entry.access.str));
     entry.access.str[sizeof(entry.access.str) - 1] = 0;
 

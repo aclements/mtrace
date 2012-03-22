@@ -15,7 +15,7 @@ public:
         struct mtrace_access_entry* cp;
         int cpu;
 
-        if (mtrace_enable.access.value == 0)
+        if (!guest_enabled_mtrace())
             return;
         if (entry->h.type != mtrace_entry_access)
             return;

@@ -15,7 +15,7 @@ public:
     virtual void handle(const union mtrace_entry* entry) {
         int cpu;
 
-        if (mtrace_enable.access.value == 0)
+        if (!guest_enabled_mtrace())
             return;
 
         cpu = entry->h.cpu;

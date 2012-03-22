@@ -41,7 +41,7 @@
 #define FLUSH_BUFFER_BYTES 8192
 
 static int mtrace_system_enable;
-static int mtrace_enable;
+static mtrace_record_mode_t mtrace_mode;
 static int mtrace_lock_trace;
 
 static int mtrace_file;
@@ -98,7 +98,7 @@ void mtrace_sample_set(int n)
 
 int mtrace_enable_get(void)
 {
-    return mtrace_enable;
+    return mtrace_mode != 0;
 }
 
 void mtrace_quantum_set(int n)
@@ -218,7 +218,7 @@ static unsigned long mtrace_get_pc(unsigned long searched_pc)
 
 static unsigned long mtrace_get_pc(unsigned long searched_pc)
 {
-    int mtrace_enable_save;
+    mtrace_record_mode_t mtrace_mode_save;
     TranslationBlock *tb;
 
     /*
@@ -243,16 +243,16 @@ static unsigned long mtrace_get_pc(unsigned long searched_pc)
      *  5. updates cpu_single_env->eip
      *
      *  NB QEMU reads guest memory while generating micro ops.  We want to
-     *  ignore these accesses, so we temporarily set mtrace_enable to 0.
+     *  ignore these accesses, so we temporarily set mtrace_mode to 0.
      */
     tb = tb_find_pc(searched_pc);
     if (!tb)
 	return cpu_single_env->eip;
 
-    mtrace_enable_save = mtrace_enable;
-    mtrace_enable = 0;
+    mtrace_mode_save = mtrace_mode;
+    mtrace_mode = 0;
     cpu_restore_state(tb, cpu_single_env, searched_pc, NULL);
-    mtrace_enable = mtrace_enable_save;
+    mtrace_mode = mtrace_mode_save;
 
     return cpu_single_env->eip;
 }
@@ -267,7 +267,7 @@ static void mtrace_access_dump(mtrace_access_t type, target_ulong host_addr,
     struct mtrace_access_entry entry;
     static int sampler;
     
-    if (!mtrace_enable)
+    if (!mtrace_mode)
 	return;
     if (sampler++ % mtrace_sample)
 	return;
@@ -553,9 +553,9 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
 	entry.host.global_ts = mtrace_get_global_tsc(cpu_single_env);
 	switch (entry.host.host_type) {
 	case mtrace_access_all_cpu:
-	    if (!!entry.host.access.value ^ mtrace_enable)
+	    if (entry.host.access.mode != mtrace_mode)
 		mtrace_reset_cline_track();
-	    mtrace_enable = !!entry.host.access.value;
+	    mtrace_mode = entry.host.access.mode;
 	    break;
 	case mtrace_call_clear_cpu:
             if (entry.host.call.cpu == ~0UL)
@@ -566,9 +566,9 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
 	case mtrace_call_set_cpu:
 	    /* Only enable call traces when mtrace_enable */
             if (entry.host.call.cpu == ~0UL)
-                mtrace_call_stack_active[cpu_single_env->cpu_index] = mtrace_enable;
+                mtrace_call_stack_active[cpu_single_env->cpu_index] = mtrace_mode;
             else
-                mtrace_call_stack_active[entry.host.call.cpu] = mtrace_enable;
+                mtrace_call_stack_active[entry.host.call.cpu] = mtrace_mode;
 	    break;
         case mtrace_disable_count_cpu:
             mtrace_count_disable[cpu_single_env->cpu_index] = 1;

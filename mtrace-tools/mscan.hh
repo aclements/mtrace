@@ -84,7 +84,7 @@ public:
         if (it == object_first_.end()) {
             extern struct mtrace_host_entry mtrace_enable;
 
-            if (mtrace_enable.access.value)
+            if (mtrace_enable.access.mode)
                 die("miss while mtrace enabled");
 
             // We tolerate a few kfree calls for which we haven't
@@ -276,12 +276,12 @@ extern CallTrace* mtrace_call_trace;
 
 static inline bool guest_enabled_mtrace(void)
 {
-    return mtrace_enable.access.value != 0;
+    return mtrace_enable.access.mode != mtrace_record_disable;
 }
 
 static inline uint64_t total_instructions(void)
 {
-    if (!mtrace_first.access.value || mtrace_enable.access.value)
+    if (!mtrace_first.access.mode || guest_enabled_mtrace())
         die("total_instructions: still processing log?");
     return mtrace_enable.global_ts - mtrace_first.global_ts;
 }

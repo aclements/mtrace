@@ -27,6 +27,10 @@ static void print_entry(union mtrace_entry *entry)
 		[mtrace_disable_count_cpu] = "disable_count_cpu",
 		[mtrace_enable_count_cpu]  = "enable_count_cpu",
 	};
+	static const char *record_mode_to_str[] = {
+		[mtrace_record_disable]    = "disable",
+		[mtrace_record_movement]   = "movement",
+	};
 	static const char *task_to_str[] = {
 		[mtrace_task_init]   = "init",
 		[mtrace_task_update] = "update",
@@ -66,8 +70,8 @@ static void print_entry(union mtrace_entry *entry)
 		       host_to_str[entry->host.host_type]);
 		switch (entry->host.host_type) {
 		case mtrace_access_all_cpu:
-			printf("  enable %c  %s",
-			       entry->host.access.value ? 't' : 'f',
+			printf("  mode %s  %s",
+			       record_mode_to_str[entry->host.access.mode],
 			       entry->host.access.str);
 			break;
 		case mtrace_call_clear_cpu:

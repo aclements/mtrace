@@ -283,7 +283,7 @@ public:
     SerialSections(void) : lock_manager_() {}
 
     virtual void handle(const union mtrace_entry* entry) {
-        if (mtrace_enable.access.value == 0)
+        if (!guest_enabled_mtrace())
             return;
 
         switch (entry->h.type) {

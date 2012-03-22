@@ -19,7 +19,7 @@ public:
             return;
         }
 
-        if (mtrace_enable.access.value == 0)
+        if (!guest_enabled_mtrace())
             return;
 
         int cpu = entry->h.cpu;

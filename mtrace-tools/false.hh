@@ -17,7 +17,7 @@ public:
 
         list<MtraceObject> objs;
 
-        if (!mtrace_enable.access.value)
+        if (!guest_enabled_mtrace())
             return;
         objs = mtrace_label_map.objects_on_cline(a->guest_addr);
         if (objs.size() > 1) {
