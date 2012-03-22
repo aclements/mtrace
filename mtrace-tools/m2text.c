@@ -19,8 +19,6 @@ static void print_entry(union mtrace_entry *entry)
 		[mtrace_pause]  = "pause",
 	};
 	static const char *host_to_str[] = {
-		[mtrace_access_clear_cpu]  = "access_clear_cpu",
-		[mtrace_access_set_cpu]    = "access_set_cpu",
 		[mtrace_access_all_cpu]    = "access_all_cpu",
 
 		[mtrace_call_clear_cpu]    = "call_clear_cpu",

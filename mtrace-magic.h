@@ -34,9 +34,7 @@ typedef enum {
 } mtrace_label_t;
 
 typedef enum {
-    mtrace_access_clear_cpu = 1,
-    mtrace_access_set_cpu,
-    mtrace_access_all_cpu,
+    mtrace_access_all_cpu = 1,
     
     mtrace_call_clear_cpu,
     mtrace_call_set_cpu,
