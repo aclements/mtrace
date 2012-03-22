@@ -191,23 +191,27 @@ private:
                 return;
 
             Ascope *cur = &stack_.top();
-            // XXX Access apply to all abstract scopes on the stack
+            // XXX Should track per-byte, but QEMU filters by cache
+            // line right now, so we have to check sharing at that
+            // level
+            auto addr = access->guest_addr & ~63;
+            // XXX Memory accesses apply to all abstract scopes on the stack
             MtraceObject obj;
             string name;
-            if (mtrace_label_map.object(access->guest_addr, obj)) {
+            if (mtrace_label_map.object(addr, obj)) {
                 ostringstream ss;
-                ss << obj.name_ << "+0x" << hex << (access->guest_addr - obj.guest_addr_);
+                ss << obj.name_ << "+0x" << hex << (addr - obj.guest_addr_);
                 name = ss.str();
             }
             switch (access->access_type) {
             case mtrace_access_st:
             case mtrace_access_iw:
-                cur->write_[access->guest_addr] = name;
-                cur->read_.erase(access->guest_addr);
+                cur->write_[addr] = name;
+                cur->read_.erase(addr);
                 break;
             case mtrace_access_ld:
-                if (!cur->write_.count(access->guest_addr))
-                    cur->read_[access->guest_addr] = name;
+                if (!cur->write_.count(addr))
+                    cur->read_[addr] = name;
                 break;
             default:
                 die("AbstractSharing::CallStack::handle: unknown access type");
