@@ -30,6 +30,7 @@ static void print_entry(union mtrace_entry *entry)
 	static const char *record_mode_to_str[] = {
 		[mtrace_record_disable]    = "disable",
 		[mtrace_record_movement]   = "movement",
+		[mtrace_record_ascope]     = "ascope",
 	};
 	static const char *task_to_str[] = {
 		[mtrace_task_init]   = "init",

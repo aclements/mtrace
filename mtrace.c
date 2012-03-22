@@ -300,11 +300,30 @@ static int mtrace_cline_update_ld(uint8_t * host_addr, unsigned int cpu)
     offset = host_addr - block->host;
     cline = offset >> MTRACE_CLINE_SHIFT;
 
-    if (block->cline_track[cline] & (1 << cpu))
-	return 0;
+    if (mtrace_mode == mtrace_record_ascope) {
+	/* Abstract scope mode.	 The cline_track byte is further
+	 * subdivided by address into pairs of bits.  0b01 indicates
+	 * the address has been loaded and 0b10 indicates it has been
+	 * stored. */
+	/* XXX This is 16 byte granularity.  It would be nice if we
+	 * could do 8 or 4 byte, but that would require a bigger
+	 * cline_track and we currently allocate that before we know
+	 * our tracking mode. */
+	int bit = (offset >> (MTRACE_CLINE_SHIFT - 3)) & 6;
+	/* If it has been loaded *or* stored, don't record it */
+	if (block->cline_track[cline] & (0b11 << bit))
+	    return 0;
+	/* Now it's being loaded */
+	block->cline_track[cline] |= (0b01 << bit);
+	return 1;
+    } else {
+	/* Movement mode.  Each bit records a CPU. */
+	if (block->cline_track[cline] & (1 << cpu))
+	    return 0;
 
-    block->cline_track[cline] |= (1 << cpu);
-    return 1;
+	block->cline_track[cline] |= (1 << cpu);
+	return 1;
+    }
 }
 
 static int mtrace_cline_update_st(uint8_t *host_addr, unsigned int cpu)
@@ -320,11 +339,22 @@ static int mtrace_cline_update_st(uint8_t *host_addr, unsigned int cpu)
     offset = host_addr - block->host;
     cline = offset >> MTRACE_CLINE_SHIFT;
 
-    if (block->cline_track[cline] == (1 << cpu))
-	return 0;
+    if (mtrace_mode == mtrace_record_ascope) {
+	int bit = (offset >> (MTRACE_CLINE_SHIFT - 3)) & 6;
+	/* If it's been stored, don't record it */
+	if (block->cline_track[cline] & (0b10 << bit))
+	    return 0;
+	/* Now it's been stored */
+	block->cline_track[cline] |= (0b10 << bit);
+	return 1;
+    } else {
+	/* Movement mode. */
+	if (block->cline_track[cline] == (1 << cpu))
+	    return 0;
 
-    block->cline_track[cline] = (1 << cpu);
-    return 1;
+	block->cline_track[cline] = (1 << cpu);
+	return 1;
+    }
 }
 
 void mtrace_st(target_ulong host_addr, target_ulong guest_addr, void *retaddr)
@@ -494,13 +524,14 @@ static int mtrace_host_addr(target_ulong guest_addr, target_ulong *host_addr)
     return 0;
 }
 
-static void mtrace_reset_cline_track(void)
+static void mtrace_reset_cline_track(mtrace_record_mode_t mode)
 {
     RAMBlock *block;
+    int fill = (mode == mtrace_record_ascope ? 0 : 0xff);
 
     QLIST_FOREACH(block, &ram_list.blocks, next)
 	if (block->cline_track)
-	    memset(block->cline_track, 0xff, block->length >> MTRACE_CLINE_SHIFT);
+	    memset(block->cline_track, fill, block->length >> MTRACE_CLINE_SHIFT);
 }
 
 /*
@@ -554,7 +585,7 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
 	switch (entry.host.host_type) {
 	case mtrace_access_all_cpu:
 	    if (entry.host.access.mode != mtrace_mode)
-		mtrace_reset_cline_track();
+		mtrace_reset_cline_track(entry.host.access.mode);
 	    mtrace_mode = entry.host.access.mode;
 	    break;
 	case mtrace_call_clear_cpu:
@@ -582,6 +613,15 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
 	    abort();
 	}
     } 
+
+    /* Special handling */
+    if (type == mtrace_entry_ascope &&
+	mtrace_mode == mtrace_record_ascope &&
+	!entry.ascope.exit) {
+	/* Clear the cache line state so we can track all accesses in
+	 * this scope */
+	mtrace_reset_cline_track(mtrace_mode);
+    }
 
     mtrace_log_entry(&entry);
 }

@@ -50,6 +50,10 @@ typedef enum {
     /* Record accesses that cause cache line movement.  Initially, all
      * cache lines will be considered shared by all CPUs. */
     mtrace_record_movement,
+
+    /* Record unique accesses within each abstract scope at a
+       granularity of 16 bytes. */
+    mtrace_record_ascope,
 } mtrace_record_mode_t;
 
 #define __pack__ __attribute__((__packed__))

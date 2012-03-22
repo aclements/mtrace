@@ -21,6 +21,8 @@ public:
 
         if (!guest_enabled_mtrace())
             return;
+        if (mtrace_enable.access.mode != mtrace_record_ascope)
+            die("Abstract sharing analysis requires mtrace_record_ascope mode");
 
         int cpu = entry->h.cpu;
 
@@ -191,10 +193,9 @@ private:
                 return;
 
             Ascope *cur = &stack_.top();
-            // XXX Should track per-byte, but QEMU filters by cache
-            // line right now, so we have to check sharing at that
-            // level
-            auto addr = access->guest_addr & ~63;
+            // Since QEMU limits the granularity of tracking to 16
+            // bytes in ascope mode, we need to do that, too.
+            auto addr = access->guest_addr & ~15;
             // XXX Memory accesses apply to all abstract scopes on the stack
             MtraceObject obj;
             string name;
