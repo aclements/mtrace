@@ -305,7 +305,7 @@ public:
 
         for (; it != stat_.end(); ++it) {
             SerialSectionStat* stat = &it->second;
-            printf(" %s  %lu  %lu\n",
+            printf(" %s  %"PRIu64"  %"PRIu64"\n",
                    stat->name.c_str(),
                    stat->summary.total_cycles(),
                    stat->summary.acquires);
@@ -443,7 +443,7 @@ private:
                 SerialSectionKey key;
 
                 if (!mtrace_label_map.object(l->lock, object)) {
-                    fprintf(stderr, "SerialSections::handle: missing %"PRIx64" (%s) %lx\n",
+                    fprintf(stderr, "SerialSections::handle: missing %"PRIx64" (%s) %"PRIx64"\n",
                             l->lock, l->str, l->pc);
                     return;
                 }

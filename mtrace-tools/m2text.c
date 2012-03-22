@@ -37,7 +37,7 @@ static void print_entry(union mtrace_entry *entry)
 
 	switch(entry->h.type) {
 	case mtrace_entry_label:
-		printf("%-3s [%-3u  %16s  %016lx  %016lx  %016lx  %016lx  %016lx]\n",
+		printf("%-3s [%-3u  %16s  %016"PRIx64"  %016"PRIx64"  %016"PRIx64"  %016"PRIx64"  %016"PRIx64"]\n",
 		       "T",
 		       entry->label.label_type,
 		       entry->label.str,
@@ -48,7 +48,7 @@ static void print_entry(union mtrace_entry *entry)
 		       entry->h.access_count);
 		break;
 	case mtrace_entry_access:
-		printf("%-3s [%-3u %16lu  pc %016"PRIx64"  host %016"PRIx64"  guest %016"PRIx64"",
+		printf("%-3s [%-3u %16"PRIu64" pc %016"PRIx64"  host %016"PRIx64"  guest %016"PRIx64"",
 		       access_type_to_str[entry->access.access_type],
 		       entry->h.cpu,
 		       entry->h.access_count,
@@ -98,7 +98,7 @@ static void print_entry(union mtrace_entry *entry)
 		       call_state_to_str[entry->fcall.state]);
 		break;
 	case mtrace_entry_segment:
-		printf("%-3s [%-3u  %3u  %16lx %16lx]\n",
+		printf("%-3s [%-3u  %3u  %16"PRIx64" %16"PRIx64"]\n",
 		       "S",
 		       entry->h.cpu,
 		       entry->h.type,
@@ -106,7 +106,7 @@ static void print_entry(union mtrace_entry *entry)
 		       entry->seg.endaddr);
 		break;
 	case mtrace_entry_call:
-		printf("%-3s [%-3u  %4s  %16lu  %16lx %16lx]\n",
+		printf("%-3s [%-3u  %4s  %16"PRIu64"  %16"PRIx64" %16"PRIx64"]\n",
 		       "L",
 		       entry->h.cpu,
 		       entry->call.ret ? "ret" : "call",
@@ -115,7 +115,7 @@ static void print_entry(union mtrace_entry *entry)
 		       entry->call.return_pc);
 		break;
 	case mtrace_entry_lock:
-		printf("%-3s [%-3u  pc %16lx  lock %16lx  %s]\n",
+		printf("%-3s [%-3u  pc %16"PRIx64"  lock %16"PRIx64"  %s]\n",
 		       entry->lock.op == mtrace_lockop_release ? "r" 
 		       		      : (entry->lock.read ? "ar" : "aw"),
 		       entry->h.cpu,
