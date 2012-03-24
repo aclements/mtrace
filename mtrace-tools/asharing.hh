@@ -262,12 +262,10 @@ private:
             else if (*first2 < *first1)
                 ++first2;
             else {
-                if (first1->second.size())
-                    // String name
-                    shared->append(first1->second);
-                else
-                    // Raw address
-                    shared->append(first1->first);
+                JsonDict *jd = JsonDict::create();
+                jd->put("memaddr", first1->first);
+                jd->put("name", first1->second);
+                shared->append(jd);
                 first1++;
                 first2++;
             }
