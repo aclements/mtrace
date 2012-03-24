@@ -263,7 +263,9 @@ private:
                 ++first2;
             else {
                 JsonDict *jd = JsonDict::create();
-                jd->put("memaddr", first1->first);
+                char buf[64];
+                sprintf(buf, "%lx", first1->first);
+                jd->put("addr", buf);
                 jd->put("name", first1->second);
                 shared->append(jd);
                 first1++;
