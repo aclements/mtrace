@@ -311,10 +311,10 @@ static int mtrace_cline_update_ld(uint8_t * host_addr, unsigned int cpu)
 	 * our tracking mode. */
 	int bit = (offset >> (MTRACE_CLINE_SHIFT - 3)) & 6;
 	/* If it has been loaded *or* stored, don't record it */
-	if (block->cline_track[cline] & (0b11 << bit))
+	if (block->cline_track[cline] & (3 << bit))
 	    return 0;
 	/* Now it's being loaded */
-	block->cline_track[cline] |= (0b01 << bit);
+	block->cline_track[cline] |= (1 << bit);
 	return 1;
     } else {
 	/* Movement mode.  Each bit records a CPU. */
@@ -342,10 +342,10 @@ static int mtrace_cline_update_st(uint8_t *host_addr, unsigned int cpu)
     if (mtrace_mode == mtrace_record_ascope) {
 	int bit = (offset >> (MTRACE_CLINE_SHIFT - 3)) & 6;
 	/* If it's been stored, don't record it */
-	if (block->cline_track[cline] & (0b10 << bit))
+	if (block->cline_track[cline] & (2 << bit))
 	    return 0;
 	/* Now it's been stored */
-	block->cline_track[cline] |= (0b10 << bit);
+	block->cline_track[cline] |= (2 << bit);
 	return 1;
     } else {
 	/* Movement mode. */
