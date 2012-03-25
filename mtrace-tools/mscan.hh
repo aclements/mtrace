@@ -64,8 +64,10 @@ public:
         if (l->label_type == 0 || l->label_type >= mtrace_label_end)
             die("MtraceLabelMap::add_label: bad type: %u", l->label_type);
 
-        if (object_first_.find(l->guest_addr) != object_first_.end())
+        if (object_first_.find(l->guest_addr) != object_first_.end()) {
+	    fprintf(stderr, "add_label: l1 %s l2 %s\n", l->str, object_first_.find(l->guest_addr)->second->name_.c_str());
             die("MtraceLabelMap::add_label: overlapping labels");
+	}
 
         id = ++mtrace_object_count;
         o = new MtraceObject(id, l);

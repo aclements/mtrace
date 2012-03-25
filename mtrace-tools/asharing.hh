@@ -27,9 +27,11 @@ public:
         int cpu = entry->h.cpu;
 
         if (entry->h.type == mtrace_entry_ascope) {
-            callstacks_.current(cpu)->handle(&entry->ascope);
+            if (callstacks_.current(cpu))
+	      callstacks_.current(cpu)->handle(&entry->ascope);
         } else if (entry->h.type == mtrace_entry_avar) {
-            callstacks_.current(cpu)->handle(&entry->avar);
+            if (callstacks_.current(cpu))
+	      callstacks_.current(cpu)->handle(&entry->avar);
         } else if (entry->h.type == mtrace_entry_access) {
             if (callstacks_.current(cpu))
                 callstacks_.current(cpu)->handle(&entry->access);
@@ -173,8 +175,10 @@ private:
 
         void handle(const mtrace_avar_entry *avar)
         {
-            if (stack_.empty())
-                die("avar without ascope");
+	    if (stack_.empty()) {
+	        fprintf(stderr, "avar without ascope\n");
+		return;
+	    }
 
             Ascope *cur = &stack_.top();
             string var = avar->name;
