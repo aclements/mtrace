@@ -3,6 +3,9 @@
 #include <set>
 #include <stack>
 
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
+
 #include "percallstack.hh"
 
 using namespace std;
@@ -270,7 +273,7 @@ private:
             else {
                 JsonDict *jd = JsonDict::create();
                 char buf[64];
-                sprintf(buf, "%lx", first1->first);
+                sprintf(buf, "%"PRIx64"", first1->first);
                 jd->put("addr", buf);
                 jd->put("name", first1->second);
                 shared->append(jd);
