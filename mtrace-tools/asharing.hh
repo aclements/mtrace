@@ -87,13 +87,13 @@ public:
                     if (s1.cpu_ == s2.cpu_)
                         continue;
 
-                    bool abstract_sharing =
+                    auto abstract_sharing =
                         shares(s1.aread_.begin(),  s1.aread_.end(),
                                s1.awrite_.begin(), s1.awrite_.end(),
 
                                s2.aread_.begin(),  s2.aread_.end(),
                                s2.awrite_.begin(), s2.awrite_.end());
-                    bool concrete_sharing =
+                    auto concrete_sharing =
                         shares(s1.read_.begin(),  s1.read_.end(),
                                s1.write_.begin(), s1.write_.end(),
 
@@ -117,8 +117,8 @@ public:
                         od->put("shared", shared);
                         lst->append(od);
                     } else if (abstract_sharing && !concrete_sharing) {
-                        fprintf(stderr, "Warning: Abstract sharing without concrete sharing: %s and %s\n",
-                                s1.name_.c_str(), s2.name_.c_str());
+                        fprintf(stderr, "Warning: Abstract sharing without concrete sharing: %s and %s (%s)\n",
+                                s1.name_.c_str(), s2.name_.c_str(), abstract_sharing->c_str());
                     }
                 }
             }
@@ -229,20 +229,22 @@ private:
     vector<Ascope> scopes_;
 
     template<class InputIterator1, class InputIterator2>
-    static bool shares(InputIterator1 r1begin, InputIterator1 r1end,
-                       InputIterator1 w1begin, InputIterator1 w1end,
-                       InputIterator2 r2begin, InputIterator2 r2end,
-                       InputIterator2 w2begin, InputIterator2 w2end)
+    static decltype(&(**((InputIterator1*)0)))
+        shares(InputIterator1 r1begin, InputIterator1 r1end,
+               InputIterator1 w1begin, InputIterator1 w1end,
+               InputIterator2 r2begin, InputIterator2 r2end,
+               InputIterator2 w2begin, InputIterator2 w2end)
     {
         return
-            intersects(r1begin, r1end, w2begin, w2end) ||
-            intersects(w1begin, w1end, r2begin, r2end) ||
+            intersects(r1begin, r1end, w2begin, w2end) ?:
+            intersects(w1begin, w1end, r2begin, r2end) ?:
             intersects(w1begin, w1end, w2begin, w2end);
     }
 
     template<class InputIterator1, class InputIterator2>
-    static bool intersects(InputIterator1 first1, InputIterator1 last1,
-                           InputIterator2 first2, InputIterator2 last2)
+    static decltype(&(**((InputIterator1*)0)))
+        intersects(InputIterator1 first1, InputIterator1 last1,
+                   InputIterator2 first2, InputIterator2 last2)
     {
         while (first1 != last1 && first2 != last2) {
             if (*first1 < *first2)
@@ -250,9 +252,9 @@ private:
             else if (*first2 < *first1)
                 ++first2;
             else
-                return true;
+                return &(*first1);
         }
-        return false;
+        return nullptr;
     }
 
     template<class InputIterator1, class InputIterator2>
