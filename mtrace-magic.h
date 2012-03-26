@@ -135,7 +135,7 @@ struct mtrace_host_entry {
 	    /* Access recording mode */
 	    mtrace_record_mode_t mode;
 	    /* Name of trace */
-	    char str[32];
+	    char str[64];
 	} access;
 
 	/* Enable/disable call/ret tracing */
@@ -155,7 +155,7 @@ struct mtrace_label_entry {
     uint64_t host_addr;
 
     mtrace_label_t label_type;  /* See mtrace-magic.h */
-    char str[32];
+    char str[64];
     uint64_t guest_addr;
     uint64_t bytes;
     uint64_t pc;
@@ -195,7 +195,7 @@ struct mtrace_lock_entry {
 
     uint64_t pc;
     uint64_t lock;
-    char str[32];
+    char str[64];
     mtrace_lockop_t op;
     uint8_t read;
 } __pack__;
@@ -215,7 +215,7 @@ struct mtrace_task_entry {
     uint64_t tid;	       /* Thread ID */
     uint64_t tgid;	       /* Thread Group ID */
     mtrace_task_t task_type;
-    char str[32];
+    char str[64];
 } __pack__;
 
 /*
@@ -261,7 +261,7 @@ struct mtrace_appdata_entry {
 struct mtrace_ascope_entry {
     struct mtrace_entry_header h;
     uint8_t exit:1;
-    char name[32];
+    char name[64];
 } __pack__;
 
 /*
@@ -270,7 +270,7 @@ struct mtrace_ascope_entry {
 struct mtrace_avar_entry {
     struct mtrace_entry_header h;
     uint8_t write:1;
-    char name[32];
+    char name[64];
 } __pack__;
 
 
