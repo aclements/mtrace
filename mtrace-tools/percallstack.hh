@@ -12,6 +12,10 @@ template<typename T>
 class PerCallStack
 {
 public:
+    PerCallStack() {
+        memset(current_, 0, sizeof(current_));
+    }
+
     template<typename... Args>
     void handle(const mtrace_fcall_entry* fcall, Args... args)
     {
