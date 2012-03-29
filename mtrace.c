@@ -363,7 +363,7 @@ void mtrace_st(target_ulong host_addr, target_ulong guest_addr, void *retaddr)
     int lock;
     int r;
 
-    if (!mtrace_system_enable)
+    if (!mtrace_system_enable || !mtrace_mode)
 	return;
 
     a = mtrace_access_count++;
@@ -387,7 +387,7 @@ void mtrace_ld(target_ulong host_addr, target_ulong guest_addr, void *retaddr)
     int lock;
     int r;
 
-    if (!mtrace_system_enable)
+    if (!mtrace_system_enable || !mtrace_mode)
 	return;
 
     a = mtrace_access_count++;
@@ -408,7 +408,7 @@ void mtrace_tcg_ld(target_ulong host_addr, target_ulong guest_addr)
 void mtrace_io_write(void *cb, target_phys_addr_t ram_addr, 
 		     target_ulong guest_addr, void *retaddr)
 {
-    if (!mtrace_system_enable)
+    if (!mtrace_system_enable || !mtrace_mode)
 	return;
 
     /*
