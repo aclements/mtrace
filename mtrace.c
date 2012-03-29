@@ -529,9 +529,25 @@ static void mtrace_reset_cline_track(mtrace_record_mode_t mode)
     RAMBlock *block;
     int fill = (mode == mtrace_record_ascope ? 0 : 0xff);
 
-    QLIST_FOREACH(block, &ram_list.blocks, next)
-	if (block->cline_track)
-	    memset(block->cline_track, fill, block->length >> MTRACE_CLINE_SHIFT);
+    QLIST_FOREACH(block, &ram_list.blocks, next) {
+        ram_addr_t size = block->length >> MTRACE_CLINE_SHIFT;
+        if (block->cline_track && block->cline_track_size < size) {
+            mtrace_cline_track_free(block);
+        }
+        if (!block->cline_track) {
+            block->cline_track = qemu_vmalloc(size);
+            if (!block->cline_track) {
+                perror("qemu_vmalloc failed\n");
+                abort();
+            }
+            /*
+             * Could use qemu_madvise(MADV_MERGEABLE) if
+             * size >> MTRACE_CLINE_SHIFT is large
+             */
+            block->cline_track_size = size;
+        }
+        memset(block->cline_track, fill, size);
+    }
 }
 
 /*
@@ -675,31 +691,12 @@ void mtrace_inst_call(target_ulong target_pc, target_ulong return_pc,
     mtrace_log_entry((union mtrace_entry *)&call);
 }
 
-uint8_t *mtrace_cline_track_alloc(size_t size)
+void mtrace_cline_track_free(RAMBlock *block)
 {
-    uint8_t *b;
-
-    if (!mtrace_cline_track || !mtrace_system_enable)
-	return NULL;
-
-    b = qemu_vmalloc(size >> MTRACE_CLINE_SHIFT);
-    if (b == NULL) {
-	perror("qemu_vmalloc failed\n");
-	abort();
-    }
-    /* 
-     * Could use qemu_madvise(MADV_MERGEABLE) if 
-     * size >> MTRACE_CLINE_SHIFT is large 
-     */
-
-    memset(b, 0xff, size >> MTRACE_CLINE_SHIFT);
-    return b;
-}
-
-void mtrace_cline_track_free(uint8_t *cline_track)
-{
-    if (cline_track)
-	qemu_vfree(cline_track);
+    if (block->cline_track)
+	qemu_vfree(block->cline_track);
+    block->cline_track = NULL;
+    block->cline_track_size = 0;
 }
 
 static void mtrace_cleanup(void)

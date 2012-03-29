@@ -873,6 +873,7 @@ typedef struct RAMBlock {
     int fd;
 #endif
     uint8_t *cline_track;
+    ram_addr_t cline_track_size;
 } RAMBlock;
 
 typedef struct RAMList {
