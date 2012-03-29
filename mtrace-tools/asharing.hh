@@ -200,14 +200,15 @@ private:
                 return;
 
             Ascope *cur = &stack_.top();
-            // Since QEMU limits the granularity of tracking to 16
+            // Since QEMU limits the granularity of tracking to 4
             // bytes in ascope mode, we need to do that, too.
-            auto addr = access->guest_addr & ~15;
+            auto addr = access->guest_addr & ~3;
             // XXX Memory accesses apply to all abstract scopes on the stack
             MtraceObject obj;
             string name;
             if (mtrace_label_map.object(addr, obj)) {
                 ostringstream ss;
+                // XXX Use the *real* address for object naming
                 ss << obj.name_ << "+0x" << hex << (addr - obj.guest_addr_);
                 name = ss.str();
             }

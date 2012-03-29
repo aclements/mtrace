@@ -33,6 +33,7 @@
 
 /* 64-byte cache lines */
 #define MTRACE_CLINE_SHIFT	6
+#define MTRACE_ASCOPE_SHIFT	4
 
 /* From dyngen-exec.h */
 #define MTRACE_GETPC() ((void *)((unsigned long)__builtin_return_address(0) - 1))
@@ -290,7 +291,6 @@ static void mtrace_access_dump(mtrace_access_t type, target_ulong host_addr,
 static int mtrace_cline_update_ld(uint8_t * host_addr, unsigned int cpu)
 {
     unsigned long offset;
-    unsigned long cline;
     RAMBlock *block;
 
     if (!mtrace_cline_track)
@@ -298,18 +298,14 @@ static int mtrace_cline_update_ld(uint8_t * host_addr, unsigned int cpu)
 
     block = qemu_ramblock_from_host(host_addr);
     offset = host_addr - block->host;
-    cline = offset >> MTRACE_CLINE_SHIFT;
 
     if (mtrace_mode == mtrace_record_ascope) {
-	/* Abstract scope mode.	 The cline_track byte is further
+	/* Abstract scope mode.  Each cline_track byte is further
 	 * subdivided by address into pairs of bits.  0b01 indicates
 	 * the address has been loaded and 0b10 indicates it has been
 	 * stored. */
-	/* XXX This is 16 byte granularity.  It would be nice if we
-	 * could do 8 or 4 byte, but that would require a bigger
-	 * cline_track and we currently allocate that before we know
-	 * our tracking mode. */
-	int bit = (offset >> (MTRACE_CLINE_SHIFT - 3)) & 6;
+	unsigned long cline = offset >> MTRACE_ASCOPE_SHIFT;
+	int bit = ((offset >> (MTRACE_ASCOPE_SHIFT - 3)) % 8) & ~1;
 	/* If it has been loaded *or* stored, don't record it */
 	if (block->cline_track[cline] & (3 << bit))
 	    return 0;
@@ -317,6 +313,8 @@ static int mtrace_cline_update_ld(uint8_t * host_addr, unsigned int cpu)
 	block->cline_track[cline] |= (1 << bit);
 	return 1;
     } else {
+        unsigned long cline = offset >> MTRACE_CLINE_SHIFT;
+
 	/* Movement mode.  Each bit records a CPU. */
 	if (block->cline_track[cline] & (1 << cpu))
 	    return 0;
@@ -329,7 +327,6 @@ static int mtrace_cline_update_ld(uint8_t * host_addr, unsigned int cpu)
 static int mtrace_cline_update_st(uint8_t *host_addr, unsigned int cpu)
 {
     unsigned long offset;
-    unsigned long cline;
     RAMBlock *block;
 
     if (!mtrace_cline_track)
@@ -337,10 +334,10 @@ static int mtrace_cline_update_st(uint8_t *host_addr, unsigned int cpu)
 
     block = qemu_ramblock_from_host(host_addr);
     offset = host_addr - block->host;
-    cline = offset >> MTRACE_CLINE_SHIFT;
 
     if (mtrace_mode == mtrace_record_ascope) {
-	int bit = (offset >> (MTRACE_CLINE_SHIFT - 3)) & 6;
+	unsigned long cline = offset >> MTRACE_ASCOPE_SHIFT;
+	int bit = ((offset >> (MTRACE_ASCOPE_SHIFT - 3)) % 8) & ~1;
 	/* If it's been stored, don't record it */
 	if (block->cline_track[cline] & (2 << bit))
 	    return 0;
@@ -348,6 +345,8 @@ static int mtrace_cline_update_st(uint8_t *host_addr, unsigned int cpu)
 	block->cline_track[cline] |= (2 << bit);
 	return 1;
     } else {
+	unsigned long cline = offset >> MTRACE_CLINE_SHIFT;
+
 	/* Movement mode. */
 	if (block->cline_track[cline] == (1 << cpu))
 	    return 0;
@@ -530,7 +529,21 @@ static void mtrace_reset_cline_track(mtrace_record_mode_t mode)
     int fill = (mode == mtrace_record_ascope ? 0 : 0xff);
 
     QLIST_FOREACH(block, &ram_list.blocks, next) {
-        ram_addr_t size = block->length >> MTRACE_CLINE_SHIFT;
+        ram_addr_t size;
+        switch (mode) {
+        case mtrace_record_movement:
+            // One byte per cache line
+            size = block->length >> MTRACE_CLINE_SHIFT;
+            break;
+        case mtrace_record_ascope:
+            // Two bits per 4 bytes (one byte per 16 bytes)
+            size = block->length >> MTRACE_ASCOPE_SHIFT;
+            break;
+        default:
+            fprintf(stderr, "bad record mode %d\n", mode);
+            abort();
+        }
+
         if (block->cline_track && block->cline_track_size < size) {
             mtrace_cline_track_free(block);
         }
@@ -600,7 +613,7 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
 	entry.host.global_ts = mtrace_get_global_tsc(cpu_single_env);
 	switch (entry.host.host_type) {
 	case mtrace_access_all_cpu:
-	    if (entry.host.access.mode != mtrace_mode)
+	    if (entry.host.access.mode && entry.host.access.mode != mtrace_mode)
 		mtrace_reset_cline_track(entry.host.access.mode);
 	    mtrace_mode = entry.host.access.mode;
 	    break;
