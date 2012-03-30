@@ -7,13 +7,20 @@
 #include <inttypes.h>
 
 #include "percallstack.hh"
-
-using namespace std;
+#include "bininfo.hh"
+#include <elf++.hh>
+#include <dwarf++.hh>
 
 class AbstractSharing : public EntryHandler {
 public:
     AbstractSharing(bool ascopes, bool unexpected)
-        : ascopes_(ascopes), unexpected_(unexpected) { }
+        : ascopes_(ascopes), unexpected_(unexpected) {
+        int fd = open("o.qemu/kernel.elf", O_RDONLY);
+        if (fd < 0)
+            die("failed to open o.qemu/kernel.elf");
+        elf_ = elf::elf(elf::create_mmap_loader(fd));
+        dwarf_ = dwarf::dwarf(dwarf::elf::create_loader(elf_));
+    }
 
     virtual void handle(const union mtrace_entry* entry) {
         if (entry->h.type == mtrace_entry_fcall) {
@@ -56,11 +63,11 @@ public:
                 JsonList *rw;
                 rw = JsonList::create();
                 for (auto &it : ascope.read_)
-                    rw->append(it.second.to_json());
+                    rw->append(it.second.to_json(dwarf_));
                 od->put("read", rw);
                 rw = JsonList::create();
                 for (auto &it : ascope.write_)
-                    rw->append(it.second.to_json());
+                    rw->append(it.second.to_json(dwarf_));
                 od->put("write", rw);
 
                 lst->append(od);
@@ -127,15 +134,15 @@ public:
         string type;
         uint64_t base;
         uint64_t access;
+        uint64_t pc;
 
-        JsonDict *to_json()
+        string to_json(const dwarf::dwarf &dw)
         {
-            JsonDict *jd = JsonDict::create();
+            if (type.size())
+                return resolve_type_offset(dw, type, base, access - base, pc);
             char buf[64];
-            sprintf(buf, "%"PRIx64"", (access - base));
-            jd->put("addr", buf);
-            jd->put("name", type);
-            return jd;
+            sprintf(buf, "0x%"PRIx64, access);
+            return string(buf);
         }
 
         bool operator<(const PhysicalAccess &o) const
@@ -158,6 +165,9 @@ public:
     };
 
 private:
+    elf::elf elf_;
+    dwarf::dwarf dwarf_;
+
     bool ascopes_, unexpected_;
 
     class CallStack
@@ -228,6 +238,7 @@ private:
                 pa.base = 0;
             }
             pa.access = access->guest_addr;
+            pa.pc = access->pc;
 
             switch (access->access_type) {
             case mtrace_access_st:
@@ -280,9 +291,9 @@ private:
     }
 
     template<class InputIterator1, class InputIterator2>
-    static void shared_to_json(JsonList *shared,
-                               InputIterator1 first1, InputIterator1 last1,
-                               InputIterator2 first2, InputIterator2 last2)
+    void shared_to_json(JsonList *shared,
+                        InputIterator1 first1, InputIterator1 last1,
+                        InputIterator2 first2, InputIterator2 last2)
     {
         while (first1 != last1 && first2 != last2) {
             if (*first1 < *first2)
@@ -290,7 +301,7 @@ private:
             else if (*first2 < *first1)
                 ++first2;
             else {
-                shared->append(first1->second.to_json());
+                shared->append(first1->second.to_json(dwarf_));
                 first1++;
                 first2++;
             }
