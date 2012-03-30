@@ -15,10 +15,12 @@ CWARNS	= -Wformat=2 -Wextra -Wmissing-noreturn -Wwrite-strings -Wshadow \
 	   -Wswitch-default -Wmissing-declarations -Wno-format-nonliteral \
 	   -Wno-deprecated -Wno-format-security
 
-CFLAGS  = -Wall -Werror $(CWARNS) -I$(QEMUDIR) -g -O3
-CFLAGS += -Ilibelfin/elf -Ilibelfin/dwarf
-LDFLAGS = -lz
+CFLAGS   := -Wall -Werror $(CWARNS) -g -O3
+CXXFLAGS := $(CFLAGS) -std=c++0x
+CPPFLAGS := -I$(QEMUDIR) -Ilibelfin/elf -Ilibelfin/dwarf
+LDLIBS   := -lz
 
+MSCAN_SRCS = mscan.cc addr2line.cc hash.c bininfo.cc
 HDRS	= $(QEMUDIR)/mtrace-magic.h util.h
 MSCAN_HDRS = addr2line.hh \
 	     bininfo.hh \
@@ -35,25 +37,33 @@ MSCAN_HDRS = addr2line.hh \
 	     percallstack.hh \
 	     asharing.hh
 
+CLEAN =
+
 all: mscan m2text mtrace-magic check-py
 
-mscan: mscan.cc addr2line.cc hash.c bininfo.o \
-		libelfin/dwarf/libdwarf++.a libelfin/elf/libelf++.a \
-		$(HDRS) $(MSCAN_HDRS)
-	@echo "  CXX      $@"
-	$(Q)$(CXX) -o $@ $(filter-out $(HDRS) $(MSCAN_HDRS),$^) $(CFLAGS) -std=c++0x $(LDFLAGS)
+mscan: $(addsuffix .o,$(basename $(MSCAN_SRCS))) \
+		libelfin/dwarf/libdwarf++.a libelfin/elf/libelf++.a
+	@echo "  LD       $@"
+	$(Q)$(CXX) $(LDFLAGS) -o $@ $(filter %.o %.a,$^) $(LOADLIBES) $(LDLIBS)
+CLEAN += mscan $(addsuffix .o,$(basename $(MSCAN_SRCS)))
 
-m2text: m2text.c $(HDRS)
+m2text: m2text.o
+	@echo "  LD       $@"
+	$(Q)$(CC) $(LDFLAGS) -o $@ $^ $(LOADLIBES) $(LDLIBS)
+CLEAN += m2text m2text.o
+
+mtrace-magic: mtrace-magic.o
+	@echo "  LD       $@"
+	$(Q)$(CC) $(LDFLAGS) -o $@ $^ $(LOADLIBES) $(LDLIBS)
+CLEAN += mtrace-magic mtrace-magic.o
+
+%.o: %.c $(HDRS) $(MSCAN_HDRS)
 	@echo "  CC       $@"
-	$(Q)$(CC) -o $@ $< $(CFLAGS) $(LDFLAGS)
+	$(Q)$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
 
-mtrace-magic: mtrace-magic.c $(HDRS)
-	@echo "  CC       $@"
-	$(Q)$(CC) -o $@ $< $(CFLAGS) $(LDFLAGS)
-
-bininfo.o: bininfo.cc $(HDRS)
+%.o: %.cc $(HDRS) $(MSCAN_HDRS)
 	@echo "  CXX      $@"
-	$(Q)$(CXX) -c -o $@ $< $(CFLAGS) -std=c++0x
+	$(Q)$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $<
 
 libelfin/%: check-libelfin
 	@$(MAKE) -C $(@D) -q $(@F) || $(MAKE) -C $(@D) $(@F)
@@ -102,4 +112,4 @@ install: mscan
 
 clean:
 	@echo "  CLEAN"
-	$(Q)rm -f mscan m2text mtrace-magic bininfo.o
+	$(Q)rm -f $(CLEAN)
