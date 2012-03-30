@@ -4,6 +4,9 @@ QEMUDIR = ..
 INSTDIR = /usr/local/bin
 PYFLAKES = $(shell which pyflakes)
 
+# Author date (e.g., from git log) of known-working libelfin commit
+LIBELFIN_DATE := Fri Mar 30 12:30:36 2012 -0400
+
 CXX  = g++
 CC   = gcc
 
@@ -32,9 +35,11 @@ MSCAN_HDRS = addr2line.hh \
 
 all: mscan m2text mtrace-magic check-py
 
-mscan: mscan.cc addr2line.cc hash.c $(HDRS) $(MSCAN_HDRS)
+mscan: mscan.cc addr2line.cc hash.c \
+		libelfin/dwarf/libdwarf++.a libelfin/elf/libelf++.a \
+		$(HDRS) $(MSCAN_HDRS)
 	@echo "  CXX      $@"
-	$(Q)$(CXX) -o $@ $< addr2line.cc hash.c $(CFLAGS) -std=c++0x $(LDFLAGS)
+	$(Q)$(CXX) -o $@ $(filter-out $(HDRS) $(MSCAN_HDRS),$^) $(CFLAGS) -std=c++0x $(LDFLAGS)
 
 m2text: m2text.c $(HDRS)
 	@echo "  CC       $@"
@@ -44,7 +49,28 @@ mtrace-magic: mtrace-magic.c $(HDRS)
 	@echo "  CC       $@"
 	$(Q)$(CC) -o $@ $< $(CFLAGS) $(LDFLAGS)
 
-.PHONY: install clean astyle check-py
+libelfin/%: check-libelfin
+	@$(MAKE) -C $(@D) -q $(@F) || $(MAKE) -C $(@D) $(@F)
+
+check-libelfin:
+	@if [ ! -d libelfin/.git ]; then \
+	 echo "libelfin not found; please"; \
+	 echo "$$ git clone git+ssh://am.lcs.mit.edu/home/am6/mpdev/libelfin.git"; \
+	 false; fi
+	@cd libelfin; \
+	 REV=$$(git log --format='%H %ad' --all -n 1 | awk '/$(LIBELFIN_DATE)/ {print $$1}'); \
+	 if [ "x$$REV" = x ]; then \
+	   echo "WARNING: libelfin commit from $(LIBELFIN_DATE) not found"; \
+	   if [ "x$$(git rev-list -n 1 --after=\"$$REV\" --all)" = x ]; then \
+	     echo "WARNING: Your libelfin clone appears to be out of date"; \
+	   fi; \
+	 elif [ "x$$(git rev-list -n 1 $$REV..HEAD)" != x ]; then \
+	   echo "WARNING: libelfin is ahead of expected rev $$REV"; \
+	 elif [ "x$$(git rev-list -n 1 HEAD..$$REV)" != x ]; then \
+	   echo "WARNING: libelfin is behind expected rev $$REV"; \
+	 fi
+
+.PHONY: install clean astyle check-py check-libelfin
 
 ASTYLE = astyle
 ASTYLE_OPTS = --suffix=none \
