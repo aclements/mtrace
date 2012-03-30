@@ -15,7 +15,7 @@ class AbstractSharing : public EntryHandler {
 public:
     AbstractSharing(bool ascopes, bool unexpected)
         : ascopes_(ascopes), unexpected_(unexpected) {
-        int fd = open("o.qemu/kernel.elf", O_RDONLY);
+        int fd = open("mscan.kern", O_RDONLY);
         if (fd < 0)
             die("failed to open o.qemu/kernel.elf");
         elf_ = elf::elf(elf::create_mmap_loader(fd));
