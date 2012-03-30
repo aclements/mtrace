@@ -21,21 +21,6 @@ CPPFLAGS := -I$(QEMUDIR) -Ilibelfin/elf -Ilibelfin/dwarf
 LDLIBS   := -lz
 
 MSCAN_SRCS = mscan.cc addr2line.cc hash.c bininfo.cc
-HDRS	= $(QEMUDIR)/mtrace-magic.h util.h
-MSCAN_HDRS = addr2line.hh \
-	     bininfo.hh \
-	     argparse.hh \
-	     calltrace.hh \
-	     dissys.hh \
-	     eyerman.hh \
-	     false.hh \
-	     hash.h \
-	     json.hh \
-	     mscan.hh \
-	     sersec.hh \
-	     sysaccess.hh \
-	     percallstack.hh \
-	     asharing.hh
 
 CLEAN =
 
@@ -57,13 +42,15 @@ mtrace-magic: mtrace-magic.o
 	$(Q)$(CC) $(LDFLAGS) -o $@ $^ $(LOADLIBES) $(LDLIBS)
 CLEAN += mtrace-magic mtrace-magic.o
 
-%.o: %.c $(HDRS) $(MSCAN_HDRS)
+%.o: %.c
 	@echo "  CC       $@"
-	$(Q)$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
+	$(Q)$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $< -MD -MP -MF .$*.d
 
-%.o: %.cc $(HDRS) $(MSCAN_HDRS)
+%.o: %.cc
 	@echo "  CXX      $@"
-	$(Q)$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $<
+	$(Q)$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $< -MD -MP -MF .$*.d
+
+-include .*.d
 
 libelfin/%: check-libelfin
 	@$(MAKE) -C $(@D) -q $(@F) || $(MAKE) -C $(@D) $(@F)
@@ -112,4 +99,4 @@ install: mscan
 
 clean:
 	@echo "  CLEAN"
-	$(Q)rm -f $(CLEAN)
+	$(Q)rm -f $(CLEAN) .*.d
