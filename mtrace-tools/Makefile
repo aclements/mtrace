@@ -16,10 +16,12 @@ CWARNS	= -Wformat=2 -Wextra -Wmissing-noreturn -Wwrite-strings -Wshadow \
 	   -Wno-deprecated -Wno-format-security
 
 CFLAGS  = -Wall -Werror $(CWARNS) -I$(QEMUDIR) -g -O3
+CFLAGS += -Ilibelfin/elf -Ilibelfin/dwarf
 LDFLAGS = -lz
 
 HDRS	= $(QEMUDIR)/mtrace-magic.h util.h
 MSCAN_HDRS = addr2line.hh \
+	     bininfo.hh \
 	     argparse.hh \
 	     calltrace.hh \
 	     dissys.hh \
@@ -35,7 +37,7 @@ MSCAN_HDRS = addr2line.hh \
 
 all: mscan m2text mtrace-magic check-py
 
-mscan: mscan.cc addr2line.cc hash.c \
+mscan: mscan.cc addr2line.cc hash.c bininfo.o \
 		libelfin/dwarf/libdwarf++.a libelfin/elf/libelf++.a \
 		$(HDRS) $(MSCAN_HDRS)
 	@echo "  CXX      $@"
@@ -48,6 +50,10 @@ m2text: m2text.c $(HDRS)
 mtrace-magic: mtrace-magic.c $(HDRS)
 	@echo "  CC       $@"
 	$(Q)$(CC) -o $@ $< $(CFLAGS) $(LDFLAGS)
+
+bininfo.o: bininfo.cc $(HDRS)
+	@echo "  CXX      $@"
+	$(Q)$(CXX) -c -o $@ $< $(CFLAGS) -std=c++0x
 
 libelfin/%: check-libelfin
 	@$(MAKE) -C $(@D) -q $(@F) || $(MAKE) -C $(@D) $(@F)
@@ -96,4 +102,4 @@ install: mscan
 
 clean:
 	@echo "  CLEAN"
-	$(Q)rm -f mscan m2text mtrace-magic
+	$(Q)rm -f mscan m2text mtrace-magic bininfo.o
