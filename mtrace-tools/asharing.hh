@@ -56,17 +56,11 @@ public:
                 JsonList *rw;
                 rw = JsonList::create();
                 for (auto &it : ascope.read_)
-                    if (it.second.size())
-                        rw->append(it.second);
-                    else
-                        rw->append(it.first);
+                    rw->append(it.second.to_json());
                 od->put("read", rw);
                 rw = JsonList::create();
                 for (auto &it : ascope.write_)
-                    if (it.second.size())
-                        rw->append(it.second);
-                    else
-                        rw->append(it.first);
+                    rw->append(it.second.to_json());
                 od->put("write", rw);
 
                 lst->append(od);
@@ -129,6 +123,27 @@ public:
         }
     }
 
+    struct PhysicalAccess {
+        string type;
+        uint64_t base;
+        uint64_t access;
+
+        JsonDict *to_json()
+        {
+            JsonDict *jd = JsonDict::create();
+            char buf[64];
+            sprintf(buf, "%"PRIx64"", (access - base));
+            jd->put("addr", buf);
+            jd->put("name", type);
+            return jd;
+        }
+
+        bool operator<(const PhysicalAccess &o) const
+        {
+            return access < o.access;
+        }
+    };
+
     class Ascope {
     public:
         Ascope(string name, int cpu)
@@ -138,8 +153,8 @@ public:
         int cpu_;
         set<string> aread_;
         set<string> awrite_;
-        map<uint64_t, string> read_;
-        map<uint64_t, string> write_;
+        map<uint64_t, PhysicalAccess> read_;
+        map<uint64_t, PhysicalAccess> write_;
     };
 
 private:
@@ -205,22 +220,25 @@ private:
             auto addr = access->guest_addr & ~3;
             // XXX Memory accesses apply to all abstract scopes on the stack
             MtraceObject obj;
-            string name;
+            PhysicalAccess pa;
             if (mtrace_label_map.object(addr, obj)) {
-                ostringstream ss;
-                // XXX Use the *real* address for object naming
-                ss << obj.name_ << "+0x" << hex << (addr - obj.guest_addr_);
-                name = ss.str();
+                pa.type = obj.name_;
+                pa.base = obj.guest_addr_;
+            } else {
+                pa.base = 0;
             }
+            pa.access = access->guest_addr;
+
             switch (access->access_type) {
             case mtrace_access_st:
             case mtrace_access_iw:
-                cur->write_[addr] = name;
+                if (!cur->write_.count(addr))
+                    cur->write_[addr] = pa;
                 cur->read_.erase(addr);
                 break;
             case mtrace_access_ld:
                 if (!cur->write_.count(addr))
-                    cur->read_[addr] = name;
+                    cur->read_[addr] = pa;
                 break;
             default:
                 die("AbstractSharing::CallStack::handle: unknown access type");
@@ -272,12 +290,7 @@ private:
             else if (*first2 < *first1)
                 ++first2;
             else {
-                JsonDict *jd = JsonDict::create();
-                char buf[64];
-                sprintf(buf, "%"PRIx64"", first1->first);
-                jd->put("addr", buf);
-                jd->put("name", first1->second);
-                shared->append(jd);
+                shared->append(first1->second.to_json());
                 first1++;
                 first2++;
             }
