@@ -1,6 +1,8 @@
 #ifndef _PERCALLSTACK_HH_
 #define _PERCALLSTACK_HH_
 
+bool pcs_warning_pause, pcs_warning_resume;
+
 /**
  * A utility class to track information per call stack.  An instance
  * of T will be created for each new call stack and deleted when its
@@ -31,15 +33,24 @@ public:
             call_stacks_[fcall->tag] = current_[cpu];
             break;
         case mtrace_pause:
-            if (!current_[cpu])
-                die("PerCallStack::handle: cannot pause call stack %#"PRIx64"; cpu %d has no call stack", fcall->tag, cpu);
+            if (!current_[cpu] && !pcs_warning_pause) {
+                fprintf(stderr, "PerCallStack::handle: cannot pause call stack %#"PRIx64"; cpu %d has no call stack\n", fcall->tag, cpu);
+                pcs_warning_pause = true;
+            }
             current_[cpu] = NULL;
             break;
         case mtrace_resume:
             if (!call_stacks_.count(fcall->tag))
                 die("PerCallStack::handle: cannot resume call stack %#"PRIx64"; unknown tag", fcall->tag);
-            if (current_[cpu])
-                die("PerCallStack::handle: cannot resume call stack %#"PRIx64"; cpu %d already has a call stack", fcall->tag, cpu);
+            if (current_[cpu]) {
+                T* target = call_stacks_.find(fcall->tag)->second;
+                if (target != current_[cpu]) {
+                    die("PerCallStack::handle: cannot resume call stack %#"PRIx64"; cpu %d already has a call stack", fcall->tag, cpu);
+                } else if (!pcs_warning_resume) {
+                    fprintf(stderr, "PerCallStack::handle: double resume of call stack %#"PRIx64"\n", fcall->tag);
+                    pcs_warning_resume = true;
+                }
+            }
             current_[cpu] = call_stacks_.find(fcall->tag)->second;
             break;
         case mtrace_done:
