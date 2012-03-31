@@ -173,15 +173,15 @@ private:
     class CallStack
     {
         AbstractSharing *a_;
-        stack<Ascope> stack_;
+        vector<Ascope> stack_;
 
         void pop()
         {
                 // XXX Lots of copying
-                Ascope *cur = &stack_.top();
+                Ascope *cur = &stack_.back();
                 if (!cur->aread_.empty() || !cur->awrite_.empty())
                     a_->scopes_.push_back(*cur);
-                stack_.pop();
+                stack_.pop_back();
         }
 
     public:
@@ -198,7 +198,7 @@ private:
             if (ascope->exit)
                 pop();
             else
-                stack_.push(Ascope(ascope->name, ascope->h.cpu));
+                stack_.push_back(Ascope(ascope->name, ascope->h.cpu));
         }
 
         void handle(const mtrace_avar_entry *avar)
@@ -208,7 +208,7 @@ private:
 		return;
 	    }
 
-            Ascope *cur = &stack_.top();
+            Ascope *cur = &stack_.back();
             string var = avar->name;
             if (avar->write) {
                 cur->awrite_.insert(var);
@@ -224,11 +224,9 @@ private:
             if (stack_.empty())
                 return;
 
-            Ascope *cur = &stack_.top();
             // Since QEMU limits the granularity of tracking to 4
             // bytes in ascope mode, we need to do that, too.
             auto addr = access->guest_addr & ~3;
-            // XXX Memory accesses apply to all abstract scopes on the stack
             MtraceObject obj;
             PhysicalAccess pa;
             if (mtrace_label_map.object(addr, obj)) {
@@ -240,19 +238,27 @@ private:
             pa.access = access->guest_addr;
             pa.pc = access->pc;
 
-            switch (access->access_type) {
-            case mtrace_access_st:
-            case mtrace_access_iw:
-                if (!cur->write_.count(addr))
-                    cur->write_[addr] = pa;
-                cur->read_.erase(addr);
-                break;
-            case mtrace_access_ld:
-                if (!cur->write_.count(addr))
-                    cur->read_[addr] = pa;
-                break;
-            default:
-                die("AbstractSharing::CallStack::handle: unknown access type");
+            // Physical accesses apply to all scopes on the stack.
+            // This is necessary to make sure that each logical scope
+            // completely captures the physical accesses done by it
+            // and on its behalf.  (Note that interrupts get
+            // completely separate callstacks, so this does *not*
+            // bleed across asynchronous event boundaries.)
+            for (auto &scope : stack_) {
+                switch (access->access_type) {
+                case mtrace_access_st:
+                case mtrace_access_iw:
+                    if (!scope.write_.count(addr))
+                        scope.write_[addr] = pa;
+                    scope.read_.erase(addr);
+                    break;
+                case mtrace_access_ld:
+                    if (!scope.write_.count(addr))
+                        scope.read_[addr] = pa;
+                    break;
+                default:
+                    die("AbstractSharing::CallStack::handle: unknown access type");
+                }
             }
         }
     };
