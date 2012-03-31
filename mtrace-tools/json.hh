@@ -102,12 +102,8 @@ JsonObject *jsonify(float value) {
 class JsonDict : public JsonObject {
 public:
     ~JsonDict(void) {
-        while (table_.size()) {
-            auto it = table_.begin();
-            JsonObject* o = it->second;
-            table_.erase(it);
-            delete o;
-        }
+        for (auto it : table_)
+            delete it.second;
     }
 
     static JsonDict* create() {
@@ -116,7 +112,15 @@ public:
 
     template<typename T>
     void put(string key, T value) {
-        table_[key] = jsonify(value);
+        auto keyit = keys_.find(key);
+        if (keyit != keys_.end()) {
+            table_.erase(keyit->second);
+            keys_.erase(keyit);
+        }
+
+        JsonObject *o = jsonify(value);
+        auto it = table_.insert(table_.end(), make_pair(key, o));
+        keys_[key] = it;
     }
 
     virtual string str(int level) const {
@@ -124,20 +128,23 @@ public:
             return "{ }";
 
         string ret = "{";
-        auto it = table_.begin();
+        bool first = true;
 
-        ret += "\n" + tab(level+1) + string("\"") + it->first + string("\"") +
-               string(": ") + it->second->str(level+1);
-        ++it;
-        for (; it != table_.end(); ++it)
-            ret += ",\n" + tab(level+1) + string("\"") + it->first + string("\"") +
-                   string(": ") + it->second->str(level+1);
+        for (auto it : table_) {
+            if (!first)
+                ret += ',';
+            first = false;
+            ret += "\n" + tab(level+1) + string("\"") + it.first + string("\"") +
+                string(": ") + it.second->str(level+1);
+        }
 
         return ret + "\n" + tab(level) + "}";
     }
 
 private:
-    unordered_map<string, JsonObject*> table_;
+    typedef list<pair<string, JsonObject*> > table_type;
+    table_type table_;
+    unordered_map<string, table_type::iterator> keys_;
 
     JsonDict() {}
     JsonDict(const JsonDict&);
