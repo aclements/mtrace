@@ -165,13 +165,18 @@ public:
         uint64_t access;
         uint64_t pc;
 
-        string to_json(const dwarf::dwarf &dw) const
+        JsonDict *to_json(const dwarf::dwarf &dw) const
         {
-            if (type.size())
-                return resolve_type_offset(dw, type, base, access - base, pc);
-            char buf[64];
-            sprintf(buf, "0x%"PRIx64, access);
-            return string(buf);
+            JsonDict *out = JsonDict::create();
+            if (type.size()) {
+                out->put("addr", resolve_type_offset(dw, type, base, access - base, pc));
+            } else {
+                char buf[64];
+                sprintf(buf, "0x%"PRIx64, access);
+                out->put("addr", buf);
+            }
+            out->put("pc", addr2line->function_description(pc));
+            return out;
         }
 
         bool operator<(const PhysicalAccess &o) const
