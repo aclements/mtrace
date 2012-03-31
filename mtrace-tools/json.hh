@@ -4,11 +4,10 @@
 // JSON spec: http://www.json.org/
 
 #include <string>
-#include <ext/hash_map>
+#include <unordered_map>
 #include <list>
 
 using namespace::std;
-using namespace::__gnu_cxx;
 
 typedef enum { json_string, json_u64, json_list } value_type_t;
 
@@ -105,10 +104,8 @@ public:
     ~JsonDict(void) {
         while (table_.size()) {
             auto it = table_.begin();
-            char* s = it->first;
             JsonObject* o = it->second;
             table_.erase(it);
-            free(s);
             delete o;
         }
     }
@@ -119,7 +116,7 @@ public:
 
     template<typename T>
     void put(string key, T value) {
-        table_[strdup(key.c_str())] = jsonify(value);
+        table_[key] = jsonify(value);
     }
 
     virtual string str(int level) const {
@@ -129,18 +126,18 @@ public:
         string ret = "{";
         auto it = table_.begin();
 
-        ret += "\n" + tab(level+1) + string("\"") + string(it->first) + string("\"") +
+        ret += "\n" + tab(level+1) + string("\"") + it->first + string("\"") +
                string(": ") + it->second->str(level+1);
         ++it;
         for (; it != table_.end(); ++it)
-            ret += ",\n" + tab(level+1) + string("\"") + string(it->first) + string("\"") +
+            ret += ",\n" + tab(level+1) + string("\"") + it->first + string("\"") +
                    string(": ") + it->second->str(level+1);
 
         return ret + "\n" + tab(level) + "}";
     }
 
 private:
-    hash_map<char*, JsonObject*> table_;
+    unordered_map<string, JsonObject*> table_;
 
     JsonDict() {}
     JsonDict(const JsonDict&);
