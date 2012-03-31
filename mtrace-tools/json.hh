@@ -65,6 +65,24 @@ static JsonObject *jsonify(uint8_t value) {
     return jsonify((uint64_t)value);
 }
 
+class JsonInt : public JsonObject {
+public:
+    virtual string str(int level) const {
+        char buf[64];
+        snprintf(buf, sizeof(buf), "%ld", value_);
+        return string(buf);
+    }
+private:
+    JsonInt(int64_t value) : value_(value) {}
+    int64_t value_;
+
+    friend JsonObject *jsonify(int value);
+};
+
+JsonObject *jsonify(int value) {
+    return new JsonInt(value);
+}
+
 class JsonHex : public JsonObject {
 public:
     JsonHex(uint64_t value) : value_(value) {}
