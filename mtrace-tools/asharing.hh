@@ -81,10 +81,10 @@ public:
             // XXX Produce a summary of sharing so its more obvious
             // when you screw up
             JsonList *lst = JsonList::create();
-            for (auto &s1 : scopes_) {
-                for (auto &s2 : scopes_) {
-                    if (&s1 == &s2)
-                        continue;
+            for (auto it1 = scopes_.begin(); it1 != scopes_.end(); ++it1) {
+                const Ascope &s1 = *it1;
+                for (auto it2 = it1+1; it2 != scopes_.end(); ++it2) {
+                    const Ascope &s2 = *it2;
                     // If the two scopes ran on the same CPU, we'll
                     // get lots of "sharing" on per-CPU data, so don't
                     // compare scopes from the same CPU
@@ -136,7 +136,7 @@ public:
         uint64_t access;
         uint64_t pc;
 
-        string to_json(const dwarf::dwarf &dw)
+        string to_json(const dwarf::dwarf &dw) const
         {
             if (type.size())
                 return resolve_type_offset(dw, type, base, access - base, pc);
