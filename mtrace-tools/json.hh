@@ -9,8 +9,6 @@
 
 using namespace::std;
 
-typedef enum { json_string, json_u64, json_list } value_type_t;
-
 static string
 tab(int level)
 {
