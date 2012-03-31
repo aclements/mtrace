@@ -140,7 +140,7 @@ public:
 
         // Summary
         JsonDict *summary = JsonDict::create();
-        summary->put("total scopes", scopes_.size());
+        summary->put("total scopes", (uint64_t) scopes_.size());
         if (unexpected_) {
             summary->put("compared scopes", compared_scopes);
             // In order of badness
