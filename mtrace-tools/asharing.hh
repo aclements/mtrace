@@ -51,9 +51,15 @@ public:
     virtual void exit(JsonDict *json_file) {
         callstacks_.flush();
 
+        JsonList *ascopes = nullptr;
+        JsonList *unexpected = nullptr;
+
+        int compared_scopes = 0, shared_scopes[2][2] = {};
+
         if (ascopes_) {
             // Raw abstract and concrete sets
-            JsonList *lst = JsonList::create();
+            ascopes = JsonList::create();
+            JsonList *lst = ascopes;
             for (auto &ascope : scopes_) {
                 JsonDict *od = JsonDict::create();
                 od->put("name", ascope.name_);
@@ -72,7 +78,6 @@ public:
 
                 lst->append(od);
             }
-            json_file->put("abstract-scopes", lst);
         }
 
         if (unexpected_) {
@@ -80,7 +85,8 @@ public:
             // XXX Would be nice to order these by the amount of sharing
             // XXX Produce a summary of sharing so its more obvious
             // when you screw up
-            JsonList *lst = JsonList::create();
+            unexpected = JsonList::create();
+            JsonList *lst = unexpected;
             for (auto it1 = scopes_.begin(); it1 != scopes_.end(); ++it1) {
                 const Ascope &s1 = *it1;
                 for (auto it2 = it1+1; it2 != scopes_.end(); ++it2) {
@@ -90,6 +96,8 @@ public:
                     // compare scopes from the same CPU
                     if (s1.cpu_ == s2.cpu_)
                         continue;
+
+                    compared_scopes++;
 
                     auto abstract_sharing =
                         shares(s1.aread_.begin(),  s1.aread_.end(),
@@ -103,6 +111,8 @@ public:
 
                                s2.read_.begin(),  s2.read_.end(),
                                s2.write_.begin(), s2.write_.end());
+
+                    shared_scopes[!!abstract_sharing][!!concrete_sharing]++;
 
                     if (concrete_sharing && !abstract_sharing) {
                         JsonDict *od = JsonDict::create();
@@ -126,8 +136,27 @@ public:
                     }
                 }
             }
-            json_file->put("unexpected-sharing", lst);
         }
+
+        // Summary
+        JsonDict *summary = JsonDict::create();
+        summary->put("total scopes", scopes_.size());
+        if (unexpected_) {
+            summary->put("compared scopes", compared_scopes);
+            // In order of badness
+            summary->put("logically unshared/physically unshared", shared_scopes[0][0]);
+            summary->put("logically shared  /physically shared",   shared_scopes[1][1]);
+            summary->put("logically unshared/physically shared",   shared_scopes[0][1]);
+            if (shared_scopes[1][0])
+                summary->put("logically shared  /physically unshared (imprecise spec)",
+                             shared_scopes[1][0]);
+        }
+
+        json_file->put("scope-summary", summary);
+        if (ascopes)
+            json_file->put("abstract-scopes", ascopes);
+        if (unexpected)
+            json_file->put("unexpected-sharing", unexpected);
     }
 
     struct PhysicalAccess {
