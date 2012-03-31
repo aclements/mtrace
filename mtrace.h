@@ -1,12 +1,12 @@
 #ifndef _MTRACE_H_
 #define _MTRACE_H_
 
-typedef struct RAMBlock RAMBlock;
+struct RAMBlock;
 
 /* mtrace.c */
 void mtrace_init(void);
 
-void mtrace_cline_track_free(RAMBlock *block);
+void mtrace_cline_track_free(struct RAMBlock *block);
 
 void mtrace_log_file_set(const char *path);
 void mtrace_system_enable_set(int b);
