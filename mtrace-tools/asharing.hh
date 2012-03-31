@@ -69,11 +69,11 @@ public:
                 JsonList *rw;
                 rw = JsonList::create();
                 for (auto &it : ascope.read_)
-                    rw->append(it.second.to_json(dwarf_));
+                    rw->append(it.second.to_json(dwarf_, 0));
                 od->put("read", rw);
                 rw = JsonList::create();
                 for (auto &it : ascope.write_)
-                    rw->append(it.second.to_json(dwarf_));
+                    rw->append(it.second.to_json(dwarf_, 0));
                 od->put("write", rw);
 
                 lst->append(od);
@@ -165,7 +165,7 @@ public:
         uint64_t access;
         uint64_t pc;
 
-        JsonDict *to_json(const dwarf::dwarf &dw) const
+        JsonDict *to_json(const dwarf::dwarf &dw, uint64_t otherpc) const
         {
             JsonDict *out = JsonDict::create();
             if (type.size()) {
@@ -176,6 +176,8 @@ public:
                 out->put("addr", buf);
             }
             out->put("pc", addr2line->function_description(pc));
+            if (otherpc)
+                out->put("pc2", addr2line->function_description(otherpc));
             return out;
         }
 
@@ -341,7 +343,7 @@ private:
             else if (*first2 < *first1)
                 ++first2;
             else {
-                shared->append(first1->second.to_json(dwarf_));
+                shared->append(first1->second.to_json(dwarf_, first2->second.pc));
                 first1++;
                 first2++;
             }
