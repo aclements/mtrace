@@ -613,7 +613,7 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
 	 */
 	r = mtrace_host_addr(entry.label.guest_addr, &entry.label.host_addr);
 	if (r) {
-	    fprintf(stderr, "mtrace_entry_register: mtrace_host_addr failed (%lx)\n", 
+	    fprintf(stderr, "mtrace_entry_register: mtrace_host_addr failed (%"PRIx64")\n", 
 		    entry.label.guest_addr);
 	    return;
 	}
@@ -690,7 +690,7 @@ void mtrace_inst_exec(target_ulong a0, target_ulong a1,
     if (a0 >= sizeof(mtrace_call) / sizeof(mtrace_call[0]) ||
 	mtrace_call[a0] == NULL) 
     {
-	fprintf(stderr, "mtrace_inst_exec: bad call %lu\n", a0);
+	fprintf(stderr, "mtrace_inst_exec: bad call %"PRIu64"\n", a0);
 	abort();
     }
     
