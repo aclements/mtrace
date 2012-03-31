@@ -60,6 +60,8 @@ static pid_t child_pid;
 static uint64_t mtrace_inst_count[255];
 static int mtrace_count_disable[255];
 
+static int mtrace_ascope_depth;
+
 void mtrace_inst_inc(void)
 {
     if (mtrace_count_disable[cpu_single_env->cpu_index])
@@ -356,13 +358,22 @@ static int mtrace_cline_update_st(uint8_t *host_addr, unsigned int cpu)
     }
 }
 
+static inline int mtrace_access_enabled(void)
+{
+    if (!mtrace_system_enable || !mtrace_mode)
+	return 0;
+    if (mtrace_mode == mtrace_record_ascope && mtrace_ascope_depth == 0)
+	return 0;
+    return 1;
+}
+
 void mtrace_st(target_ulong host_addr, target_ulong guest_addr, void *retaddr)
 {
     uint64_t a;
     int lock;
     int r;
 
-    if (!mtrace_system_enable || !mtrace_mode)
+    if (!mtrace_access_enabled())
 	return;
 
     a = mtrace_access_count++;
@@ -386,7 +397,7 @@ void mtrace_ld(target_ulong host_addr, target_ulong guest_addr, void *retaddr)
     int lock;
     int r;
 
-    if (!mtrace_system_enable || !mtrace_mode)
+    if (!mtrace_access_enabled())
 	return;
 
     a = mtrace_access_count++;
@@ -407,7 +418,7 @@ void mtrace_tcg_ld(target_ulong host_addr, target_ulong guest_addr)
 void mtrace_io_write(void *cb, target_phys_addr_t ram_addr, 
 		     target_ulong guest_addr, void *retaddr)
 {
-    if (!mtrace_system_enable || !mtrace_mode)
+    if (!mtrace_access_enabled())
 	return;
 
     /*
@@ -644,12 +655,20 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
     } 
 
     /* Special handling */
-    if (type == mtrace_entry_ascope &&
-	mtrace_mode == mtrace_record_ascope &&
-	!entry.ascope.exit) {
-	/* Clear the cache line state so we can track all accesses in
-	 * this scope */
-	mtrace_reset_cline_track(mtrace_mode);
+    if (type == mtrace_entry_ascope) {
+	/* We track the global ascope depth instead of per-cpu because
+	 * ascopes may migrate between CPUs */
+	if (entry.ascope.exit)
+	    mtrace_ascope_depth--;
+	else
+	    mtrace_ascope_depth++;
+
+	if (mtrace_mode == mtrace_record_ascope &&
+	    !entry.ascope.exit) {
+	    /* Clear the cache line state so we can track all accesses in
+	     * this scope */
+	    mtrace_reset_cline_track(mtrace_mode);
+	}
     }
 
     mtrace_log_entry(&entry);
