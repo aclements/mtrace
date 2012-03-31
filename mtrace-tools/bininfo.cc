@@ -197,5 +197,5 @@ resolve_type_offset(const dwarf::dwarf &dw, const string &type,
         return resolve_type_offset(dw, type, base, offset, 0);
 
     sprintf(buf, "%"PRIx64, offset);
-    return type + "+0x" + buf + "@" + to_string(pc);
+    return type + "+0x" + buf;
 }
