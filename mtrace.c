@@ -656,7 +656,7 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
 	}
     } 
 
-    /* Special handling */
+    /* Special handling for abstract scopes */
     if (type == mtrace_entry_ascope) {
 	/* We track the global ascope depth instead of per-cpu because
 	 * ascopes may migrate between CPUs */
@@ -671,6 +671,13 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
 	     * this scope */
 	    mtrace_reset_cline_track(mtrace_mode);
 	}
+    }
+
+    /* Special handling for locks */
+    if (type == mtrace_entry_lock) {
+	/* Only record lock operations in movement mode */
+	if (mtrace_mode != mtrace_record_movement)
+	    return;
     }
 
     mtrace_log_entry(&entry);
