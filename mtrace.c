@@ -643,10 +643,12 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
 	    break;
         case mtrace_disable_count_cpu:
             mtrace_count_disable[cpu_single_env->cpu_index] = 1;
-            break;
+            /* No point in logging this */
+            return;
         case mtrace_enable_count_cpu:
             mtrace_count_disable[cpu_single_env->cpu_index] = 0;
-            break;
+            /* No point in logging this */
+            return;
 	default:
 	    fprintf(stderr, "bad mtrace_entry_host type %u\n", 
 		    entry.host.host_type);
