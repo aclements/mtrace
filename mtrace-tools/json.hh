@@ -6,6 +6,7 @@
 #include <string>
 #include <unordered_map>
 #include <list>
+#include <stdexcept>
 
 using namespace::std;
 
@@ -126,35 +127,77 @@ public:
         return new JsonDict();
     }
 
+    static JsonDict* create(ostream *out, int level = 0) {
+        return new JsonDict(out, level);
+    }
+
+    void end() {
+        if (out_) {
+            if (first_)
+                (*out_) << "{ }";
+            else
+                (*out_) << '\n' << tab(level_) << '}';
+            out_->flush();
+            delete this;
+        }
+    }
+
     template<typename T>
     void put(string key, T value) {
+        JsonObject *o = jsonify(value);
+
+        if (out_) {
+            key_out(key);
+            val_out(o);
+            out_->flush();
+            delete o;
+            return;
+        }
+
         auto keyit = keys_.find(key);
         if (keyit != keys_.end()) {
+            if (out_)
+                throw std::runtime_error("JsonDict already contains key " + key);
             table_.erase(keyit->second);
             keys_.erase(keyit);
         }
 
-        JsonObject *o = jsonify(value);
         auto it = table_.insert(table_.end(), make_pair(key, o));
         keys_[key] = it;
     }
 
+    template<typename T>
+    T *start(string key) {
+        if (out_) {
+            key_out(key);
+            return T::create(out_, level_ + 1);
+        } else {
+            T* obj = T::create();
+            put(key, obj);
+            return obj;
+        }
+    }
+
     virtual string str(int level) const {
+        if (out_)
+            throw std::runtime_error("Cannot str a streaming JsonDict");
+
         if (!table_.size())
             return "{ }";
 
-        string ret = "{";
-        bool first = true;
+        ostringstream stream;
+        out_ = &stream;
+        first_ = true;
+        level_ = level;
 
-        for (auto it : table_) {
-            if (!first)
-                ret += ',';
-            first = false;
-            ret += "\n" + tab(level+1) + string("\"") + it.first + string("\"") +
-                string(": ") + it.second->str(level+1);
+        for (auto &it : table_) {
+            key_out(it.first);
+            val_out(it.second);
         }
+        (*out_) << '\n' << tab(level) << '}';
+        out_ = nullptr;
 
-        return ret + "\n" + tab(level) + "}";
+        return stream.str();
     }
 
 private:
@@ -162,9 +205,28 @@ private:
     table_type table_;
     unordered_map<string, table_type::iterator> keys_;
 
-    JsonDict() {}
+    // Streaming dictionaries
+    mutable ostream *out_;
+    mutable bool first_;
+    mutable int level_;
+
+    JsonDict(ostream *out = nullptr, int level = 0)
+        : out_(out), first_(true), level_(level) { }
     JsonDict(const JsonDict&);
     JsonDict& operator=(const JsonDict&);
+
+    void key_out(const string &key) const {
+        if (first_)
+            (*out_) << '{';
+        else
+            (*out_) << ',';
+        (*out_) << '\n' << tab(level_+1) << '\"' << key << "\": ";
+        first_ = false;
+    }
+
+    void val_out(JsonObject *o) const {
+        (*out_) << o->str(level_+1);
+    }
 };
 
 class JsonList : public JsonObject {
@@ -182,6 +244,10 @@ public:
         return new JsonList();
     }
 
+    static JsonList* create(ostream *out, int level = 0) {
+        return new JsonList(out, level);
+    }
+
     template<typename InputIterator>
     static JsonList* create(InputIterator first, InputIterator last) {
         JsonList *lst = create();
@@ -190,12 +256,38 @@ public:
         return lst;
     }
 
+    void end() {
+        if (out_) {
+            if (first_)
+                (*out_) << "[ ]";
+            else
+                (*out_) << " ]";
+            out_->flush();
+            delete this;
+        }
+    }
+
     template<typename T>
     void append(T value) {
-        list_.push_back(jsonify(value));
+        JsonObject *o = jsonify(value);
+
+        if (out_) {
+            val_out(o);
+            out_->flush();
+            delete o;
+        } else {
+            list_.push_back(o);
+        }
+    }
+
+    size_t size() {
+        return list_.size();
     }
 
     virtual string str(int level) const {
+        if (out_)
+            throw std::runtime_error("Cannot str a streaming JsonList");
+
         if (!list_.size())
             return "[ ]";
 
@@ -212,9 +304,24 @@ public:
 private:
     list<JsonObject*> list_;
 
-    JsonList() {}
+    // Streaming lists
+    mutable ostream *out_;
+    mutable bool first_;
+    mutable int level_;
+
+    JsonList(ostream *out = nullptr, int level = 0)
+        : out_(out), first_(true), level_(level) { }
     JsonList(const JsonList&);
     JsonList& operator=(const JsonList&);
+
+    void val_out(JsonObject *o) const {
+        if (first_)
+            (*out_) << '[';
+        else
+            (*out_) << ',';
+        (*out_) << '\n' << tab(level_+1) << o->str(level_+1);
+        first_ = false;
+    }
 };
 
 #endif
