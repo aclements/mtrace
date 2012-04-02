@@ -60,7 +60,14 @@ static pid_t child_pid;
 static uint64_t mtrace_inst_count[255];
 static int mtrace_count_disable[255];
 
-static int mtrace_ascope_depth;
+/* Call stack tag by CPU */
+static uint64_t mtrace_call_stack[255];
+
+struct mtrace_call_stack_info
+{
+    uint64_t tag;
+    int ascope_depth;
+} mtrace_per_call_stack[0x8000];
 
 void mtrace_inst_inc(void)
 {
@@ -210,6 +217,49 @@ static void mtrace_log_entry(union mtrace_entry *entry)
 	memcpy(&flush_buffer[n], entry, entry->h.size);
 	n += entry->h.size;
     }
+}
+
+static struct mtrace_call_stack_info *mtrace_get_per_call_stack(uint64_t tag)
+{
+    const int buckets = sizeof(mtrace_per_call_stack) / sizeof(mtrace_per_call_stack[0]);
+    int i;
+    for (i = 0; i < buckets; i++) {
+	unsigned bucket = (tag + i) % buckets;
+	struct mtrace_call_stack_info *cs = &mtrace_per_call_stack[bucket];
+	if (cs->tag == tag) {
+	    return cs;
+	} else if (cs->tag == 0) {
+	    *cs = (struct mtrace_call_stack_info){.tag = tag};
+	    return cs;
+	}
+    }
+    fprintf(stderr, "mtrace_per_call_stack hash table full\n");
+    abort();
+}
+
+static void mtrace_del_per_call_stack(uint64_t tag)
+{
+    const int buckets = sizeof(mtrace_per_call_stack) / sizeof(mtrace_per_call_stack[0]);
+    struct mtrace_call_stack_info *found = NULL, *last = NULL;
+    int i;
+    for (i = 0; i < buckets; i++) {
+	unsigned bucket = (tag + i) % buckets;
+	last = &mtrace_per_call_stack[bucket];
+	if (last->tag == tag) {
+	    found = last;
+	} else if (last->tag == 0) {
+	    break;
+	}
+    }
+    if (found == last || found == NULL)
+	return;
+    *found = *last;
+    last->tag = 0;
+}
+
+static struct mtrace_call_stack_info *mtrace_my_call_stack(int cpu)
+{
+    return mtrace_get_per_call_stack(mtrace_call_stack[cpu]);
 }
 
 #if 0
@@ -362,7 +412,8 @@ static inline int mtrace_access_enabled(void)
 {
     if (!mtrace_system_enable || !mtrace_mode)
 	return 0;
-    if (mtrace_mode == mtrace_record_ascope && mtrace_ascope_depth == 0)
+    if (mtrace_mode == mtrace_record_ascope &&
+	mtrace_my_call_stack(cpu_single_env->cpu_index)->ascope_depth == 0)
 	return 0;
     return 1;
 }
@@ -656,14 +707,29 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
 	}
     } 
 
+    /* Track call stacks for filtering purposes */
+    if (type == mtrace_entry_fcall) {
+	int cpu = entry.h.cpu;
+	uint64_t tag = entry.fcall.tag;
+	switch (entry.fcall.state) {
+	case mtrace_start:
+	case mtrace_resume:
+	    mtrace_call_stack[cpu] = tag;
+	    break;
+	case mtrace_done:
+	    mtrace_del_per_call_stack(tag);
+	case mtrace_pause:
+	    mtrace_call_stack[cpu] = 0;
+	    break;
+	}
+    }
+
     /* Special handling for abstract scopes */
     if (type == mtrace_entry_ascope) {
-	/* We track the global ascope depth instead of per-cpu because
-	 * ascopes may migrate between CPUs */
 	if (entry.ascope.exit)
-	    mtrace_ascope_depth--;
+	    mtrace_my_call_stack(entry.h.cpu)->ascope_depth--;
 	else
-	    mtrace_ascope_depth++;
+	    mtrace_my_call_stack(entry.h.cpu)->ascope_depth++;
 
 	if (mtrace_mode == mtrace_record_ascope &&
 	    !entry.ascope.exit) {
