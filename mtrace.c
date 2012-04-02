@@ -33,7 +33,6 @@
 
 /* 64-byte cache lines */
 #define MTRACE_CLINE_SHIFT	6
-#define MTRACE_ASCOPE_SHIFT	4
 
 /* From dyngen-exec.h */
 #define MTRACE_GETPC() ((void *)((unsigned long)__builtin_return_address(0) - 1))
@@ -352,17 +351,13 @@ static int mtrace_cline_update_ld(uint8_t * host_addr, unsigned int cpu)
     offset = host_addr - block->host;
 
     if (mtrace_mode == mtrace_record_ascope) {
-	/* Abstract scope mode.  Each cline_track byte is further
-	 * subdivided by address into pairs of bits.  0b01 indicates
-	 * the address has been loaded and 0b10 indicates it has been
-	 * stored. */
-	unsigned long cline = offset >> MTRACE_ASCOPE_SHIFT;
-	int bit = ((offset >> (MTRACE_ASCOPE_SHIFT - 3)) % 8) & ~1;
-	/* If it has been loaded *or* stored, don't record it */
-	if (block->cline_track[cline] & (3 << bit))
-	    return 0;
-	/* Now it's being loaded */
-	block->cline_track[cline] |= (1 << bit);
+	/* Abstract scope mode.  Everything gets tracked.  We rely on
+	 * higher-level filtering in mtrace_access_enabled, so we only
+	 * get here if this access is performed by code running in an
+	 * ascope.  We could filter to unique accesses only (we used
+	 * to), but we'd have to track this per-ascope (or at least
+	 * per-CPU) since multiple ascopes can be running in
+	 * parallel. */
 	return 1;
     } else {
         unsigned long cline = offset >> MTRACE_CLINE_SHIFT;
@@ -388,13 +383,6 @@ static int mtrace_cline_update_st(uint8_t *host_addr, unsigned int cpu)
     offset = host_addr - block->host;
 
     if (mtrace_mode == mtrace_record_ascope) {
-	unsigned long cline = offset >> MTRACE_ASCOPE_SHIFT;
-	int bit = ((offset >> (MTRACE_ASCOPE_SHIFT - 3)) % 8) & ~1;
-	/* If it's been stored, don't record it */
-	if (block->cline_track[cline] & (2 << bit))
-	    return 0;
-	/* Now it's been stored */
-	block->cline_track[cline] |= (2 << bit);
 	return 1;
     } else {
 	unsigned long cline = offset >> MTRACE_CLINE_SHIFT;
@@ -588,7 +576,10 @@ static int mtrace_host_addr(target_ulong guest_addr, target_ulong *host_addr)
 static void mtrace_reset_cline_track(mtrace_record_mode_t mode)
 {
     RAMBlock *block;
-    int fill = (mode == mtrace_record_ascope ? 0 : 0xff);
+
+    if (mode == mtrace_record_ascope)
+	/* No tracking */
+	return;
 
     QLIST_FOREACH(block, &ram_list.blocks, next) {
         ram_addr_t size;
@@ -596,10 +587,6 @@ static void mtrace_reset_cline_track(mtrace_record_mode_t mode)
         case mtrace_record_movement:
             // One byte per cache line
             size = block->length >> MTRACE_CLINE_SHIFT;
-            break;
-        case mtrace_record_ascope:
-            // Two bits per 4 bytes (one byte per 16 bytes)
-            size = block->length >> MTRACE_ASCOPE_SHIFT;
             break;
         default:
             fprintf(stderr, "bad record mode %d\n", mode);
@@ -621,7 +608,7 @@ static void mtrace_reset_cline_track(mtrace_record_mode_t mode)
              */
             block->cline_track_size = size;
         }
-        memset(block->cline_track, fill, size);
+        memset(block->cline_track, 0xff, size);
     }
 }
 
@@ -730,13 +717,6 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
 	    mtrace_my_call_stack(entry.h.cpu)->ascope_depth--;
 	else
 	    mtrace_my_call_stack(entry.h.cpu)->ascope_depth++;
-
-	if (mtrace_mode == mtrace_record_ascope &&
-	    !entry.ascope.exit) {
-	    /* Clear the cache line state so we can track all accesses in
-	     * this scope */
-	    mtrace_reset_cline_track(mtrace_mode);
-	}
     }
 
     /* Special handling for locks */
