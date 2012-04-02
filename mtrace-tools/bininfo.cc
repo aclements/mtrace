@@ -167,7 +167,7 @@ resolve_type_offset(const dwarf::dwarf &dw, const string &type,
     char buf[64];
 
     for (auto &cu : dw.compilation_units()) {
-        die root = cu.root();
+        const die &root = cu.root();
         if (pc != 0 && !die_pc_range(root).contains(pc))
             continue;
 
