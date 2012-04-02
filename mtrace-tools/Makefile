@@ -61,7 +61,7 @@ check-libelfin:
 	 echo "$$ git clone git+ssh://am.lcs.mit.edu/home/am6/mpdev/libelfin.git"; \
 	 false; fi
 	@cd libelfin; \
-	 REV=$$(git log --format='%H %ad' --all -n 1 | awk '/$(LIBELFIN_DATE)/ {print $$1}'); \
+	 REV=$$(git log --format='%H %ad' --all | awk '/$(LIBELFIN_DATE)/ {print $$1; exit}'); \
 	 if [ "x$$REV" = x ]; then \
 	   echo "WARNING: libelfin commit from $(LIBELFIN_DATE) not found"; \
 	   if [ "x$$(git rev-list -n 1 --after=\"$$REV\" --all)" = x ]; then \
