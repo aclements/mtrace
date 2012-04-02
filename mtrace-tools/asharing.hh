@@ -171,9 +171,7 @@ public:
             if (type.size()) {
                 out->put("addr", resolve_type_offset(dw, type, base, access - base, pc));
             } else {
-                char buf[64];
-                sprintf(buf, "0x%"PRIx64, access);
-                out->put("addr", buf);
+                out->put("addr", new JsonHex(access));
             }
             if (other && pc != other->pc) {
                 out->put("pc1", addr2line->function_description(pc));
