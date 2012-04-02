@@ -51,42 +51,15 @@ public:
     virtual void exit(JsonDict *json_file) {
         callstacks_.flush();
 
-        JsonList *ascopes = nullptr;
-        JsonList *unexpected = nullptr;
+        list<pair<const Ascope*, const Ascope*> > sharing;
 
-        int compared_scopes = 0, shared_scopes[2][2] = {};
-
-        if (ascopes_) {
-            // Raw abstract and concrete sets
-            ascopes = JsonList::create();
-            JsonList *lst = ascopes;
-            for (auto &ascope : scopes_) {
-                JsonDict *od = JsonDict::create();
-                od->put("name", ascope.name_);
-                od->put("aread", JsonList::create(ascope.aread_.begin(), ascope.aread_.end()));
-                od->put("awrite", JsonList::create(ascope.awrite_.begin(), ascope.awrite_.end()));
-
-                JsonList *rw;
-                rw = JsonList::create();
-                for (auto &it : ascope.read_)
-                    rw->append(it.second.to_json(dwarf_));
-                od->put("read", rw);
-                rw = JsonList::create();
-                for (auto &it : ascope.write_)
-                    rw->append(it.second.to_json(dwarf_));
-                od->put("write", rw);
-
-                lst->append(od);
-            }
-        }
+        // Compute basic data
+        JsonDict *summary = json_file->start<JsonDict>("scope-summary");
+        summary->put("total scopes", (uint64_t) scopes_.size());
 
         if (unexpected_) {
-            // Processed sets
+            int compared_scopes = 0, shared_scopes[2][2] = {};
             // XXX Would be nice to order these by the amount of sharing
-            // XXX Produce a summary of sharing so its more obvious
-            // when you screw up
-            unexpected = JsonList::create();
-            JsonList *lst = unexpected;
             for (auto it1 = scopes_.begin(); it1 != scopes_.end(); ++it1) {
                 const Ascope &s1 = *it1;
                 for (auto it2 = it1+1; it2 != scopes_.end(); ++it2) {
@@ -115,33 +88,14 @@ public:
                     shared_scopes[!!abstract_sharing][!!concrete_sharing]++;
 
                     if (concrete_sharing && !abstract_sharing) {
-                        JsonDict *od = JsonDict::create();
-                        od->put("s1", s1.name_);
-                        od->put("s2", s2.name_);
-                        JsonList *shared = JsonList::create();
-                        shared_to_json(shared,
-                                       s1.read_.begin(),  s1.read_.end(),
-                                       s2.write_.begin(), s2.write_.end());
-                        shared_to_json(shared,
-                                       s1.write_.begin(), s1.write_.end(),
-                                       s2.read_.begin(),  s2.read_.end());
-                        shared_to_json(shared,
-                                       s1.write_.begin(), s1.write_.end(),
-                                       s2.write_.begin(), s2.write_.end());
-                        od->put("shared", shared);
-                        lst->append(od);
+                        sharing.push_back(make_pair(&s1, &s2));
                     } else if (abstract_sharing && !concrete_sharing) {
                         fprintf(stderr, "Warning: Abstract sharing without concrete sharing: %s and %s (%s)\n",
                                 s1.name_.c_str(), s2.name_.c_str(), abstract_sharing->c_str());
                     }
                 }
             }
-        }
 
-        // Summary
-        JsonDict *summary = JsonDict::create();
-        summary->put("total scopes", (uint64_t) scopes_.size());
-        if (unexpected_) {
             summary->put("compared scopes", compared_scopes);
             // In order of badness
             summary->put("logically unshared/physically unshared", shared_scopes[0][0]);
@@ -152,11 +106,59 @@ public:
                              shared_scopes[1][0]);
         }
 
-        json_file->put("scope-summary", summary);
-        if (ascopes)
-            json_file->put("abstract-scopes", ascopes);
-        if (unexpected)
-            json_file->put("unexpected-sharing", unexpected);
+        summary->end();
+
+        if (ascopes_) {
+            // Raw abstract and concrete sets
+            JsonList *lst = JsonList::create();
+            for (auto &ascope : scopes_) {
+                JsonDict *od = JsonDict::create();
+                od->put("name", ascope.name_);
+                od->put("aread", JsonList::create(ascope.aread_.begin(), ascope.aread_.end()));
+                od->put("awrite", JsonList::create(ascope.awrite_.begin(), ascope.awrite_.end()));
+
+                JsonList *rw;
+                rw = JsonList::create();
+                for (auto &it : ascope.read_)
+                    rw->append(it.second.to_json(dwarf_));
+                od->put("read", rw);
+                rw = JsonList::create();
+                for (auto &it : ascope.write_)
+                    rw->append(it.second.to_json(dwarf_));
+                od->put("write", rw);
+
+                lst->append(od);
+            }
+            json_file->put("abstract-scopes", lst);
+        }
+
+        if (unexpected_) {
+            // Processed sets
+            // XXX Would be nice to order these by the amount of sharing
+            JsonList *lst = json_file->start<JsonList>("unexpected-sharing");
+
+            for (auto it : sharing) {
+                const Ascope &s1 = *it.first;
+                const Ascope &s2 = *it.second;
+
+                JsonDict *od = JsonDict::create();
+                od->put("s1", s1.name_);
+                od->put("s2", s2.name_);
+                JsonList *shared = JsonList::create();
+                shared_to_json(shared,
+                               s1.read_.begin(),  s1.read_.end(),
+                               s2.write_.begin(), s2.write_.end());
+                shared_to_json(shared,
+                               s1.write_.begin(), s1.write_.end(),
+                               s2.read_.begin(),  s2.read_.end());
+                shared_to_json(shared,
+                               s1.write_.begin(), s1.write_.end(),
+                               s2.write_.begin(), s2.write_.end());
+                od->put("shared", shared);
+                lst->append(od);
+            }
+            lst->end();
+        }
     }
 
     struct PhysicalAccess {
