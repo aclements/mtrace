@@ -173,6 +173,7 @@ public:
             } else {
                 out->put("addr", new JsonHex(access));
             }
+            out->put("rawaddr", new JsonHex(access));
             if (other && pc != other->pc) {
                 out->put("pc1", addr2line->function_description(pc));
                 out->put("pc2", addr2line->function_description(other->pc));
