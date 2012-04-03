@@ -54,7 +54,8 @@ public:
         list<pair<const Ascope*, const Ascope*> > sharing;
 
         // Compute basic data
-        JsonDict *summary = json_file->start<JsonDict>("scope-summary");
+        JsonDict *summary = JsonDict::create();
+        json_file->put("scope-summary", summary, false);
         summary->put("total scopes", (uint64_t) scopes_.size());
 
         if (unexpected_) {
@@ -106,7 +107,7 @@ public:
                              shared_scopes[1][0]);
         }
 
-        summary->end();
+        summary->done();
 
         if (ascopes_) {
             // Raw abstract and concrete sets
@@ -135,7 +136,8 @@ public:
         if (unexpected_) {
             // Processed sets
             // XXX Would be nice to order these by the amount of sharing
-            JsonList *lst = json_file->start<JsonList>("unexpected-sharing");
+            JsonList *lst = JsonList::create();
+            json_file->put("unexpected-sharing", lst, false);
 
             for (auto it : sharing) {
                 const Ascope &s1 = *it.first;
@@ -145,19 +147,20 @@ public:
                 od->put("s1", s1.name_);
                 od->put("s2", s2.name_);
                 JsonList *shared = JsonList::create();
-                shared_to_json(shared,
+                int count = 0;
+                shared_to_json(shared, &count,
                                s1.read_.begin(),  s1.read_.end(),
                                s2.write_.begin(), s2.write_.end());
-                shared_to_json(shared,
+                shared_to_json(shared, &count,
                                s1.write_.begin(), s1.write_.end(),
                                s2.read_.begin(),  s2.read_.end());
-                shared_to_json(shared,
+                shared_to_json(shared, &count,
                                s1.write_.begin(), s1.write_.end(),
                                s2.write_.begin(), s2.write_.end());
                 od->put("shared", shared);
                 lst->append(od);
             }
-            lst->end();
+            lst->done();
         }
     }
 
@@ -337,7 +340,7 @@ private:
     }
 
     template<class InputIterator1, class InputIterator2>
-    void shared_to_json(JsonList *shared,
+    void shared_to_json(JsonList *shared, int *count,
                         InputIterator1 first1, InputIterator1 last1,
                         InputIterator2 first2, InputIterator2 last2)
     {
@@ -347,7 +350,9 @@ private:
             else if (*first2 < *first1)
                 ++first2;
             else {
-                shared->append(first1->second.to_json(dwarf_, &first2->second));
+                if (*count < 25)
+                    shared->append(first1->second.to_json(dwarf_, &first2->second));
+                ++*count;
                 first1++;
                 first2++;
             }

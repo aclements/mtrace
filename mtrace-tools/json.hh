@@ -21,7 +21,29 @@ tab(int level)
 
 class JsonObject {
 public:
-    virtual string str(int level) const = 0;
+    virtual ~JsonObject() { }
+
+    /**
+     * Write this object to the given stream with the given
+     * indentation.  If the object has been fully written, this should
+     * return true to return the output token to the parent
+     * immediately.  Otherwise, this should return false and, once it
+     * is fully written, it should invoke parent->write_next(o, this)
+     * to return the output token to the parent and indicate that this
+     * child may be deleted.
+     */
+    virtual bool write_to(ostream *o, int level, JsonObject *parent) = 0;
+
+    /**
+     * For a collection, indicate that no more elements will be
+     * added.  For other types, does nothing.
+     */
+    virtual void done() { }
+
+private:
+    friend class JsonDict;
+    friend class JsonList;
+    virtual void write_next(ostream *o, JsonObject *child) { }
 };
 
 static JsonObject *jsonify(JsonObject *value) {
@@ -29,10 +51,11 @@ static JsonObject *jsonify(JsonObject *value) {
 }
 
 class JsonString : public JsonObject {
-public:
-    virtual string str(int level) const {
-        return string("\"") + value_ + string("\"");
+    virtual bool write_to(ostream *o, int level, JsonObject *parent) {
+        *o << '"' << value_ << '"';
+        return true;
     }
+
 private:
     JsonString(string value) : value_(value) {}
     string value_;
@@ -45,12 +68,11 @@ JsonObject *jsonify(string value) {
 }
 
 class JsonUint : public JsonObject {
-public:
-    virtual string str(int level) const {
-        char buf[64];
-        snprintf(buf, sizeof(buf), "%lu", value_);
-        return string(buf);
+    virtual bool write_to(ostream *o, int level, JsonObject *parent) {
+        *o << value_;
+        return true;
     }
+
 private:
     JsonUint(uint64_t value) : value_(value) {}
     uint64_t value_;
@@ -68,11 +90,11 @@ static JsonObject *jsonify(uint8_t value) {
 
 class JsonInt : public JsonObject {
 public:
-    virtual string str(int level) const {
-        char buf[64];
-        snprintf(buf, sizeof(buf), "%ld", value_);
-        return string(buf);
+    virtual bool write_to(ostream *o, int level, JsonObject *parent) {
+        *o << value_;
+        return true;
     }
+
 private:
     JsonInt(int64_t value) : value_(value) {}
     int64_t value_;
@@ -88,23 +110,27 @@ class JsonHex : public JsonObject {
 public:
     JsonHex(uint64_t value) : value_(value) {}
 
-    virtual string str(int level) const {
+    virtual bool write_to(ostream *o, int level, JsonObject *parent) {
         char buf[64];
         // JSON spec doesn't include hex numbers
         snprintf(buf, sizeof(buf), "\"0x%lx\"", value_);
-        return string(buf);
+        *o << buf;
+        return true;
     }
+
 private:
     uint64_t value_;
 };
 
 class JsonFloat : public JsonObject {
 public:
-    virtual string str(int level) const {
+    virtual bool write_to(ostream *o, int level, JsonObject *parent) {
         char buf[64];
         snprintf(buf, sizeof(buf), "%f", value_);
-        return string(buf);
+        *o << buf;
+        return true;
     }
+
 private:
     JsonFloat(float value) : value_(value) {}
     float value_;
@@ -119,6 +145,7 @@ JsonObject *jsonify(float value) {
 class JsonDict : public JsonObject {
 public:
     ~JsonDict(void) {
+        done();
         for (auto it : table_)
             delete it.second;
     }
@@ -127,125 +154,104 @@ public:
         return new JsonDict();
     }
 
-    static JsonDict* create(ostream *out, int level = 0) {
-        return new JsonDict(out, level);
-    }
-
-    void end() {
-        if (out_) {
-            if (first_)
-                (*out_) << "{ }";
-            else
-                (*out_) << '\n' << tab(level_) << '}';
-            out_->flush();
-            delete this;
+    void done() {
+        if (!done_) {
+            done_ = true;
+            flush();
         }
     }
 
     template<typename T>
-    void put(string key, T value) {
+    void put(string key, T value, bool auto_done = true) {
+        if (done_)
+            throw std::runtime_error("cannot append to ended JsonDict");
+
         JsonObject *o = jsonify(value);
-
-        if (out_) {
-            key_out(key);
-            val_out(o);
-            out_->flush();
-            delete o;
-            return;
-        }
-
-        auto keyit = keys_.find(key);
-        if (keyit != keys_.end()) {
-            if (out_)
-                throw std::runtime_error("JsonDict already contains key " + key);
-            table_.erase(keyit->second);
-            keys_.erase(keyit);
-        }
-
-        auto it = table_.insert(table_.end(), make_pair(key, o));
-        keys_[key] = it;
+        table_.push_back(make_pair(key, o));
+        if (auto_done)
+            o->done();
+        flush();
     }
 
-    template<typename T>
-    T *start(string key) {
-        if (out_) {
-            key_out(key);
-            return T::create(out_, level_ + 1);
-        } else {
-            T* obj = T::create();
-            put(key, obj);
-            return obj;
-        }
-    }
-
-    virtual string str(int level) const {
-        if (out_)
-            throw std::runtime_error("Cannot str a streaming JsonDict");
-
-        if (!table_.size())
-            return "{ }";
-
-        ostringstream stream;
-        out_ = &stream;
-        first_ = true;
+    virtual bool write_to(ostream *o, int level, JsonObject *parent) {
+        out_ = o;
         level_ = level;
-
-        for (auto &it : table_) {
-            key_out(it.first);
-            val_out(it.second);
+        parent_ = nullptr;
+        first_ = true;
+        flush();
+        if (done_ && out_) {
+            out_ = nullptr;
+            return true;
         }
-        (*out_) << '\n' << tab(level) << '}';
-        out_ = nullptr;
+        parent_ = parent;
+        return false;
+    }
 
-        return stream.str();
+protected:
+    virtual void write_next(ostream *o, JsonObject *child) {
+        delete child;
+        out_ = o;
+        flush();
     }
 
 private:
-    typedef list<pair<string, JsonObject*> > table_type;
-    table_type table_;
-    unordered_map<string, table_type::iterator> keys_;
+    list<pair<string, JsonObject*> > table_;
 
     // Streaming dictionaries
-    mutable ostream *out_;
-    mutable bool first_;
-    mutable int level_;
+    ostream *out_;
+    int level_;
+    JsonObject *parent_;
+    bool first_;
+    bool done_;
 
-    JsonDict(ostream *out = nullptr, int level = 0)
-        : out_(out), first_(true), level_(level) { }
+    JsonDict() : out_(nullptr), done_(false) { }
     JsonDict(const JsonDict&);
     JsonDict& operator=(const JsonDict&);
 
-    void key_out(const string &key) const {
-        if (first_)
-            (*out_) << '{';
-        else
-            (*out_) << ',';
-        (*out_) << '\n' << tab(level_+1) << '\"' << key << "\": ";
-        first_ = false;
-    }
+    void flush() {
+        while (out_ && !table_.empty()) {
+            auto obj = table_.front();
+            table_.pop_front();
 
-    void val_out(JsonObject *o) const {
-        (*out_) << o->str(level_+1);
+            if (first_)
+                *out_ << '{';
+            else
+                *out_ << ',';
+            first_ = false;
+            *out_ << '\n' << tab(level_+1) << "\"" << obj.first << "\": ";
+
+            if (obj.second->write_to(out_, level_+1, this)) {
+                delete obj.second;
+            } else {
+                // obj owns the ostream now.  It'll pass it back to us
+                // later by calling write_next.
+                out_ = nullptr;
+            }
+        }
+
+        if (done_ && out_) {
+            if (first_)
+                *out_ << "{ }";
+            else
+                *out_ << '\n' << tab(level_) << '}';
+            if (parent_)
+                parent_->write_next(out_, this);
+        } else if (out_) {
+            out_->flush();
+        }
     }
 };
 
 class JsonList : public JsonObject {
 public:
     ~JsonList(void) {
-        while (list_.size()) {
-            auto it = list_.begin();
-            JsonObject* o = *it;
-            list_.erase(it);
-            delete o;
-        }
+        done();
+        for (auto it : list_)
+            delete it;
     }
 
     static JsonList* create() {
         return new JsonList();
-    }
-
-    static JsonList* create(ostream *out, int level = 0) {
-        return new JsonList(out, level);
     }
 
     template<typename InputIterator>
@@ -256,71 +262,91 @@ public:
         return lst;
     }
 
-    void end() {
-        if (out_) {
-            if (first_)
-                (*out_) << "[ ]";
-            else
-                (*out_) << " ]";
-            out_->flush();
-            delete this;
+    void done() {
+        if (!done_) {
+            done_ = true;
+            flush();
         }
     }
 
     template<typename T>
-    void append(T value) {
+    void append(T value, bool auto_done = true) {
+        if (done_)
+            throw std::runtime_error("cannot append to ended JsonList");
+
         JsonObject *o = jsonify(value);
+        list_.push_back(o);
+        if (auto_done)
+            o->done();
+        flush();
+    }
 
-        if (out_) {
-            val_out(o);
-            out_->flush();
-            delete o;
-        } else {
-            list_.push_back(o);
+    virtual bool write_to(ostream *o, int level, JsonObject *parent) {
+        out_ = o;
+        level_ = level;
+        parent_ = nullptr;
+        first_ = true;
+        flush();
+        if (done_ && out_) {
+            out_ = nullptr;
+            return true;
         }
+        parent_ = parent;
+        return false;
     }
 
-    size_t size() {
-        return list_.size();
-    }
-
-    virtual string str(int level) const {
-        if (out_)
-            throw std::runtime_error("Cannot str a streaming JsonList");
-
-        if (!list_.size())
-            return "[ ]";
-
-        string ret = "[";
-        auto it = list_.begin();
-
-        ret += "\n" + tab(level+1) + (*it)->str(level+1);
-        ++it;
-        for (; it != list_.end(); ++it)
-            ret += ",\n" + tab(level+1) + (*it)->str(level+1);
-        return ret + " ]";
+protected:
+    virtual void write_next(ostream *o, JsonObject *child) {
+        delete child;
+        out_ = o;
+        flush();
     }
 
 private:
     list<JsonObject*> list_;
 
     // Streaming lists
-    mutable ostream *out_;
-    mutable bool first_;
-    mutable int level_;
+    ostream *out_;
+    int level_;
+    JsonObject *parent_;
+    bool first_;
+    bool done_;
 
-    JsonList(ostream *out = nullptr, int level = 0)
-        : out_(out), first_(true), level_(level) { }
+    JsonList() : out_(nullptr), done_(false) { }
     JsonList(const JsonList&);
     JsonList& operator=(const JsonList&);
 
-    void val_out(JsonObject *o) const {
-        if (first_)
-            (*out_) << '[';
-        else
-            (*out_) << ',';
-        (*out_) << '\n' << tab(level_+1) << o->str(level_+1);
-        first_ = false;
+    void flush() {
+        while (out_ && !list_.empty()) {
+            JsonObject *obj = list_.front();
+            list_.pop_front();
+
+            if (first_)
+                *out_ << '[';
+            else
+                *out_ << ',';
+            first_ = false;
+            *out_ << '\n' << tab(level_+1);
+
+            if (obj->write_to(out_, level_+1, this)) {
+                delete obj;
+            } else {
+                // obj owns the ostream now.  It'll pass it back to us
+                // later by calling write_next.
+                out_ = nullptr;
+            }
+        }
+
+        if (done_ && out_) {
+            if (first_)
+                *out_ << "[ ]";
+            else
+                *out_ << " ]";
+            if (parent_)
+                parent_->write_next(out_, this);
+        } else if (out_) {
+            out_->flush();
+        }
     }
 };
 
