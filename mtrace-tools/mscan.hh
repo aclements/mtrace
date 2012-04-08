@@ -3,6 +3,7 @@
 
 #include <map>
 #include <sstream>
+#include <iomanip>
 
 #include "addr2line.hh"
 
@@ -207,12 +208,16 @@ public:
     }
 
     string function_description(pc_t pc) const {
+        stringstream ss;
         string func;
         string file;
         string line;
 
+        ss << std::setw(16) << std::setfill('0') << std::hex;
+        ss << pc;
+        
         all_string(pc, func, file, line);
-        return file + ":" + line + ":" + func;
+        return "0x" + ss.str() + ":" + file + ":" + line + ":" + func;
     }
 
 private:
