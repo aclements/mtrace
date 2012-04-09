@@ -100,78 +100,10 @@ class LockManager {
     typedef hash_map<uint64_t, LockState*> LockStateTable;
 
 public:
-    bool release(const struct mtrace_lock_entry* lock, SerialSection& ss) {
-        static int misses;
-        LockState* ls;
-
-        auto it = state_.find(lock->lock);
-        if (it == state_.end()) {
-            misses++;
-            if (misses >= 20)
-                die("LockManager: released too many unheld locks");
-            return false;
-        }
-
-        ls = it->second;
-        ls->release(lock);
-
-        if (ls->depth_ == 0) {
-            ss = ls->ss_;
-            stack_.remove(ls);
-            state_.erase(it);
-            delete ls;
-            return true;
-        }
-        return false;
-    }
-
-    void acquire(const struct mtrace_lock_entry* lock) {
-        auto it = state_.find(lock->lock);
-
-        if (it == state_.end()) {
-            pair<LockStateTable::iterator, bool> r;
-            LockState* ls = new LockState();
-            r = state_.insert(pair<uint64_t, LockState*>(lock->lock, ls));
-            if (!r.second)
-                die("acquire: insert failed");
-            stack_.push_front(ls);
-            it = r.first;
-        }
-        it->second->acquire(lock);
-    }
-
-    void acquired(const struct mtrace_lock_entry* lock) {
-        static int misses;
-
-        auto it = state_.find(lock->lock);
-
-        if (it == state_.end()) {
-            misses++;
-            if (misses >= 10)
-                die("acquired: acquired too many missing locks");
-            return;
-        }
-        it->second->acquired(lock);
-    }
-
-    bool access(const struct mtrace_access_entry* a, SerialSection& ss) {
-        if (stack_.empty()) {
-            ss.start = a->h.ts;
-            ss.end = ss.start + 1;
-            ss.acquire_cpu = a->h.cpu;
-            ss.release_cpu = a->h.cpu;
-            ss.call_pc = mtrace_call_pc[a->h.cpu];
-            ss.acquire_pc = a->pc;
-            if (a->traffic)
-                ss.per_pc_coherence_miss[a->pc] = 1;
-            else if (a->lock)
-                ss.locked_inst = 1;
-            return true;
-        }
-
-        stack_.front()->access(a);
-        return false;
-    }
+    bool release(const struct mtrace_lock_entry* lock, SerialSection& ss);
+    void acquire(const struct mtrace_lock_entry* lock);
+    void acquired(const struct mtrace_lock_entry* lock);
+    bool access(const struct mtrace_access_entry* a, SerialSection& ss);
 
 private:
     LockStateTable state_;
@@ -183,51 +115,10 @@ private:
 //
 class SerialSections : public EntryHandler {
     struct SerialSectionSummary {
-        SerialSectionSummary(void):
-            per_pc_coherence_miss(),
-            ts_cycles( {0}),
-                 acquires(0),
-                 mismatches(0),
-        locked_inst(0) {}
-
-
-        void add(const SerialSection* ss) {
-            if (ss->acquire_cpu != ss->release_cpu) {
-                mismatches++;
-                return;
-            }
-
-            if (ss->end < ss->start)
-                die("SerialSectionSummary::add %"PRIu64" < %"PRIu64,
-                    ss->end, ss->start);
-
-            ts_cycles[ss->acquire_cpu] += ss->end - ss->start;
-            auto it = ss->per_pc_coherence_miss.begin();
-            for (; it != ss->per_pc_coherence_miss.end(); ++it)
-                per_pc_coherence_miss[it->first] += it->second;
-
-            locked_inst += ss->locked_inst;
-            acquires++;
-        }
-
-        timestamp_t total_cycles(void) const {
-            timestamp_t sum = 0;
-            int i;
-
-            for (i = 0; i < MAX_CPUS; i++)
-                sum += ts_cycles[i];
-            return sum;
-        }
-
-        uint64_t coherence_misses(void) const {
-            uint64_t sum = 0;
-
-            auto it = per_pc_coherence_miss.begin();
-            for (; it != per_pc_coherence_miss.end(); ++it)
-                sum += it->second;
-
-            return sum;
-        }
+        SerialSectionSummary(void);
+        void add(const SerialSection* ss);
+        timestamp_t total_cycles(void) const;
+        uint64_t coherence_misses(void) const;
 
         map<pc_t, uint64_t> per_pc_coherence_miss;
         timestamp_t ts_cycles[MAX_CPUS];
