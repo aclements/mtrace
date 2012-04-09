@@ -46,9 +46,14 @@ private:
     virtual void write_next(ostream *o, JsonObject *child) { }
 };
 
-static JsonObject *jsonify(JsonObject *value) {
+static inline JsonObject *jsonify(JsonObject *value) {
     return value;
 }
+static inline JsonObject *jsonify(string value);
+static inline JsonObject *jsonify(uint64_t value);
+static inline JsonObject *jsonify(uint8_t value);
+static inline JsonObject *jsonify(int value);
+static inline JsonObject *jsonify(float value);
 
 class JsonString : public JsonObject {
     virtual bool write_to(ostream *o, int level, JsonObject *parent) {
@@ -63,7 +68,7 @@ private:
     friend JsonObject *jsonify(string value);
 };
 
-JsonObject *jsonify(string value) {
+static inline JsonObject *jsonify(string value) {
     return new JsonString(value);
 }
 
@@ -80,11 +85,11 @@ private:
     friend JsonObject *jsonify(uint64_t value);
 };
 
-JsonObject *jsonify(uint64_t value) {
+static inline JsonObject *jsonify(uint64_t value) {
     return new JsonUint(value);
 }
 
-static JsonObject *jsonify(uint8_t value) {
+static inline JsonObject *jsonify(uint8_t value) {
     return jsonify((uint64_t)value);
 }
 
@@ -102,7 +107,7 @@ private:
     friend JsonObject *jsonify(int value);
 };
 
-JsonObject *jsonify(int value) {
+static inline JsonObject *jsonify(int value) {
     return new JsonInt(value);
 }
 
@@ -138,7 +143,7 @@ private:
     friend JsonObject *jsonify(float value);
 };
 
-JsonObject *jsonify(float value) {
+static inline JsonObject *jsonify(float value) {
     return new JsonFloat(value);
 }
 
