@@ -435,8 +435,6 @@ int main(int ac, char** av)
                      "Average distinct cache lines per operation");
     parse.add_option("distinct-sys",
                      "Average distinct cache lines per syscall");
-    parse.add_option("eyerman",
-                     "Input to \"Eyerman's law\"");
     parse.add_option("abstract-scopes",
                      "Abstract sharing scopes");
     parse.add_option("unexpected-sharing",
