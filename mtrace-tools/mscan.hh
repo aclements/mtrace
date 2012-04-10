@@ -6,6 +6,7 @@
 #include <iomanip>
 
 #include "addr2line.hh"
+#include "bininfo.hh"
 
 using namespace::std;
 
@@ -276,6 +277,8 @@ extern MtraceAddr2label mtrace_label_map;
 // The current call stack
 class CallTrace;
 extern CallTrace* mtrace_call_trace;
+// An object representing the DWARF in the kernel ELF
+extern dwarf::dwarf mtrace_dwarf;
 
 //
 // Some helpers

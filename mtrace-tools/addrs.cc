@@ -17,6 +17,8 @@ extern "C" {
 #include "addrs.hh"
 #include "json.hh"
 
+#include "bininfo.hh"
+
 //
 // ObjectAddrStat
 //
@@ -25,6 +27,7 @@ ObjectAddrStat::init(const MtraceObject* object,
                      const struct mtrace_access_entry* a)
 {
     name = object->name_;
+    base = object->guest_addr_;
     address = a->guest_addr;
     add(a);
 }
@@ -45,13 +48,16 @@ ObjectAddrStat::to_json(void)
     JsonDict* d = JsonDict::create();
 
     d->put("name", name);
-    d->put("address", new JsonHex(address));
+    //d->put("address", new JsonHex(address));
+    d->put("address",
+           resolve_type_offset(mtrace_dwarf, name, base, address-base));
 
     JsonList* l = JsonList::create();
     uint64_t tot = 0;
     for (auto it = per_pc.begin(); it != per_pc.end(); ++it) {
         JsonDict* count = JsonDict::create();
-        count->put("pc", new JsonHex(it->first));
+        //count->put("pc", new JsonHex(it->first));
+        count->put("info", addr2line->function_description(it->first));
         count->put("count", it->second);
         l->append(count);
         tot += it->second;

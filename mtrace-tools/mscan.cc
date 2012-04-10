@@ -25,6 +25,10 @@ extern "C" {
 #include "argparse.hh"
 #include "addrs.hh"
 
+#include "bininfo.hh"
+#include <elf++.hh>
+#include <dwarf++.hh>
+
 using namespace::std;
 
 typedef map<uint64_t, struct mtrace_label_entry> LabelMap;
@@ -39,6 +43,8 @@ tid_t mtrace_tid[MAX_CPUS];
 MtraceAddr2label mtrace_label_map;
 uint64_t mtrace_object_count;
 CallTrace* mtrace_call_trace;
+dwarf::dwarf mtrace_dwarf;
+elf::elf mtrace_elf;
 
 static LabelMap labels;
 static list<struct mtrace_label_entry> percpu_labels;
@@ -454,6 +460,12 @@ int main(int ac, char** av)
         edie("gzopen %s", log_file);
 
     addr2line = new MtraceAddr2line(elf_file);
+
+    int fd = open(elf_file, O_RDONLY);
+    if (fd < 0)
+        die("failed to open %s", elf_file);
+    mtrace_elf = elf::elf(elf::create_mmap_loader(fd));
+    mtrace_dwarf = dwarf::dwarf(dwarf::elf::create_loader(mtrace_elf));
 
     init_static_syms(sym_file);
     init_entry_alloc();

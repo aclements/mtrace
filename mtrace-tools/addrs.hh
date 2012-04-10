@@ -30,6 +30,7 @@ struct ObjectAddrStat {
     JsonDict* to_json(void);
 
     string name;
+    guest_addr_t base;
     guest_addr_t address;
     map<pc_t, uint64_t> per_pc;
 };
