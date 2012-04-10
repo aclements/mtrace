@@ -24,6 +24,7 @@ extern "C" {
 #include "eyerman.hh"
 #include "asharing.hh"
 #include "argparse.hh"
+#include "addrs.hh"
 
 using namespace::std;
 
@@ -55,6 +56,7 @@ static struct MtraceOptions {
     bool        abstract_scopes;
     bool        unexpected_sharing;
     bool        summary;
+    bool        shared_addresses;
 } mtrace_options;
 
 class DefaultHostHandler : public EntryHandler {
@@ -308,6 +310,12 @@ static void init_handlers(void)
 
     if (mtrace_options.summary)
         exit_handler.push_back(new DefaultSummary());
+
+    if (mtrace_options.shared_addresses) {
+        SharedAddresses* addrs = new SharedAddresses();
+        entry_handler[mtrace_entry_access].push_back(addrs);
+        exit_handler.push_back(addrs);
+    }
 }
 
 static void init_static_syms(const char* sym_file)
@@ -411,7 +419,9 @@ static void handle_arg(const ArgParse* parser, string option, string val)
         mtrace_options.abstract_scopes = true;
     } else if (option == "unexpected-sharing") {
         mtrace_options.unexpected_sharing = true;
-    } else {
+    } else if (option == "shared-addresses")
+        mtrace_options.shared_addresses = true;
+    else {
         die("handle_arg: unexpected");
     }
 }
@@ -446,6 +456,8 @@ int main(int ac, char** av)
                      "Unexpected abstract sharing");
     parse.add_option("summary",
                      "Workload summary");
+    parse.add_option("shared-addresses",
+                     "Shared (object, address) pairs");
     parse.parse(handle_arg);
 
     // The default if no arguments
