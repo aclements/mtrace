@@ -21,7 +21,6 @@ extern "C" {
 #include "sersec.hh"
 #include "sysaccess.hh"
 #include "false.hh"
-#include "eyerman.hh"
 #include "asharing.hh"
 #include "argparse.hh"
 #include "addrs.hh"
@@ -52,7 +51,6 @@ static struct MtraceOptions {
     bool        serial_sections;
     bool        distinct_ops;
     bool        distinct_sys;
-    bool        eyerman;
     bool        abstract_scopes;
     bool        unexpected_sharing;
     bool        summary;
@@ -282,21 +280,6 @@ static void init_handlers(void)
         }
     }
 
-    if (mtrace_options.eyerman) {
-        SerialSections* eyerman_sersecs;
-        if (!mtrace_options.serial_sections) {
-            eyerman_sersecs = new SerialSections();
-            entry_handler[mtrace_entry_lock].push_back(eyerman_sersecs);
-            entry_handler[mtrace_entry_access].push_back(eyerman_sersecs);
-            exit_handler.push_back(eyerman_sersecs);
-        } else {
-            eyerman_sersecs = sersecs;
-        }
-
-        Eyerman* eyerman = new Eyerman(eyerman_sersecs);
-        exit_handler.push_back(eyerman);
-    }
-
     if (mtrace_options.abstract_scopes ||
         mtrace_options.unexpected_sharing) {
         AbstractSharing *ashare = new AbstractSharing(mtrace_options.abstract_scopes,
@@ -411,8 +394,6 @@ static void handle_arg(const ArgParse* parser, string option, string val)
         mtrace_options.distinct_sys = true;
     } else if (option == "distinct-sys") {
         mtrace_options.distinct_sys = true;
-    } else if (option == "eyerman") {
-        mtrace_options.eyerman = true;
     } else if (option == "summary") {
         mtrace_options.summary = true;
     } else if (option == "abstract-scopes") {
