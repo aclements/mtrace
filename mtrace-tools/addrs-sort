@@ -2,7 +2,14 @@
 
 import sys
 import json
+import numpy
+
+def weight(item):
+    s = numpy.std(item["count-per-cpu"])
+    if s == 0:
+        s = 1
+    return (2*item["count"])/s
 
 addrs = json.loads(sys.stdin.read())["shared-addresses"]
-addrs = sorted(addrs, key=lambda x:x["count"], reverse=True)
+addrs = sorted(addrs, key=weight, reverse=True)
 print json.dumps(addrs, indent=2)
