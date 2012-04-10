@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <cinttypes>
 #include <list>
+#include <sstream>
 
 extern "C" {
 #include <mtrace-magic.h>
@@ -35,11 +36,16 @@ ObjectAddrStat::init(const MtraceObject* object,
 void
 ObjectAddrStat::add(const struct mtrace_access_entry* a)
 {
-    auto it = per_pc.find(a->pc);
-    if (it == per_pc.end())
-        per_pc[a->pc] = 1;
-    else
-        it->second++;
+    {
+        auto it = per_pc.find(a->pc);
+        if (it == per_pc.end())
+            per_pc[a->pc] = 1;
+        else
+            it->second++;
+    }
+    if (per_cpu.size() < (unsigned)a->h.cpu+1)
+        per_cpu.resize(a->h.cpu+1);
+    per_cpu[a->h.cpu]++;
 }
 
 JsonDict*
@@ -62,7 +68,15 @@ ObjectAddrStat::to_json(void)
         l->append(count);
         tot += it->second;
     }
+    JsonList* cpu_accesses = JsonList::create();
+    unsigned i;
+    for (i = 0; i < per_cpu.size(); i++)
+        cpu_accesses->append(per_cpu[i]);
+    for (; i < mtrace_summary.num_cpus; i++)
+        cpu_accesses->append(0);
+
     d->put("count-per-pc", l);
+    d->put("count-per-cpu", cpu_accesses);
     d->put("count", tot);
 
     return d;

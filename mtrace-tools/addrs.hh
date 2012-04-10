@@ -1,9 +1,11 @@
+#include <vector>
+
 using namespace::std;
 using namespace::__gnu_cxx;
 
 struct ObjectAddrKey {
     guest_addr_t addr;
-    uint64_t obj_id;
+    object_id_t obj_id;
 };
 
 struct ObjectAddrEq {
@@ -32,6 +34,7 @@ struct ObjectAddrStat {
     string name;
     guest_addr_t base;
     guest_addr_t address;
+    vector<uint64_t> per_cpu;
     map<pc_t, uint64_t> per_pc;
 };
 
