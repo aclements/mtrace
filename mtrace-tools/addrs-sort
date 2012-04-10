@@ -1,0 +1,8 @@
+#!/usr/bin/python
+
+import sys
+import json
+
+addrs = json.loads(sys.stdin.read())["shared-addresses"]
+addrs = sorted(addrs, key=lambda x:x["count"], reverse=True)
+print json.dumps(addrs, indent=2)
