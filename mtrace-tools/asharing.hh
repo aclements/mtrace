@@ -8,18 +8,12 @@
 
 #include "percallstack.hh"
 #include "bininfo.hh"
-#include <elf++.hh>
 #include <dwarf++.hh>
 
 class AbstractSharing : public EntryHandler {
 public:
     AbstractSharing(bool ascopes, bool unexpected)
         : ascopes_(ascopes), unexpected_(unexpected) {
-        int fd = open("mscan.kern", O_RDONLY);
-        if (fd < 0)
-            die("failed to open o.qemu/kernel.elf");
-        elf_ = elf::elf(elf::create_mmap_loader(fd));
-        dwarf_ = dwarf::dwarf(dwarf::elf::create_loader(elf_));
     }
 
     virtual void handle(const union mtrace_entry* entry) {
@@ -121,11 +115,11 @@ public:
                 JsonList *rw;
                 rw = JsonList::create();
                 for (auto &it : ascope.read_)
-                    rw->append(it.second.to_json(dwarf_));
+                    rw->append(it.second.to_json());
                 od->put("read", rw);
                 rw = JsonList::create();
                 for (auto &it : ascope.write_)
-                    rw->append(it.second.to_json(dwarf_));
+                    rw->append(it.second.to_json());
                 od->put("write", rw);
 
                 lst->append(od);
@@ -170,11 +164,11 @@ public:
         uint64_t access;
         uint64_t pc;
 
-        JsonDict *to_json(const dwarf::dwarf &dw, const PhysicalAccess *other = nullptr) const
+        JsonDict *to_json(const PhysicalAccess *other = nullptr) const
         {
             JsonDict *out = JsonDict::create();
             if (type.size()) {
-                out->put("addr", resolve_type_offset(dw, type, base, access - base, pc));
+                out->put("addr", resolve_type_offset(mtrace_dwarf, type, base, access - base, pc));
             } else {
                 out->put("addr", new JsonHex(access));
             }
@@ -208,9 +202,6 @@ public:
     };
 
 private:
-    elf::elf elf_;
-    dwarf::dwarf dwarf_;
-
     bool ascopes_, unexpected_;
 
     class CallStack
@@ -351,7 +342,7 @@ private:
                 ++first2;
             else {
                 if (*count < 25)
-                    shared->append(first1->second.to_json(dwarf_, &first2->second));
+                    shared->append(first1->second.to_json(&first2->second));
                 ++*count;
                 first1++;
                 first2++;
