@@ -163,6 +163,7 @@ public:
         uint64_t base;
         uint64_t access;
         uint64_t pc;
+        uint8_t size;
 
         JsonDict *to_json(const PhysicalAccess *other = nullptr) const
         {
@@ -179,6 +180,7 @@ public:
             } else {
                 out->put("pc", addr2line->function_description(pc));
             }
+            out->put("size", size);
             return out;
         }
 
@@ -258,9 +260,8 @@ private:
             if (stack_.empty())
                 return;
 
-            // Since QEMU limits the granularity of tracking to 4
-            // bytes in ascope mode, we need to do that, too.
-            auto addr = access->guest_addr & ~3;
+            auto addr = access->guest_addr;
+
             MtraceObject obj;
             PhysicalAccess pa;
             if (mtrace_label_map.object(addr, obj)) {
@@ -271,6 +272,7 @@ private:
             }
             pa.access = access->guest_addr;
             pa.pc = access->pc;
+            pa.size = access->bytes;
 
             // Physical accesses apply to all scopes on the stack.
             // This is necessary to make sure that each logical scope
