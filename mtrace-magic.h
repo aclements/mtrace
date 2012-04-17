@@ -179,6 +179,7 @@ struct mtrace_access_entry {
     uint64_t pc;
     uint64_t host_addr;
     uint64_t guest_addr;
+    uint8_t bytes;
 }__pack__;
 
 /*

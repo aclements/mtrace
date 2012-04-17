@@ -314,7 +314,8 @@ static void mtrace_access_dump(mtrace_access_t type, target_ulong host_addr,
 			       unsigned long access_count,
 			       void *retaddr,
 			       int traffic,
-			       int lock)
+			       int lock,
+                               char bytes)
 {
     struct mtrace_access_entry entry;
     static int sampler;
@@ -335,6 +336,7 @@ static void mtrace_access_dump(mtrace_access_t type, target_ulong host_addr,
     entry.guest_addr = guest_addr;
     entry.traffic = traffic;
     entry.lock = lock;
+    entry.bytes = bytes;
 
     mtrace_log_entry((union mtrace_entry *)&entry);
 }
@@ -406,7 +408,7 @@ static inline int mtrace_access_enabled(void)
     return 1;
 }
 
-void mtrace_st(target_ulong host_addr, target_ulong guest_addr, void *retaddr)
+void mtrace_st(target_ulong host_addr, target_ulong guest_addr, char bytes, void *retaddr)
 {
     uint64_t a;
     int lock;
@@ -422,15 +424,15 @@ void mtrace_st(target_ulong host_addr, target_ulong guest_addr, void *retaddr)
     lock = mtrace_lock_active[cpu_single_env->cpu_index];
     if (r || lock)
 	mtrace_access_dump(mtrace_access_st, host_addr, guest_addr, 
-			   a, retaddr, r, lock);
+			   a, retaddr, r, lock, bytes);
 }
 
-void mtrace_tcg_st(target_ulong host_addr, target_ulong guest_addr)
+void mtrace_tcg_st(target_ulong host_addr, target_ulong guest_addr, char bytes)
 {
-    mtrace_st(host_addr, guest_addr, MTRACE_GETPC());
+    mtrace_st(host_addr, guest_addr, bytes, MTRACE_GETPC());
 }
 
-void mtrace_ld(target_ulong host_addr, target_ulong guest_addr, void *retaddr)
+void mtrace_ld(target_ulong host_addr, target_ulong guest_addr, char bytes, void *retaddr)
 {
     uint64_t a;
     int lock;
@@ -446,16 +448,16 @@ void mtrace_ld(target_ulong host_addr, target_ulong guest_addr, void *retaddr)
     lock = mtrace_lock_active[cpu_single_env->cpu_index];
     if (r || lock)
 	mtrace_access_dump(mtrace_access_ld, host_addr, guest_addr, 
-			   a, retaddr, r, lock);
+			   a, retaddr, r, lock, bytes);
 }
 
-void mtrace_tcg_ld(target_ulong host_addr, target_ulong guest_addr)
+void mtrace_tcg_ld(target_ulong host_addr, target_ulong guest_addr, char bytes)
 {
-    mtrace_ld(host_addr, guest_addr, MTRACE_GETPC());
+    mtrace_ld(host_addr, guest_addr, bytes, MTRACE_GETPC());
 }
 
 void mtrace_io_write(void *cb, target_phys_addr_t ram_addr, 
-		     target_ulong guest_addr, void *retaddr)
+		     target_ulong guest_addr, char bytes, void *retaddr)
 {
     if (!mtrace_access_enabled())
 	return;
@@ -482,12 +484,12 @@ void mtrace_io_write(void *cb, target_phys_addr_t ram_addr,
 	if (r || lock)
 	    mtrace_access_dump(mtrace_access_iw, 
 			       (unsigned long) qemu_get_ram_ptr(ram_addr), 
-			       guest_addr, a, retaddr, r, lock);
+			       guest_addr, a, retaddr, r, lock, bytes);
     }
 }
 
 void mtrace_io_read(void *cb, target_phys_addr_t ram_addr, 
-		    target_ulong guest_addr, void *retaddr)
+		    target_ulong guest_addr, char bytes, void *retaddr)
 {
     /* Nothing to do.. */
 }

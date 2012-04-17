@@ -51,13 +51,14 @@ static void print_entry(union mtrace_entry *entry)
 		       entry->h.access_count);
 		break;
 	case mtrace_entry_access:
-		printf("%-3s [%-3u %16"PRIu64" pc %016"PRIx64"  host %016"PRIx64"  guest %016"PRIx64"",
+		printf("%-3s [%-3u %16"PRIu64" pc %016"PRIx64"  host %016"PRIx64"  guest %016"PRIx64"  %db",
 		       access_type_to_str[entry->access.access_type],
 		       entry->h.cpu,
 		       entry->h.access_count,
 		       entry->access.pc,
 		       entry->access.host_addr,
-		       entry->access.guest_addr);
+		       entry->access.guest_addr,
+		       entry->access.bytes);
 		if (entry->access.traffic)
 			printf("  traffic");
 		if (entry->access.lock)
