@@ -143,13 +143,13 @@ public:
                 od->put("s2", s2.name_);
                 JsonList *shared = JsonList::create();
                 int count = 0;
-                shared_to_json(shared, &count,
+                shared_to_json(shared, &count, "rw",
                                s1.read_.begin(),  s1.read_.end(),
                                s2.write_.begin(), s2.write_.end());
-                shared_to_json(shared, &count,
+                shared_to_json(shared, &count, "wr",
                                s1.write_.begin(), s1.write_.end(),
                                s2.read_.begin(),  s2.read_.end());
-                shared_to_json(shared, &count,
+                shared_to_json(shared, &count, "ww",
                                s1.write_.begin(), s1.write_.end(),
                                s2.write_.begin(), s2.write_.end());
                 od->put("shared", shared);
@@ -334,7 +334,7 @@ private:
     }
 
     template<class InputIterator1, class InputIterator2>
-    void shared_to_json(JsonList *shared, int *count,
+    void shared_to_json(JsonList *shared, int *count, const char *type,
                         InputIterator1 first1, InputIterator1 last1,
                         InputIterator2 first2, InputIterator2 last2)
     {
@@ -344,8 +344,11 @@ private:
             else if (*first2 < *first1)
                 ++first2;
             else {
-                if (*count < 25)
-                    shared->append(first1->second.to_json(&first2->second));
+                if (*count < 25) {
+                    JsonDict *d = first1->second.to_json(&first2->second);
+                    d->put("type", type);
+                    shared->append(d);
+                }
                 ++*count;
                 first1++;
                 first2++;
