@@ -106,6 +106,7 @@ public:
         if (ascopes_) {
             // Raw abstract and concrete sets
             JsonList *lst = JsonList::create();
+            json_file->put("abstract-scopes", lst, false);
             for (auto &ascope : scopes_) {
                 JsonDict *od = JsonDict::create();
                 od->put("name", ascope.name_);
@@ -124,7 +125,7 @@ public:
 
                 lst->append(od);
             }
-            json_file->put("abstract-scopes", lst);
+            lst->done();
         }
 
         if (unexpected_) {
