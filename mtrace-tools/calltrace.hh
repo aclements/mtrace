@@ -48,6 +48,13 @@ public:
             return list;
         }
 
+        JsonList* new_json_short(void) const {
+            JsonList* list = JsonList::create();
+            for (auto &ce : stack_)
+                list->append(addr2line->function_description(ce.return_pc));
+            return list;
+        }
+
     private:
         CallStack(const struct mtrace_fcall_entry* e)
             : tag_(e->tag) {}
