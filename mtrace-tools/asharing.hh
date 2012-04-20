@@ -244,7 +244,7 @@ private:
         void handle(const mtrace_avar_entry *avar)
         {
 	    if (stack_.empty()) {
-	        fprintf(stderr, "avar without ascope\n");
+	        fprintf(stderr, "avar without ascope: %s\n", avar->name);
 		return;
 	    }
 
