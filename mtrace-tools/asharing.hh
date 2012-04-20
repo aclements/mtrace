@@ -214,6 +214,7 @@ private:
     {
         AbstractSharing *a_;
         vector<Ascope> stack_;
+        bool active_;
 
         void pop()
         {
@@ -226,7 +227,7 @@ private:
 
     public:
         CallStack(const mtrace_fcall_entry *fcall, AbstractSharing *a)
-            : a_(a) {}
+            : a_(a), active_(guest_enabled_mtrace()) {}
         ~CallStack()
         {
             while (!stack_.empty())
@@ -235,6 +236,11 @@ private:
 
         void handle(const mtrace_ascope_entry *ascope)
         {
+            // We're only interested in scopes that started after
+            // recording was enabled
+            if (!active_)
+                return;
+
             if (ascope->exit)
                 pop();
             else
