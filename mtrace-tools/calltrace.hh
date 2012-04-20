@@ -20,7 +20,7 @@ public:
     }
 
     CallStack* new_current(int cpu) const {
-        if (current_[cpu])
+        if (current_[cpu] && !current_[cpu]->stack_.empty())
             return new CallStack(*current_[cpu]);
         return NULL;
     }
