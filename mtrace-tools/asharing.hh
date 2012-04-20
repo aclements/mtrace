@@ -183,8 +183,20 @@ public:
                 out->put("pc", addr2line->function_description(pc));
             }
             out->put("size", size);
-            if (stack)
+
+            if (other) {
+                if (stack && other->stack) {
+                    if (*stack == *other->stack) {
+                        out->put("stack", stack->new_json_short());
+                    } else {
+                        out->put("stack1", stack->new_json_short());
+                        out->put("stack2", other->stack->new_json_short());
+                    }
+                }
+            } else if (stack) {
                 out->put("stack", stack->new_json_short());
+            }
+
             return out;
         }
 

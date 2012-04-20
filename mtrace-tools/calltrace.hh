@@ -55,6 +55,19 @@ public:
             return list;
         }
 
+        bool operator==(const CallStack &o)
+        {
+            if (stack_.size() != o.stack_.size())
+                return false;
+            for (auto it1 = stack_.cbegin(), it2 = o.stack_.cbegin();
+                 it1 != stack_.end(); ++it1, ++it2) {
+                if (it1->target_pc != it2->target_pc ||
+                    it1->return_pc != it2->return_pc)
+                    return false;
+            }
+            return true;
+        }
+
     private:
         CallStack(const struct mtrace_fcall_entry* e)
             : tag_(e->tag) {}
