@@ -58,6 +58,7 @@ DEF_HELPER_1(sysexit, void, int)
 DEF_HELPER_1(syscall, void, int)
 DEF_HELPER_1(sysret, void, int)
 #endif
+DEF_HELPER_1(pause, void, int)
 DEF_HELPER_1(hlt, void, int)
 DEF_HELPER_1(monitor, void, tl)
 DEF_HELPER_1(mwait, void, int)

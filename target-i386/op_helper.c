@@ -4667,6 +4667,13 @@ void helper_idivq_EAX(target_ulong t0)
 }
 #endif
 
+void helper_pause(int next_eip_addend)
+{
+    env->exception_index = EXCP_INTERRUPT;
+    EIP += next_eip_addend;
+    cpu_loop_exit();
+}
+
 static void do_hlt(void)
 {
     env->hflags &= ~HF_INHIBIT_IRQ_MASK; /* needed if sti is just before */
