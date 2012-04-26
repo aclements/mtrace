@@ -89,7 +89,8 @@ public:
             extern struct mtrace_host_entry mtrace_enable;
 
             if (mtrace_enable.access.mode)
-                die("miss while mtrace enabled");
+                die("unknown label removed at guest addr %llx",
+                    (unsigned long long)l->guest_addr);
 
             // We tolerate a few kfree calls for which we haven't
             // seen a previous kmalloc, because we might have missed
