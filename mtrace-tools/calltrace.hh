@@ -105,9 +105,9 @@ public:
     }
 
     const CallStack *get_current(int cpu) const {
-        if (!current_[cpu])
-            return nullptr;
-        return &*cache_.insert(*current_[cpu]).first;
+        if (current_[cpu] && !current_[cpu]->stack_.empty())
+            return &*cache_.insert(*current_[cpu]).first;
+        return NULL;
     }
 
 private:
