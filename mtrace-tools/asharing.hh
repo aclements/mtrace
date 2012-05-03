@@ -62,7 +62,7 @@ public:
                     // If the two scopes ran on the same CPU, we'll
                     // get lots of "sharing" on per-CPU data, so don't
                     // compare scopes from the same CPU
-                    if (s1.cpu_ == s2.cpu_)
+                    if (s1.cpu_set_ & s2.cpu_set_)
                         continue;
 
                     compared_scopes++;
@@ -209,10 +209,15 @@ public:
     class Ascope {
     public:
         Ascope(string name, int cpu)
-            : name_(name), cpu_(cpu) { }
+            : name_(name), cpu_set_(1 << cpu) { }
+
+        void add_cpu(int cpu)
+        {
+            cpu_set_ |= 1 << cpu;
+        }
 
         string name_;
-        int cpu_;
+        uint64_t cpu_set_;
         set<string> aread_;
         set<string> awrite_;
         map<uint64_t, PhysicalAccess> read_;
@@ -310,10 +315,12 @@ private:
                     if (!scope.write_.count(addr))
                         scope.write_[addr] = pa;
                     scope.read_.erase(addr);
+                    scope.add_cpu(access->h.cpu);
                     break;
                 case mtrace_access_ld:
                     if (!scope.write_.count(addr))
                         scope.read_[addr] = pa;
+                    scope.add_cpu(access->h.cpu);
                     break;
                 default:
                     die("AbstractSharing::CallStack::handle: unknown access type");
