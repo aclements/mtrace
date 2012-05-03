@@ -1,14 +1,93 @@
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
 #include <set>
+#include <unordered_set>
 #include "json.hh"
+
+class CallStack {
+    friend class CallTrace;
+    friend struct std::hash<CallStack>;
+
+public:
+    JsonList* new_json(void) const {
+        JsonList* list = JsonList::create();
+
+        auto it = stack_.begin();
+        for (; it != stack_.end(); ++it) {
+            JsonDict* dict = JsonDict::create();
+            dict->put("type", it->ret ? "ret" : "call");
+            dict->put("target-pc", new JsonHex(it->target_pc));
+            dict->put("target-info",
+                      addr2line->function_description(it->target_pc));
+            dict->put("return-pc", new JsonHex(it->return_pc));
+            dict->put("return-info",
+                      addr2line->function_description(it->return_pc));
+            list->append(dict);
+        }
+
+        return list;
+    }
+
+    JsonList* new_json_short(void) const {
+        JsonList* list = JsonList::create();
+        for (auto &ce : stack_)
+            list->append(addr2line->function_description(ce.return_pc-1));
+        return list;
+    }
+
+    bool operator==(const CallStack &o) const
+    {
+        if (stack_.size() != o.stack_.size())
+            return false;
+        for (auto it1 = stack_.cbegin(), it2 = o.stack_.cbegin();
+             it1 != stack_.end(); ++it1, ++it2) {
+            if (it1->target_pc != it2->target_pc ||
+                it1->return_pc != it2->return_pc)
+                return false;
+        }
+        return true;
+    }
+
+private:
+    CallStack(const struct mtrace_fcall_entry* e)
+    : tag_(e->tag) {}
+
+    void push(const struct mtrace_call_entry* e) {
+        stack_.push_front(*e);
+    }
+
+    void pop(const struct mtrace_call_entry* e) {
+        if (!stack_.empty())
+            stack_.pop_front();
+    }
+
+    const uint64_t                  tag_;
+    list<struct mtrace_call_entry>  stack_;
+};
+
+namespace std {
+    template<>
+    struct hash<CallStack> {
+        typedef size_t result_type;
+        typedef const CallStack &argument_type;
+        result_type operator()(argument_type a) const {
+            size_t h = 0;
+            for (auto &ent : a.stack_) {
+                h ^= hash<uint64_t>()(ent.ret ^ ent.target_pc ^ ent.return_pc);
+                h <<= 1;
+            }
+            return h;
+        }
+    };
+}
 
 //
 // Provides the current call stack via current(cpu)
 //
 class CallTrace : public EntryHandler {
 public:
-    class CallStack;
+    // CallStack used to be a nested class
+    typedef ::CallStack CallStack;
 
     virtual void handle(const union mtrace_entry* entry) {
         if (entry->h.type == mtrace_entry_call)
@@ -25,65 +104,11 @@ public:
         return NULL;
     }
 
-    class CallStack {
-        friend class CallTrace;
-
-    public:
-        JsonList* new_json(void) const {
-            JsonList* list = JsonList::create();
-
-            auto it = stack_.begin();
-            for (; it != stack_.end(); ++it) {
-                JsonDict* dict = JsonDict::create();
-                dict->put("type", it->ret ? "ret" : "call");
-                dict->put("target-pc", new JsonHex(it->target_pc));
-                dict->put("target-info",
-                          addr2line->function_description(it->target_pc));
-                dict->put("return-pc", new JsonHex(it->return_pc));
-                dict->put("return-info",
-                          addr2line->function_description(it->return_pc));
-                list->append(dict);
-            }
-
-            return list;
-        }
-
-        JsonList* new_json_short(void) const {
-            JsonList* list = JsonList::create();
-            for (auto &ce : stack_)
-                list->append(addr2line->function_description(ce.return_pc-1));
-            return list;
-        }
-
-        bool operator==(const CallStack &o)
-        {
-            if (stack_.size() != o.stack_.size())
-                return false;
-            for (auto it1 = stack_.cbegin(), it2 = o.stack_.cbegin();
-                 it1 != stack_.end(); ++it1, ++it2) {
-                if (it1->target_pc != it2->target_pc ||
-                    it1->return_pc != it2->return_pc)
-                    return false;
-            }
-            return true;
-        }
-
-    private:
-        CallStack(const struct mtrace_fcall_entry* e)
-            : tag_(e->tag) {}
-
-        void push(const struct mtrace_call_entry* e) {
-            stack_.push_front(*e);
-        }
-
-        void pop(const struct mtrace_call_entry* e) {
-            if (!stack_.empty())
-                stack_.pop_front();
-        }
-
-        const uint64_t                  tag_;
-        list<struct mtrace_call_entry>  stack_;
-    };
+    const CallStack *get_current(int cpu) const {
+        if (!current_[cpu])
+            return nullptr;
+        return &*cache_.insert(*current_[cpu]).first;
+    }
 
 private:
     void handle(const struct mtrace_fcall_entry* e, int cpu) {
@@ -137,7 +162,7 @@ private:
 
     CallStack*                      current_[MAX_CPUS];
     map<uint64_t, CallStack*>       call_stack_;
-
+    mutable std::unordered_set<CallStack> cache_;
 };
 
 //

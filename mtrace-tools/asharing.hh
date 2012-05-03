@@ -165,7 +165,7 @@ public:
         uint64_t access;
         uint64_t pc;
         uint8_t size;
-        CallTrace::CallStack *stack;
+        const CallTrace::CallStack *stack;
 
         JsonDict *to_json(const PhysicalAccess *other = nullptr) const
         {
@@ -295,7 +295,7 @@ private:
             pa.access = access->guest_addr;
             pa.pc = access->pc;
             pa.size = access->bytes;
-            pa.stack = mtrace_call_trace->new_current(access->h.cpu);
+            pa.stack = mtrace_call_trace->get_current(access->h.cpu);
 
             // Physical accesses apply to all scopes on the stack.
             // This is necessary to make sure that each logical scope
