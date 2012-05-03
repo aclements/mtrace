@@ -171,6 +171,8 @@ public:
         {
             JsonDict *out = JsonDict::create();
             if (type.size()) {
+                // XXX For static symbols, we only have the name of
+                // the symbol, not the name of its type.
                 out->put("addr", resolve_type_offset(mtrace_dwarf, type, base, access - base, pc));
             } else {
                 out->put("addr", new JsonHex(access));
@@ -184,6 +186,7 @@ public:
             }
             out->put("size", size);
 
+            // XXX It would be nice if these stacks included inlines
             if (other) {
                 if (stack && other->stack) {
                     if (*stack == *other->stack) {
@@ -261,7 +264,7 @@ private:
             if (ascope->exit)
                 pop();
             else
-                stack_.push_back(Ascope(ascope->name, ascope->h.cpu));
+                stack_.emplace_back(ascope->name, ascope->h.cpu);
         }
 
         void handle(const mtrace_avar_entry *avar)
