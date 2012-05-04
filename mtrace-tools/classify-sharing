@@ -1,0 +1,36 @@
+#!/usr/bin/python
+
+import sys, re, json
+
+def canonicalize(pair):
+    ops = [canon_op(pair["s1"]), canon_op(pair["s2"])]
+    ops.sort()
+    shared = map(canon_share, pair["shared"])
+    shared.sort()
+    return tuple(ops + shared)
+
+def canon_op(op):
+    # Get just the function name
+    return op.split("(", 1)[0]
+
+def canon_share(share):
+    # XXX Include the pcs?
+    return (canon_addr(share["addr"]), share["type"])
+
+def canon_addr(addr):
+    m = re.match(r"\(\*\(([^)]*)\)0x[0-9a-f]+\)(.*)", addr)
+    if m:
+        # Strip the address and leave just the type and the field
+        return m.group(1) + m.group(2)
+    m = re.match(r".*\+0x[0-9a-f]+", addr)
+    if m:
+        # It's just a type and offset already
+        return addr
+    raise RuntimeError("Can't canonicalize address %s" % addr)
+
+data = json.load(sys.stdin)
+unique = set()
+for pairs in data["unexpected-sharing"]:
+    unique.add(canonicalize(pairs))
+for c in unique:
+    print c
