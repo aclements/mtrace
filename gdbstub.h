@@ -24,6 +24,7 @@ int gdb_handlesig (CPUState *, int);
 void gdb_signalled(CPUState *, int);
 void gdbserver_fork(CPUState *);
 #endif
+int gdbserver_running(void);
 /* Get or set a register.  Returns the size of the register.  */
 typedef int (*gdb_reg_cb)(CPUState *env, uint8_t *buf, int reg);
 void gdb_register_coprocessor(CPUState *env,

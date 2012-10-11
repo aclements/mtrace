@@ -1302,8 +1302,20 @@ static int check_exception(int intno, int *error_code)
 
         qemu_log_mask(CPU_LOG_RESET, "Triple fault\n");
 
+#if 0
         qemu_system_reset_request();
         return EXCP_HLT;
+#else
+        /*
+         * QEMU traditionally resets the machine on triple fault
+         * because programs written for 286 protected mode would exit
+         * protected mode by intentionally triple faulting the machine
+         * (after setting the boot vector to point to their code).
+         * This sucks for debugging programs that were written after
+         * 1985, so we instead halt the machine for inspection.
+         */
+        return EXCP_TRIPLE;
+#endif
     }
 #endif
 
