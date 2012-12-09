@@ -327,7 +327,7 @@ static void init_static_syms(const char* sym_file)
     while (fi.good()) {
         fi.getline(line, sizeof(line));
 
-        r = sscanf(line, "%"PRIx64" %"PRIx64" %c %[^\n]", &addr, &size, &type, str);
+        r = sscanf(line, "%" PRIx64" %" PRIx64" %c %[^\n]", &addr, &size, &type, str);
         if (r == 4 && (type == 'D' || type == 'd' || // .data
                        type == 'B' || type == 'b' || // .bbs
                        type == 'r' || type == 'R' || // .ro
@@ -348,7 +348,7 @@ static void init_static_syms(const char* sym_file)
             continue;
         }
 
-        r = sscanf(line, "%"PRIu64" %c %s", &addr, &type, str);
+        r = sscanf(line, "%" PRIu64" %c %s", &addr, &type, str);
         if (r == 3 && type == 'D') {
             if (!strcmp("__per_cpu_end", str)) {
                 percpu_end = addr;

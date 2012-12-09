@@ -136,7 +136,7 @@ SerialSections::exit(void)
     
     for (; it != stat_.end(); ++it) {
         SerialSectionStat* stat = &it->second;
-        printf(" %s  %"PRIu64"  %"PRIu64"\n",
+        printf(" %s  %" PRIu64"  %" PRIu64"\n",
                stat->name.c_str(),
                    stat->summary.total_cycles(),
                stat->summary.acquires);
@@ -263,7 +263,7 @@ SerialSections::handle_lock(const struct mtrace_lock_entry* l)
             SerialSectionKey key;
             
             if (!mtrace_label_map.object(l->lock, object)) {
-                fprintf(stderr, "SerialSections::handle: missing %"PRIx64" (%s) %"PRIx64"\n",
+                fprintf(stderr, "SerialSections::handle: missing %" PRIx64" (%s) %" PRIx64"\n",
                         l->lock, l->str, l->pc);
                 return;
             }
@@ -319,7 +319,7 @@ SerialSections::handle_access(const struct mtrace_access_entry* a)
 //
 SerialSections::SerialSectionSummary::SerialSectionSummary(void)
     : per_pc_coherence_miss(),
-      ts_cycles( {0}),
+      ts_cycles {0},
       acquires(0),
       mismatches(0),
       locked_inst(0)
@@ -335,7 +335,7 @@ SerialSections::SerialSectionSummary::add(const SerialSection* ss)
     }
     
     if (ss->end < ss->start)
-        die("SerialSectionSummary::add %"PRIu64" < %"PRIu64,
+        die("SerialSectionSummary::add %" PRIu64" < %" PRIu64,
             ss->end, ss->start);
     
     ts_cycles[ss->acquire_cpu] += ss->end - ss->start;

@@ -187,7 +187,7 @@ resolve_type_offset(const dwarf::dwarf &dw, const string &type,
             continue;
 
         // Found our starting point
-        sprintf(buf, "%"PRIx64, base);
+        sprintf(buf, "%" PRIx64, base);
         return "(*(" + type + ")0x" + buf + ")" + do_offset(d, offset);
     }
 
@@ -196,6 +196,6 @@ resolve_type_offset(const dwarf::dwarf &dw, const string &type,
     if (pc != 0)
         return resolve_type_offset(dw, type, base, offset, 0);
 
-    sprintf(buf, "%"PRIx64, offset);
+    sprintf(buf, "%" PRIx64, offset);
     return type + "+0x" + buf;
 }

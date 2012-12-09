@@ -26,28 +26,28 @@ public:
         switch (fcall->state) {
         case mtrace_start:
             if (call_stacks_.count(fcall->tag))
-                die("PerCallStack::handle: cannot start call stack %#"PRIx64"; already exists", fcall->tag);
+                die("PerCallStack::handle: cannot start call stack %#" PRIx64"; already exists", fcall->tag);
             if (current_[cpu])
-                die("PerCallStack::handle: cannot start call stack %#"PRIx64"; cpu %d already has a call stack", fcall->tag, cpu);
+                die("PerCallStack::handle: cannot start call stack %#" PRIx64"; cpu %d already has a call stack", fcall->tag, cpu);
             current_[cpu] = new T(fcall, args...);
             call_stacks_[fcall->tag] = current_[cpu];
             break;
         case mtrace_pause:
             if (!current_[cpu] && !pcs_warning_pause) {
-                fprintf(stderr, "PerCallStack::handle: cannot pause call stack %#"PRIx64"; cpu %d has no call stack\n", fcall->tag, cpu);
+                fprintf(stderr, "PerCallStack::handle: cannot pause call stack %#" PRIx64"; cpu %d has no call stack\n", fcall->tag, cpu);
                 pcs_warning_pause = true;
             }
             current_[cpu] = NULL;
             break;
         case mtrace_resume:
             if (!call_stacks_.count(fcall->tag))
-                die("PerCallStack::handle: cannot resume call stack %#"PRIx64"; unknown tag", fcall->tag);
+                die("PerCallStack::handle: cannot resume call stack %#" PRIx64"; unknown tag", fcall->tag);
             if (current_[cpu]) {
                 T* target = call_stacks_.find(fcall->tag)->second;
                 if (target != current_[cpu]) {
-                    die("PerCallStack::handle: cannot resume call stack %#"PRIx64"; cpu %d already has a call stack", fcall->tag, cpu);
+                    die("PerCallStack::handle: cannot resume call stack %#" PRIx64"; cpu %d already has a call stack", fcall->tag, cpu);
                 } else if (!pcs_warning_resume) {
-                    fprintf(stderr, "PerCallStack::handle: double resume of call stack %#"PRIx64"\n", fcall->tag);
+                    fprintf(stderr, "PerCallStack::handle: double resume of call stack %#" PRIx64"\n", fcall->tag);
                     pcs_warning_resume = true;
                 }
             }
@@ -55,7 +55,7 @@ public:
             break;
         case mtrace_done:
             if (!current_[cpu])
-                die("PerCallStack::handle: cannot end call stack %#"PRIx64"; cpu %d has no call stack", fcall->tag, cpu);
+                die("PerCallStack::handle: cannot end call stack %#" PRIx64"; cpu %d has no call stack", fcall->tag, cpu);
             delete current_[cpu];
             current_[cpu] = NULL;
             call_stacks_.erase(fcall->tag);

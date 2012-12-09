@@ -117,7 +117,7 @@ private:
         case mtrace_resume: {
             auto it = call_stack_.find(e->tag);
             if (it == call_stack_.end())
-                die("CallTrace::handle: missing call stack %#"PRIx64 "", e->tag);
+                die("CallTrace::handle: missing call stack %#" PRIx64 "", e->tag);
             current_[cpu] = it->second;
             break;
         }
@@ -125,7 +125,7 @@ private:
             CallStack* cs = new CallStack(e);
             auto it = call_stack_.find(e->tag);
             if (it != call_stack_.end())
-                die("CallTrace::handle: found call stack %#"PRIx64"", e->tag);
+                die("CallTrace::handle: found call stack %#" PRIx64"", e->tag);
             call_stack_[e->tag] = cs;
             current_[cpu] = cs;
             break;

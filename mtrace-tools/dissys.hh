@@ -67,7 +67,7 @@ public:
                 (float)pit->second.calls;
 
             func = addr2line->function_name(pc);
-            printf("%-32s %10"PRIu64" %10"PRIu64" %10.2f\n",
+            printf("%-32s %10" PRIu64" %10" PRIu64" %10.2f\n",
                    func.c_str(),
                    pit->second.calls,
                    pit->second.distinct, n);
@@ -185,7 +185,7 @@ public:
         uint64_t dist = distinct();
         float ave = (float)dist / (float)mtrace_summary.app_ops;
 
-        printf("%s ops: %"PRIu64" distincts: %"PRIu64" ave: %.2f\n",
+        printf("%s ops: %" PRIu64" distincts: %" PRIu64" ave: %.2f\n",
                mtrace_summary.app_name, mtrace_summary.app_ops, dist, ave);
     }
 
