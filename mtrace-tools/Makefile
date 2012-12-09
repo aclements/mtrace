@@ -42,11 +42,11 @@ mtrace-magic: mtrace-magic.o
 	$(Q)$(CC) $(LDFLAGS) -o $@ $^ $(LOADLIBES) $(LDLIBS)
 CLEAN += mtrace-magic mtrace-magic.o
 
-%.o: %.c
+%.o: %.c check-libelfin
 	@echo "  CC       $@"
 	$(Q)$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $< -MD -MP -MF .$*.d
 
-%.o: %.cc
+%.o: %.cc check-libelfin
 	@echo "  CXX      $@"
 	$(Q)$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $< -MD -MP -MF .$*.d
 
