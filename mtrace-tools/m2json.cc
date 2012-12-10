@@ -160,11 +160,12 @@ int main(int argc, char **argv)
 	if (!fp)
 		edie("gzopen %s", argv[0]);
         thelist = JsonList::create();
+        thelist->write_to(&cout, 0, nullptr);
 	while ((r = read_entry(fp, &entry)) > 0)
 		handle_entry(&entry);
 	if (r < 0)
 		die("failed to read entry");
 	gzclose(fp);
-        thelist->write_to(&cout, 0, nullptr);
+        thelist->done();
 	return 0;
 }
