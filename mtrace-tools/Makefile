@@ -24,7 +24,7 @@ MSCAN_SRCS = mscan.cc addr2line.cc hash.c bininfo.cc sersec.cc addrs.cc
 
 CLEAN =
 
-all: mscan m2text mtrace-magic check-py
+all: mscan m2text mtrace-magic check-py m2json
 
 mscan: $(addsuffix .o,$(basename $(MSCAN_SRCS))) \
 		libelfin/dwarf/libdwarf++.a libelfin/elf/libelf++.a
@@ -36,6 +36,11 @@ m2text: m2text.o
 	@echo "  LD       $@"
 	$(Q)$(CC) $(LDFLAGS) -o $@ $^ $(LOADLIBES) $(LDLIBS)
 CLEAN += m2text m2text.o
+
+m2json: m2json.o
+	@echo "  LD       $@"
+	$(Q)$(CXX) $(LDFLAGS) -o $@ $^ $(LOADLIBES) $(LDLIBS)
+CLEAN += m2json m2json.o
 
 mtrace-magic: mtrace-magic.o
 	@echo "  LD       $@"
