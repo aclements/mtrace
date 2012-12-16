@@ -24,6 +24,7 @@ extern "C" {
 #include "asharing.hh"
 #include "argparse.hh"
 #include "addrs.hh"
+#include "checktest.hh"
 
 #include "bininfo.hh"
 #include <elf++.hh>
@@ -61,6 +62,7 @@ static struct MtraceOptions {
     bool        unexpected_sharing;
     bool        summary;
     bool        shared_addresses;
+    bool        check_testcases;
 } mtrace_options;
 
 class DefaultHostHandler : public EntryHandler {
@@ -305,6 +307,14 @@ static void init_handlers(void)
         entry_handler[mtrace_entry_access].push_back(addrs);
         exit_handler.push_back(addrs);
     }
+
+    if (mtrace_options.check_testcases) {
+        CheckTestcases* ct = new CheckTestcases();
+        entry_handler[mtrace_entry_host].push_back(ct);
+        entry_handler[mtrace_entry_ascope].push_back(ct);
+        entry_handler[mtrace_entry_access].push_back(ct);
+        exit_handler.push_back(ct);
+    }
 }
 
 static void init_static_syms(const char* sym_file)
@@ -406,9 +416,11 @@ static void handle_arg(const ArgParse* parser, string option, string val)
         mtrace_options.abstract_scopes = true;
     } else if (option == "unexpected-sharing") {
         mtrace_options.unexpected_sharing = true;
-    } else if (option == "shared-addresses")
+    } else if (option == "shared-addresses") {
         mtrace_options.shared_addresses = true;
-    else {
+    } else if (option == "check-testcases") {
+        mtrace_options.check_testcases = true;
+    } else {
         die("handle_arg: unexpected");
     }
 }
@@ -443,6 +455,8 @@ int main(int ac, char** av)
                      "Workload summary");
     parse.add_option("shared-addresses",
                      "Shared (object, address) pairs");
+    parse.add_option("check-testcases",
+                     "Check for cache line sharing in commutative testcases");
     parse.parse(handle_arg);
 
     // The default if no arguments
