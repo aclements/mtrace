@@ -41,52 +41,56 @@ struct AccessSet {
     }
 };
 
-class Testcase : public EntryHandler {
+class Testcase {
 public:
-    Testcase(const std::string &n) : name_(n), scopecount_(0) {}
+    Testcase(const std::string &n) : name_(n), scopecount_() {}
 
-    virtual void handle(const union mtrace_entry* entry) {
-        if (entry->h.type == mtrace_entry_ascope) {
-            if (0 != scope_prefix.compare(0, scope_prefix.size(),
-                                          entry->ascope.name,
-                                          0, scope_prefix.size()))
-                return;
+    void handle(const mtrace_ascope_entry* entry) {
+        int cpu = entry->h.cpu;
 
-            if (entry->ascope.exit)
-                scopecount_--;
-            else
-                scopecount_++;
+        if (0 != scope_prefix.compare(0, scope_prefix.size(),
+                                      entry->name,
+                                      0, scope_prefix.size()))
+            return;
 
-            assert(scopecount_ >= 0);
-        }
+        if (scopecount_.count(cpu) == 0)
+            scopecount_[cpu] = 0;
 
-        if (entry->h.type == mtrace_entry_access) {
-            if (scopecount_ == 0)
-                return;
+        if (entry->exit)
+            scopecount_[cpu]--;
+        else
+            scopecount_[cpu]++;
 
-            PhysicalAccess pa;
-            pa.access = entry->access.guest_addr;
-            pa.pc = entry->access.pc;
-            pa.size = entry->access.bytes;
-            pa.stack = 0;
-
-            MtraceObject obj;
-            if (mtrace_label_map.object(pa.access, obj)) {
-                pa.type = obj.name_;
-                pa.base = obj.guest_addr_;
-            } else {
-                pa.base = 0;
-            }
-
-            int cpu = entry->h.cpu;
-            if (cpuacc_.count(cpu) == 0)
-                cpuacc_[cpu] = AccessSet();
-
-            cpuacc_[cpu].add_access(pa, entry->access.access_type);
-        }
+        assert(scopecount_[cpu] >= 0);
     }
 
-    virtual void exit(JsonDict* out) {
+    void handle(const mtrace_access_entry* entry) {
+        int cpu = entry->h.cpu;
+
+        if (scopecount_[cpu] == 0)
+            return;
+
+        PhysicalAccess pa;
+        pa.access = entry->guest_addr;
+        pa.pc = entry->pc;
+        pa.size = entry->bytes;
+        pa.stack = 0;
+
+        MtraceObject obj;
+        if (mtrace_label_map.object(pa.access, obj)) {
+            pa.type = obj.name_;
+            pa.base = obj.guest_addr_;
+        } else {
+            pa.base = 0;
+        }
+
+        if (cpuacc_.count(cpu) == 0)
+            cpuacc_[cpu] = AccessSet();
+
+        cpuacc_[cpu].add_access(pa, entry->access_type);
+    }
+
+    bool exit(JsonDict* out) {
         std::set<uint64_t> overlap_addrs;
         std::set<std::pair<PhysicalAccess, PhysicalAccess>> overlaps;
 
@@ -124,19 +128,20 @@ public:
             }
         }
 
+        if (overlaps.size() == 0)
+            return false;
+
         out->put("name", name_);
-        out->put("nshared", overlaps.size());
         JsonList* jshared = JsonList::create();
-        for (auto& x: overlaps) {
-            // jshared->append(x.first.to_json(&x.second));
-            jshared->append(x.first.access);
-        }
+        for (auto& x: overlaps)
+            jshared->append(x.first.to_json(&x.second));
         out->put("shared", jshared);
+        return true;
     }
 
 private:
     std::string name_;
-    int scopecount_;
+    std::map<int, int> scopecount_;
     std::map<int, AccessSet> cpuacc_;
 };
 
@@ -145,7 +150,6 @@ public:
     CheckTestcases() : testcase_(0), testcases_() {}
 
     virtual void handle(const union mtrace_entry* entry) {
-
         switch (entry->h.type) {
         case mtrace_entry_host:
             if (entry->host.host_type == mtrace_access_all_cpu) {
@@ -161,9 +165,13 @@ public:
             break;
 
         case mtrace_entry_ascope:
+            if (testcase_)
+                testcase_->handle(&entry->ascope);
+            break;
+
         case mtrace_entry_access:
             if (testcase_)
-                testcase_->handle(entry);
+                testcase_->handle(&entry->access);
             break;
 
         default:
@@ -177,9 +185,8 @@ public:
 
         for (auto& t: testcases_) {
             JsonDict* jd = JsonDict::create();
-            jl->append(jd, false);
-            t->exit(jd);
-            jd->done();
+            if (t->exit(jd))
+                jl->append(jd);
         }
 
         jl->done();
