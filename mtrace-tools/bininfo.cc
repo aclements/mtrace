@@ -168,8 +168,12 @@ resolve_type_offset(const dwarf::dwarf &dw, const string &type,
 
     for (auto &cu : dw.compilation_units()) {
         const die &root = cu.root();
-        if (pc != 0 && !die_pc_range(root).contains(pc))
+        try {
+            if (pc != 0 && !die_pc_range(root).contains(pc))
+                continue;
+        } catch (out_of_range& e) {
             continue;
+        }
 
         // Get or create the type name map
         auto tnit = type_names.find(root);
