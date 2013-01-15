@@ -1,0 +1,14 @@
+#!/usr/bin/python
+
+import sys
+import json
+
+def distinct_cpus(x):
+  return (len(filter(lambda x: x != 0, x['cpuwrites'])),
+          len(filter(lambda x: x != 0, x['cpureads'])))
+
+d = json.loads(sys.stdin.read())
+d['shared_cachelines'] = sorted(d['shared_cachelines'],
+                                key=distinct_cpus,
+                                reverse=True)
+print json.dumps(d, indent=2)
