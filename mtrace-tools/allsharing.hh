@@ -12,8 +12,8 @@
 #include <dwarf++.hh>
 
 struct AccessSetCount {
-    std::map<uint64_t, PhysicalAccess> read_;
-    std::map<uint64_t, PhysicalAccess> write_;
+    std::map<uint64_t, std::set<PhysicalAccess>*> read_;
+    std::map<uint64_t, std::set<PhysicalAccess>*> write_;
 
     std::map<uint64_t, uint64_t> readcount_;
     std::map<uint64_t, uint64_t> writecount_;
@@ -27,14 +27,15 @@ struct AccessSetCount {
         case mtrace_access_iw:
             writecount_[addr]++;
             if (write_.count(addr) == 0)
-                write_[addr] = pa;
-            read_.erase(addr);
+                write_[addr] = new std::set<PhysicalAccess>();
+            write_[addr]->insert(pa);
             break;
 
         case mtrace_access_ld:
             readcount_[addr]++;
-            if (write_.count(addr) == 0 && read_.count(addr) == 0)
-                read_[addr] = pa;
+            if (read_.count(addr) == 0)
+                read_[addr] = new std::set<PhysicalAccess>();
+            read_[addr]->insert(pa);
             break;
 
         default:
@@ -109,7 +110,7 @@ public:
             int maxcpu = 0;
             std::map<uint64_t, uint64_t> cpu_reads;
             std::map<uint64_t, uint64_t> cpu_writes;
-            PhysicalAccess pa;
+            std::set<PhysicalAccess> pas;
             for (auto& cpu: cpuacc_) {
                 AccessSetCount& cpuacc = cpu.second;
 
@@ -121,16 +122,22 @@ public:
                 cpu_writes[cpu.first] += cpuacc.writecount_[addr];
 
                 if (cpuacc.read_.count(addr))
-                    pa = cpuacc.read_[addr];
+                    pas.insert(cpuacc.read_[addr]->begin(),
+                               cpuacc.read_[addr]->end());
                 if (cpuacc.write_.count(addr))
-                    pa = cpuacc.write_[addr];
+                    pas.insert(cpuacc.write_[addr]->begin(),
+                               cpuacc.write_[addr]->end());
             }
 
             if (cpu_count <= 1)
                 continue;
 
             JsonDict* jd = JsonDict::create();
-            jd->put("pa", pa.to_json());
+
+            JsonList* palist = JsonList::create();
+            for (auto& pa: pas)
+                palist->append(pa.to_json());
+            jd->put("accesses", palist);
 
             JsonList* cpureads = JsonList::create();
             JsonList* cpuwrites = JsonList::create();
