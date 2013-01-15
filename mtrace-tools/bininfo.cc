@@ -191,8 +191,12 @@ resolve_type_offset(const dwarf::dwarf &dw, const string &type,
             continue;
 
         // Found our starting point
-        sprintf(buf, "%" PRIx64, base);
-        return "(*(" + type + ")0x" + buf + ")" + do_offset(d, offset);
+        try {
+            sprintf(buf, "%" PRIx64, base);
+            return "(*(" + type + ")0x" + buf + ")" + do_offset(d, offset);
+        } catch (out_of_range& e) {
+            continue;
+        }
     }
 
     // The pc may not have known what type it was manipulating (e.g.,
