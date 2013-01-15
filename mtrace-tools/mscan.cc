@@ -25,6 +25,7 @@ extern "C" {
 #include "argparse.hh"
 #include "addrs.hh"
 #include "checktest.hh"
+#include "allsharing.hh"
 
 #include "bininfo.hh"
 #include <elf++.hh>
@@ -63,6 +64,7 @@ static struct MtraceOptions {
     bool        summary;
     bool        shared_addresses;
     bool        check_testcases;
+    bool        all_sharing;
 } mtrace_options;
 
 class DefaultHostHandler : public EntryHandler {
@@ -315,6 +317,13 @@ static void init_handlers(void)
         entry_handler[mtrace_entry_access].push_back(ct);
         exit_handler.push_back(ct);
     }
+
+    if (mtrace_options.all_sharing) {
+        AllSharing* as = new AllSharing();
+        entry_handler[mtrace_entry_host].push_back(as);
+        entry_handler[mtrace_entry_access].push_back(as);
+        exit_handler.push_back(as);
+    }
 }
 
 static void init_static_syms(const char* sym_file)
@@ -420,6 +429,8 @@ static void handle_arg(const ArgParse* parser, string option, string val)
         mtrace_options.shared_addresses = true;
     } else if (option == "check-testcases") {
         mtrace_options.check_testcases = true;
+    } else if (option == "all-sharing") {
+        mtrace_options.all_sharing = true;
     } else {
         die("handle_arg: unexpected");
     }
@@ -457,6 +468,8 @@ int main(int ac, char** av)
                      "Shared (object, address) pairs");
     parse.add_option("check-testcases",
                      "Check for cache line sharing in commutative testcases");
+    parse.add_option("all-sharing",
+                     "Report all sharing between CPUs");
     parse.parse(handle_arg);
 
     // The default if no arguments
