@@ -10,7 +10,7 @@
 
 using namespace::std;
 
-#define MAX_CPUS 8
+#define MAX_CPUS 256
 
 typedef uint64_t call_tag_t;
 typedef uint64_t pc_t;
