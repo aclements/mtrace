@@ -26,6 +26,7 @@ extern "C" {
 #include "addrs.hh"
 #include "checktest.hh"
 #include "allsharing.hh"
+#include "cacheassoc.hh"
 
 #include "bininfo.hh"
 #include <elf++.hh>
@@ -65,6 +66,7 @@ static struct MtraceOptions {
     bool        shared_addresses;
     bool        check_testcases;
     bool        all_sharing;
+    bool        cache_assoc;
 } mtrace_options;
 
 class DefaultHostHandler : public EntryHandler {
@@ -324,6 +326,14 @@ static void init_handlers(void)
         entry_handler[mtrace_entry_access].push_back(as);
         exit_handler.push_back(as);
     }
+
+    if (mtrace_options.cache_assoc) {
+        CacheAssoc* ca = new CacheAssoc();
+        entry_handler[mtrace_entry_machine].push_back(ca);
+        entry_handler[mtrace_entry_host].push_back(ca);
+        entry_handler[mtrace_entry_access].push_back(ca);
+        exit_handler.push_back(ca);
+    }
 }
 
 static void init_static_syms(const char* sym_file)
@@ -431,6 +441,8 @@ static void handle_arg(const ArgParse* parser, string option, string val)
         mtrace_options.check_testcases = true;
     } else if (option == "all-sharing") {
         mtrace_options.all_sharing = true;
+    } else if (option == "cache-assoc") {
+        mtrace_options.cache_assoc = true;
     } else {
         die("handle_arg: unexpected");
     }
@@ -470,6 +482,8 @@ int main(int ac, char** av)
                      "Check for cache line sharing in commutative testcases");
     parse.add_option("all-sharing",
                      "Report all sharing between CPUs");
+    parse.add_option("cache-assoc",
+                     "Report cache associativity set contention");
     parse.parse(handle_arg);
 
     // The default if no arguments
