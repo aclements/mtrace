@@ -295,6 +295,7 @@ union mtrace_entry {
 
 #ifndef QEMU_MTRACE
 
+#ifndef PIN_MTRACE
 /*
  * Magic instruction for calling into mtrace in QEMU.
  */
@@ -308,6 +309,12 @@ static inline void mtrace_magic(unsigned long ax, unsigned long bx,
 		       "c" (cx), "d" (dx), 
 		       "S" (si), "D" (di));
 }
+#else
+void mtrace_magic(unsigned long a0, unsigned long a1,
+                  unsigned long a2, unsigned long a3,
+                  unsigned long a4, unsigned long a5)
+    __attribute__((noinline));
+#endif
 
 static inline void mtrace_entry_register(volatile struct mtrace_entry_header *h,
 					 unsigned long type,
