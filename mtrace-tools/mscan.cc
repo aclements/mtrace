@@ -27,6 +27,7 @@ extern "C" {
 #include "checktest.hh"
 #include "allsharing.hh"
 #include "cacheassoc.hh"
+#include "fcalls.hh"
 
 #include "bininfo.hh"
 #include <elf++.hh>
@@ -67,6 +68,7 @@ static struct MtraceOptions {
     bool        check_testcases;
     bool        all_sharing;
     bool        cache_assoc;
+    bool        fcalls;
 } mtrace_options;
 
 class DefaultHostHandler : public EntryHandler {
@@ -334,6 +336,13 @@ static void init_handlers(void)
         entry_handler[mtrace_entry_access].push_back(ca);
         exit_handler.push_back(ca);
     }
+
+    if (mtrace_options.fcalls) {
+        FCalls* fc = new FCalls();
+        entry_handler[mtrace_entry_access].push_back(fc);
+        entry_handler[mtrace_entry_fcall].push_back(fc);
+        exit_handler.push_back(fc);
+    }
 }
 
 static void init_static_syms(const char* sym_file)
@@ -443,6 +452,8 @@ static void handle_arg(const ArgParse* parser, string option, string val)
         mtrace_options.all_sharing = true;
     } else if (option == "cache-assoc") {
         mtrace_options.cache_assoc = true;
+    } else if (option == "fcalls") {
+        mtrace_options.fcalls = true;
     } else {
         die("handle_arg: unexpected");
     }
@@ -484,6 +495,8 @@ int main(int ac, char** av)
                      "Report all sharing between CPUs");
     parse.add_option("cache-assoc",
                      "Report cache associativity set contention");
+    parse.add_option("fcalls",
+                     "Report each fcall and its accesses");
     parse.parse(handle_arg);
 
     // The default if no arguments
