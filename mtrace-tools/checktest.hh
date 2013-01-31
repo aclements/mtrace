@@ -74,7 +74,7 @@ public:
         pa.access = entry->guest_addr;
         pa.pc = entry->pc;
         pa.size = entry->bytes;
-        pa.stack = 0;
+        pa.stack = mtrace_call_trace->new_current(cpu);
 
         MtraceObject obj;
         if (mtrace_label_map.object(pa.access, obj)) {
