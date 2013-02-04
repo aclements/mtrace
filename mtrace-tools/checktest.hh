@@ -43,7 +43,8 @@ struct AccessSet {
 
 class Testcase {
 public:
-    Testcase(const std::string &n) : name_(n), scopecount_(), done_(false) {}
+    Testcase(const std::string &n, bool kernelscope)
+      : name_(n), kernelscope_(kernelscope), scopecount_(), done_(false) {}
 
     void handle(const mtrace_ascope_entry* entry) {
         int cpu = entry->h.cpu;
@@ -67,7 +68,7 @@ public:
     void handle(const mtrace_access_entry* entry) {
         int cpu = entry->h.cpu;
 
-        if (scopecount_[cpu] == 0)
+        if (!kernelscope_ && scopecount_[cpu] == 0)
             return;
 
         PhysicalAccess pa;
@@ -150,6 +151,7 @@ public:
 
 private:
     std::string name_;
+    bool kernelscope_;
     std::map<int, int> scopecount_;
     std::map<int, AccessSet> cpuacc_;
 
@@ -165,8 +167,11 @@ public:
         switch (entry->h.type) {
         case mtrace_entry_host:
             if (entry->host.host_type == mtrace_access_all_cpu) {
-                if (entry->host.access.mode == mtrace_record_ascope) {
-                    testcase_ = new Testcase(entry->host.access.str);
+                if (entry->host.access.mode == mtrace_record_ascope ||
+                    entry->host.access.mode == mtrace_record_kernelscope)
+                {
+                    bool kscope = (entry->host.access.mode == mtrace_record_kernelscope);
+                    testcase_ = new Testcase(entry->host.access.str, kscope);
                     testcases_.push_back(testcase_);
                 }
 
