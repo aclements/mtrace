@@ -43,7 +43,7 @@ struct AccessSet {
 
 class Testcase {
 public:
-    Testcase(const std::string &n) : name_(n), scopecount_() {}
+    Testcase(const std::string &n) : name_(n), scopecount_(), done_(false) {}
 
     void handle(const mtrace_ascope_entry* entry) {
         int cpu = entry->h.cpu;
@@ -74,7 +74,7 @@ public:
         pa.access = entry->guest_addr;
         pa.pc = entry->pc;
         pa.size = entry->bytes;
-        pa.stack = mtrace_call_trace->new_current(cpu);
+        pa.stack = mtrace_call_trace->get_current(cpu);
 
         MtraceObject obj;
         if (mtrace_label_map.object(pa.access, obj)) {
@@ -90,9 +90,12 @@ public:
         cpuacc_[cpu].add_access(pa, entry->access_type);
     }
 
-    bool exit(JsonDict* out) {
+    void done() {
+        if (done_)
+            return;
+        done_ = true;
+
         std::set<uint64_t> overlap_addrs;
-        std::set<std::pair<PhysicalAccess, PhysicalAccess>> overlaps;
 
         for (auto& cpu_a: cpuacc_) {
             for (auto& cpu_b: cpuacc_) {
@@ -107,11 +110,11 @@ public:
                     const PhysicalAccess& pa_a = write_a.second;
 
                     if (acc_b.read_.count(addr_a) && !overlap_addrs.count(pa_a.access)) {
-                        overlaps.insert(make_pair(pa_a, acc_b.read_[addr_a]));
+                        overlaps_.insert(make_pair(pa_a, acc_b.read_[addr_a]));
                         overlap_addrs.insert(pa_a.access);
                     }
                     if (acc_b.write_.count(addr_a) && !overlap_addrs.count(pa_a.access)) {
-                        overlaps.insert(make_pair(pa_a, acc_b.write_[addr_a]));
+                        overlaps_.insert(make_pair(pa_a, acc_b.write_[addr_a]));
                         overlap_addrs.insert(pa_a.access);
                     }
                 }
@@ -121,19 +124,25 @@ public:
                     const PhysicalAccess& pa_a = read_a.second;
 
                     if (acc_b.write_.count(addr_a) && !overlap_addrs.count(pa_a.access)) {
-                        overlaps.insert(make_pair(pa_a, acc_b.write_[addr_a]));
+                        overlaps_.insert(make_pair(pa_a, acc_b.write_[addr_a]));
                         overlap_addrs.insert(pa_a.access);
                     }
                 }
             }
         }
 
-        if (overlaps.size() == 0)
+        scopecount_.clear();
+        cpuacc_.clear();
+    }
+
+    bool exit(JsonDict* out) {
+        done();
+        if (overlaps_.size() == 0)
             return false;
 
         out->put("name", name_);
         JsonList* jshared = JsonList::create();
-        for (auto& x: overlaps)
+        for (auto& x: overlaps_)
             jshared->append(x.first.to_json(&x.second));
         out->put("shared", jshared);
         return true;
@@ -143,6 +152,9 @@ private:
     std::string name_;
     std::map<int, int> scopecount_;
     std::map<int, AccessSet> cpuacc_;
+
+    bool done_;
+    std::set<std::pair<PhysicalAccess, PhysicalAccess>> overlaps_;
 };
 
 class CheckTestcases : public EntryHandler {
@@ -159,6 +171,7 @@ public:
                 }
 
                 if (entry->host.access.mode == mtrace_record_disable) {
+                    testcase_->done();
                     testcase_ = 0;
                 }
             }
