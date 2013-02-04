@@ -98,9 +98,9 @@ public:
             // the kmalloc before the mtrace kernel code registered
             // the trace functions.
             misses[l->label_type]++;
-            if (misses[l->label_type] > 200)
-                die("suspicious number of misses %u",
-                    l->label_type);
+            if (misses[l->label_type] == 200)
+                fprintf(stderr, "suspicious number of misses: type %u\n",
+                        l->label_type);
         } else {
             MtraceObject* o = it->second;
 
