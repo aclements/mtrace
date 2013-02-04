@@ -171,7 +171,8 @@ public:
                 }
 
                 if (entry->host.access.mode == mtrace_record_disable) {
-                    testcase_->done();
+                    if (testcase_)
+                        testcase_->done();
                     testcase_ = 0;
                 }
             }

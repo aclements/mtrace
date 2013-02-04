@@ -517,7 +517,11 @@ int main(int ac, char** av)
     if (fd < 0)
         die("failed to open %s", elf_file);
     mtrace_elf = elf::elf(elf::create_mmap_loader(fd));
-    mtrace_dwarf = dwarf::dwarf(dwarf::elf::create_loader(mtrace_elf));
+    try {
+        mtrace_dwarf = dwarf::dwarf(dwarf::elf::create_loader(mtrace_elf));
+    } catch (std::exception& e) {
+        cerr << "Cannot init dwarf: " << e.what() << "\n";
+    }
 
     init_static_syms(sym_file);
     init_entry_alloc();
