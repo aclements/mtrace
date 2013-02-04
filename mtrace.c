@@ -712,6 +712,7 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
 	    mtrace_call_stack[cpu] = tag;
 	    break;
 	case mtrace_done:
+	case mtrace_done_value:
 	    mtrace_del_per_call_stack(tag);
 	case mtrace_pause:
 	    mtrace_call_stack[cpu] = 0;
