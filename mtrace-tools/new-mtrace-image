@@ -147,7 +147,7 @@ class Root(object):
               '--include=' + include,
               '--exclude=udev',
               '--variant=minbase',
-              'squeeze',
+              'wheezy',
               self.tmp,
               'http://mirrors.xmission.com/debian/']).run()
 
