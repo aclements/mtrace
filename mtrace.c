@@ -352,7 +352,9 @@ static int mtrace_cline_update_ld(uint8_t * host_addr, unsigned int cpu)
     block = qemu_ramblock_from_host(host_addr);
     offset = host_addr - block->host;
 
-    if (mtrace_mode == mtrace_record_ascope) {
+    if (mtrace_mode == mtrace_record_ascope ||
+	mtrace_mode == mtrace_record_kernelscope)
+    {
 	/* Abstract scope mode.  Everything gets tracked.  We rely on
 	 * higher-level filtering in mtrace_access_enabled, so we only
 	 * get here if this access is performed by code running in an
@@ -384,7 +386,9 @@ static int mtrace_cline_update_st(uint8_t *host_addr, unsigned int cpu)
     block = qemu_ramblock_from_host(host_addr);
     offset = host_addr - block->host;
 
-    if (mtrace_mode == mtrace_record_ascope) {
+    if (mtrace_mode == mtrace_record_ascope ||
+	mtrace_mode == mtrace_record_kernelscope)
+    {
 	return 1;
     } else {
 	unsigned long cline = offset >> MTRACE_CLINE_SHIFT;
@@ -405,6 +409,8 @@ static inline int mtrace_access_enabled(void)
     if (mtrace_mode == mtrace_record_ascope &&
 	mtrace_my_call_stack(cpu_single_env->cpu_index)->ascope_depth == 0)
 	return 0;
+    if (mtrace_mode == mtrace_record_kernelscope)
+	return (cpu_single_env->segs[R_CS].selector & 3) != 3;
     return 1;
 }
 
@@ -579,7 +585,7 @@ static void mtrace_reset_cline_track(mtrace_record_mode_t mode)
 {
     RAMBlock *block;
 
-    if (mode == mtrace_record_ascope)
+    if (mode == mtrace_record_ascope || mode == mtrace_record_kernelscope)
 	/* No tracking */
 	return;
 

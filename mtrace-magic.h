@@ -52,8 +52,11 @@ typedef enum {
     mtrace_record_movement,
 
     /* Record unique accesses within each abstract scope at a
-       granularity of 16 bytes. */
+     * granularity of 16 bytes. */
     mtrace_record_ascope,
+
+    /* Like mtrace_record_ascope, but record iff in kernel mode. */
+    mtrace_record_kernelscope,
 } mtrace_record_mode_t;
 
 #define __pack__ __attribute__((__packed__))

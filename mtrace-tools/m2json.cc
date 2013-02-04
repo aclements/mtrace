@@ -55,6 +55,7 @@ static void handle_entry(union mtrace_entry *entry)
                                 entry->host.access.mode == mtrace_record_disable ? "disable" :
                                 entry->host.access.mode == mtrace_record_movement ? "movement" :
                                 entry->host.access.mode == mtrace_record_ascope ? "ascope" :
+                                entry->host.access.mode == mtrace_record_kernelscope ? "kernelscope" :
                                 "unknown");
                         je->put("access_str", entry->host.access.str);
 			break;
