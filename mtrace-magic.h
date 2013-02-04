@@ -93,6 +93,7 @@ typedef enum {
     mtrace_start = 1,
     /* Terminate the call stack identified by 'tag'. */
     mtrace_done,
+    mtrace_done_value,
     /* Resume execution on the paused call stack identified by 'tag'.
      * A call stack may be resumed on a different cpu than it was
      * paused on. */
@@ -176,6 +177,7 @@ struct mtrace_access_entry {
     mtrace_access_t access_type;
     uint8_t traffic:1;
     uint8_t lock:1;
+    uint8_t deps:1;
     uint64_t pc;
     uint64_t host_addr;
     uint64_t guest_addr;

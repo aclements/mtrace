@@ -133,7 +133,8 @@ private:
         case mtrace_pause:
             current_[cpu] = NULL;
             break;
-        case mtrace_done: {
+        case mtrace_done_value: {
+        case mtrace_done:
             CallStack* cs = current_[cpu];
             if (cs == NULL)
                 die("CallTrace::handle: no current CallStack");
@@ -143,7 +144,7 @@ private:
             break;
         }
         default:
-            die("DistinctSyscalls::handle: default error");
+            die("CallTrace::handle: default");
         }
     }
 

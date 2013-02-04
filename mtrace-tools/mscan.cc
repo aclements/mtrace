@@ -27,7 +27,7 @@ extern "C" {
 #include "checktest.hh"
 #include "allsharing.hh"
 #include "cacheassoc.hh"
-#include "fcalls.hh"
+#include "sbw0.hh"
 
 #include "bininfo.hh"
 #include <elf++.hh>
@@ -68,7 +68,7 @@ static struct MtraceOptions {
     bool        check_testcases;
     bool        all_sharing;
     bool        cache_assoc;
-    bool        fcalls;
+    bool        sbw0;
 } mtrace_options;
 
 class DefaultHostHandler : public EntryHandler {
@@ -128,6 +128,7 @@ public:
             mtrace_call_pc[cpu] = 0;
             mtrace_tid[cpu] = 0;
             break;
+        case mtrace_done_value:
         case mtrace_done:
             mtrace_call_pc[cpu] = 0;
             mtrace_tid[cpu] = 0;
@@ -337,11 +338,11 @@ static void init_handlers(void)
         exit_handler.push_back(ca);
     }
 
-    if (mtrace_options.fcalls) {
-        FCalls* fc = new FCalls();
-        entry_handler[mtrace_entry_access].push_back(fc);
-        entry_handler[mtrace_entry_fcall].push_back(fc);
-        exit_handler.push_back(fc);
+    if (mtrace_options.sbw0) {
+        SBW0* sbw0 = new SBW0();
+        entry_handler[mtrace_entry_access].push_back(sbw0);
+        entry_handler[mtrace_entry_fcall].push_back(sbw0);
+        exit_handler.push_back(sbw0);
     }
 }
 
@@ -452,8 +453,8 @@ static void handle_arg(const ArgParse* parser, string option, string val)
         mtrace_options.all_sharing = true;
     } else if (option == "cache-assoc") {
         mtrace_options.cache_assoc = true;
-    } else if (option == "fcalls") {
-        mtrace_options.fcalls = true;
+    } else if (option == "sbw0") {
+        mtrace_options.sbw0 = true;
     } else {
         die("handle_arg: unexpected");
     }
@@ -495,8 +496,7 @@ int main(int ac, char** av)
                      "Report all sharing between CPUs");
     parse.add_option("cache-assoc",
                      "Report cache associativity set contention");
-    parse.add_option("fcalls",
-                     "Report each fcall and its accesses");
+    parse.add_option("sbw0", "");
     parse.parse(handle_arg);
 
     // The default if no arguments
