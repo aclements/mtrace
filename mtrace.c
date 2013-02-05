@@ -61,6 +61,7 @@ static int mtrace_count_disable[255];
 
 /* Call stack tag by CPU */
 static uint64_t mtrace_call_stack[255];
+static int mtrace_call_stack_tagvalid[255];
 
 struct mtrace_call_stack_info
 {
@@ -258,6 +259,8 @@ static void mtrace_del_per_call_stack(uint64_t tag)
 
 static struct mtrace_call_stack_info *mtrace_my_call_stack(int cpu)
 {
+    if (!mtrace_call_stack_tagvalid[cpu])
+	return 0;
     return mtrace_get_per_call_stack(mtrace_call_stack[cpu]);
 }
 
@@ -406,9 +409,12 @@ static inline int mtrace_access_enabled(void)
 {
     if (!mtrace_system_enable || !mtrace_mode)
 	return 0;
-    if (mtrace_mode == mtrace_record_ascope &&
-	mtrace_my_call_stack(cpu_single_env->cpu_index)->ascope_depth == 0)
-	return 0;
+    if (mtrace_mode == mtrace_record_ascope) {
+	struct mtrace_call_stack_info *s =
+	    mtrace_my_call_stack(cpu_single_env->cpu_index);
+	if (!s || s->ascope_depth == 0)
+	    return 0;
+    }
     if (mtrace_mode == mtrace_record_kernelscope)
 	return (cpu_single_env->segs[R_CS].selector & 3) != 3;
     return 1;
@@ -710,22 +716,30 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
 	case mtrace_start:
 	case mtrace_resume:
 	    mtrace_call_stack[cpu] = tag;
+	    mtrace_call_stack_tagvalid[cpu] = 1;
 	    break;
 	case mtrace_done:
 	case mtrace_done_value:
 	    mtrace_del_per_call_stack(tag);
 	case mtrace_pause:
-	    mtrace_call_stack[cpu] = 0;
+	    mtrace_call_stack_tagvalid[cpu] = 0;
 	    break;
 	}
     }
 
     /* Special handling for abstract scopes */
     if (type == mtrace_entry_ascope) {
-	if (entry.ascope.exit)
-	    mtrace_my_call_stack(entry.h.cpu)->ascope_depth--;
-	else
-	    mtrace_my_call_stack(entry.h.cpu)->ascope_depth++;
+	struct mtrace_call_stack_info *s =
+	    mtrace_my_call_stack(entry.h.cpu);
+	if (!s) {
+	    fprintf(stderr, "Error: mtrace_entry_ascope (%s, %s) with no stack tag!\n",
+                    entry.ascope.exit ? "exit" : "enter", entry.ascope.name);
+	} else {
+	    if (entry.ascope.exit)
+		s->ascope_depth--;
+	    else
+		s->ascope_depth++;
+	}
     }
 
     /* Special handling for locks */
