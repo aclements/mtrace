@@ -142,6 +142,17 @@ static void handle_entry(union mtrace_entry *entry)
                 je->put("write", entry->avar.write);
                 je->put("name", entry->avar.name);
 		break;
+        case mtrace_entry_gc:
+                je->put("type", "gc");
+                je->put("base", entry->gc.base);
+                je->put("nbytes", entry->gc.nbytes);
+                je->put("name", entry->gc.name);
+                je->put("gcflag", entry->gc.gc);
+                break;
+        case mtrace_entry_gcepoch:
+                je->put("type", "gcepoch");
+                je->put("begin", entry->gcepoch.begin);
+                break;
 	default:
 		fprintf(stderr, "print_entry: bad type %u\n", entry->h.type);
 	}

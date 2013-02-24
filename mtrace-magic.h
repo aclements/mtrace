@@ -21,6 +21,9 @@ typedef enum {
     mtrace_entry_ascope,        /* abstract variable scope */
     mtrace_entry_avar,          /* abstract variables */
 
+    mtrace_entry_gc,
+    mtrace_entry_gcepoch,
+
     mtrace_entry_num		/* NB actually num + 1 */
 } mtrace_entry_t;
 
@@ -279,6 +282,22 @@ struct mtrace_avar_entry {
     char name[64];
 } __pack__;
 
+/*
+ * RCU GC
+ */
+struct mtrace_gc_entry {
+    struct mtrace_entry_header h;
+    uint64_t base;
+    uint64_t nbytes;
+    char name[64];
+    uint8_t gc:1;     // object scheduled for GC (otherwise, specifies nbytes)
+} __pack__;
+
+struct mtrace_gcepoch_entry {
+    struct mtrace_entry_header h;
+    uint8_t begin:1;
+} __pack__;
+
 
 union mtrace_entry {
     struct mtrace_entry_header h;
@@ -296,6 +315,8 @@ union mtrace_entry {
     struct mtrace_appdata_entry appdata;
     struct mtrace_ascope_entry ascope;
     struct mtrace_avar_entry avar;
+    struct mtrace_gc_entry gc;
+    struct mtrace_gcepoch_entry gcepoch;
 } __pack__;
 
 #ifndef QEMU_MTRACE
@@ -485,6 +506,28 @@ static inline void mtrace_ascope_register(int is_exit, const char *name)
     strncpy((char*)entry.name, name, sizeof(entry.name));
 
     mtrace_entry_register(&entry.h, mtrace_entry_ascope, sizeof(entry));
+}
+
+static inline void mtrace_gc_register(uint64_t base, uint64_t nbytes,
+                                      const char* name, int is_gc)
+{
+    volatile struct mtrace_gc_entry entry;
+
+    entry.base = base;
+    entry.nbytes = nbytes;
+    strncpy((char*)entry.name, name, sizeof(entry.name));
+    entry.gc = is_gc;
+
+    mtrace_entry_register(&entry.h, mtrace_entry_gc, sizeof(entry));
+}
+
+static inline void mtrace_gcepoch_register(int is_begin)
+{
+    volatile struct mtrace_gcepoch_entry entry;
+
+    entry.begin = is_begin;
+
+    mtrace_entry_register(&entry.h, mtrace_entry_gcepoch, sizeof(entry));
 }
 
 #endif /* QEMU_MTRACE */

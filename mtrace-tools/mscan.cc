@@ -28,6 +28,7 @@ extern "C" {
 #include "allsharing.hh"
 #include "cacheassoc.hh"
 #include "sbw0.hh"
+#include "checkgc.hh"
 
 #include "bininfo.hh"
 #include <elf++.hh>
@@ -69,6 +70,7 @@ static struct MtraceOptions {
     bool        all_sharing;
     bool        cache_assoc;
     bool        sbw0;
+    bool        check_gc;
 } mtrace_options;
 
 class DefaultHostHandler : public EntryHandler {
@@ -344,6 +346,15 @@ static void init_handlers(void)
         entry_handler[mtrace_entry_fcall].push_back(sbw0);
         exit_handler.push_back(sbw0);
     }
+
+    if (mtrace_options.check_gc) {
+        CheckGC* cg = new CheckGC();
+        entry_handler[mtrace_entry_host].push_back(cg);
+        entry_handler[mtrace_entry_access].push_back(cg);
+        entry_handler[mtrace_entry_gc].push_back(cg);
+        entry_handler[mtrace_entry_gcepoch].push_back(cg);
+        exit_handler.push_back(cg);
+    }
 }
 
 static void init_static_syms(const char* sym_file)
@@ -455,6 +466,8 @@ static void handle_arg(const ArgParse* parser, string option, string val)
         mtrace_options.cache_assoc = true;
     } else if (option == "sbw0") {
         mtrace_options.sbw0 = true;
+    } else if (option == "check-gc") {
+        mtrace_options.check_gc = true;
     } else {
         die("handle_arg: unexpected");
     }
@@ -497,6 +510,8 @@ int main(int ac, char** av)
     parse.add_option("cache-assoc",
                      "Report cache associativity set contention");
     parse.add_option("sbw0", "");
+    parse.add_option("check-gc",
+                     "Check for RCU memory accessed without gc_epoch");
     parse.parse(handle_arg);
 
     // The default if no arguments
