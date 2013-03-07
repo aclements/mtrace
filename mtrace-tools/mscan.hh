@@ -4,6 +4,7 @@
 #include <map>
 #include <sstream>
 #include <iomanip>
+#include <list>
 
 #include "addr2line.hh"
 #include "bininfo.hh"
