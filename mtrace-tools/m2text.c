@@ -119,10 +119,11 @@ static void print_entry(union mtrace_entry *entry)
 		       entry->call.return_pc);
 		break;
 	case mtrace_entry_lock:
-		printf("%-3s [%-3u  pc %16"PRIx64"  lock %16"PRIx64"  %s]\n",
+		printf("%-3s [%-3u  ts %16"PRIu64" pc %16"PRIx64"  lock %16"PRIx64"  %s]\n",
 		       entry->lock.op == mtrace_lockop_release ? "r" 
 		       		      : (entry->lock.read ? "ar" : "aw"),
 		       entry->h.cpu,
+		       entry->h.ts,
 		       entry->lock.pc,
 		       entry->lock.lock,
 		       entry->lock.str);
