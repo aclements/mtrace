@@ -170,11 +170,6 @@ class DiskImage(Root):
         self.tmp = tempfile.mkdtemp(prefix='new-mtrace-image-', dir=os.path.dirname(filepath))
 
     def mount(self, quiet = False):
-        if os.path.exists(self.tmp):
-            raise Exception('Failed: temporary directory exists: %s' % self.tmp)               
-        else:
-            os.mkdir(self.tmp)
-
         sudo(['mount',
               '-o',
               'loop',
@@ -184,7 +179,6 @@ class DiskImage(Root):
     def umount(self, quiet = False):
         sudo(['umount',
               self.tmp]).run(quiet)
-        os.rmdir(self.tmp)
 
     def create(self, img_size):
         if os.path.isfile(self.filepath):
