@@ -742,13 +742,6 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
 	}
     }
 
-    /* Special handling for locks */
-    if (type == mtrace_entry_lock) {
-	/* Only record lock operations in movement mode */
-	if (mtrace_mode != mtrace_record_movement)
-	    return;
-    }
-
     mtrace_log_entry(&entry);
 }
 
