@@ -1,4 +1,6 @@
+#include <ext/hash_map>
 #include <vector>
+#include "hash.h"
 
 using namespace::std;
 using namespace::__gnu_cxx;

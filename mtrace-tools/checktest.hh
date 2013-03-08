@@ -5,6 +5,7 @@
 
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
+#include <assert.h>
 
 #include "percallstack.hh"
 #include "bininfo.hh"

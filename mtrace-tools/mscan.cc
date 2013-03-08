@@ -18,7 +18,6 @@ extern "C" {
 #include "mscan.hh"
 #include "calltrace.hh"
 #include "dissys.hh"
-#include "sersec.hh"
 #include "sysaccess.hh"
 #include "false.hh"
 #include "asharing.hh"
@@ -59,7 +58,6 @@ static struct MtraceOptions {
     bool        syscall_accesses;
     bool        syscall_accesses_pc;
     bool        false_sharing;
-    bool        serial_sections;
     bool        distinct_ops;
     bool        distinct_sys;
     bool        abstract_scopes;
@@ -266,14 +264,6 @@ static void init_handlers(void)
         }
     }
 
-    SerialSections* sersecs = NULL;
-    if (mtrace_options.serial_sections) {
-        sersecs = new SerialSections();
-        entry_handler[mtrace_entry_lock].push_back(sersecs);
-        entry_handler[mtrace_entry_access].push_back(sersecs);
-        exit_handler.push_back(sersecs);
-    }
-
     if (mtrace_options.false_sharing) {
         FalseSharing* false_sharing = new FalseSharing();
         entry_handler[mtrace_entry_access].push_back(false_sharing);
@@ -443,8 +433,6 @@ static void handle_arg(const ArgParse* parser, string option, string val)
         mtrace_options.syscall_accesses_pc = true;        
     } else if (option == "false-sharing")  {
         mtrace_options.false_sharing = true;
-    } else if (option == "serial-sections") {
-        mtrace_options.serial_sections = true;
     } else if (option == "distinct-ops") {
         mtrace_options.distinct_ops = true;
         mtrace_options.distinct_sys = true;
@@ -489,8 +477,6 @@ int main(int ac, char** av)
                      "The PC of every access, organized by syscall");
     parse.add_option("false-sharing",
                      "False sharing");
-    parse.add_option("serial-sections",
-                     "Serial sections");
     parse.add_option("distinct-ops",
                      "Average distinct cache lines per operation");
     parse.add_option("distinct-sys",
@@ -518,7 +504,6 @@ int main(int ac, char** av)
     if (ac == 1) {
         mtrace_options.distinct_sys = true;
         mtrace_options.false_sharing = true;
-        mtrace_options.serial_sections = true;
         mtrace_options.summary = true;
     }
 
