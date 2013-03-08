@@ -28,6 +28,7 @@ extern "C" {
 #include "cacheassoc.hh"
 #include "sbw0.hh"
 #include "checkgc.hh"
+#include "serlen.hh"
 
 #include "bininfo.hh"
 #include <elf++.hh>
@@ -68,6 +69,7 @@ static struct MtraceOptions {
     bool        all_sharing;
     bool        cache_assoc;
     bool        sbw0;
+    bool        ser_len;
     bool        check_gc;
 } mtrace_options;
 
@@ -345,6 +347,12 @@ static void init_handlers(void)
         entry_handler[mtrace_entry_gcepoch].push_back(cg);
         exit_handler.push_back(cg);
     }
+
+    if (mtrace_options.ser_len) {
+        SerLen* serlen = new SerLen();
+        entry_handler[mtrace_entry_lock].push_back(serlen);
+        exit_handler.push_back(serlen);
+    }
 }
 
 static void init_static_syms(const char* sym_file)
@@ -456,6 +464,8 @@ static void handle_arg(const ArgParse* parser, string option, string val)
         mtrace_options.sbw0 = true;
     } else if (option == "check-gc") {
         mtrace_options.check_gc = true;
+    } else if (option == "serial-length") {
+        mtrace_options.ser_len = true;
     } else {
         die("handle_arg: unexpected");
     }
@@ -498,6 +508,9 @@ int main(int ac, char** av)
     parse.add_option("sbw0", "");
     parse.add_option("check-gc",
                      "Check for RCU memory accessed without gc_epoch");
+    parse.add_option("serial-length",
+                     "The number of instructions executed in each "
+                     "serial section");
     parse.parse(handle_arg);
 
     // The default if no arguments

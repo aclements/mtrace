@@ -20,7 +20,7 @@ CXXFLAGS := $(CFLAGS) -std=c++0x
 CPPFLAGS := -I$(QEMUDIR) -Ilibelfin/elf -Ilibelfin/dwarf
 LDLIBS   := -lz
 
-MSCAN_SRCS = mscan.cc addr2line.cc hash.c bininfo.cc addrs.cc sbw0.cc
+MSCAN_SRCS = mscan.cc addr2line.cc hash.c bininfo.cc addrs.cc sbw0.cc serlen.cc
 
 CLEAN =
 
