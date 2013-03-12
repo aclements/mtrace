@@ -5,7 +5,7 @@ INSTDIR = /usr/local/bin
 PYFLAKES = $(shell which pyflakes)
 
 # Author date (e.g., from git log) of known-working libelfin commit
-LIBELFIN_DATE := Mon Feb 4 11:36:41 2013 -0500
+LIBELFIN_DATE := Sun Mar 10 13:36:53 2013 -0400
 
 CXX  = g++
 CC   = gcc
