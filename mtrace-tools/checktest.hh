@@ -139,8 +139,9 @@ public:
 
     bool exit(JsonDict* out) {
         done();
-        if (overlaps_.size() == 0)
-            return false;
+        if (overlaps_.size() == 0) {
+            // return false;
+        }
 
         out->put("name", name_);
         JsonList* jshared = JsonList::create();
