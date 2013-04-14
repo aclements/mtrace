@@ -55,6 +55,7 @@ static LabelMap labels;
 static list<struct mtrace_label_entry> percpu_labels;
 
 static struct MtraceOptions {
+    string      log_file;
     set<pc_t>   stack_trace_pc;
     bool        syscall_accesses;
     bool        syscall_accesses_pc;
@@ -71,6 +72,8 @@ static struct MtraceOptions {
     bool        sbw0;
     bool        ser_len;
     bool        check_gc;
+
+    MtraceOptions() : log_file("mtrace.out") {}
 } mtrace_options;
 
 class DefaultHostHandler : public EntryHandler {
@@ -427,7 +430,9 @@ static void init_static_syms(const char* sym_file)
 
 static void handle_arg(const ArgParse* parser, string option, string val)
 {
-    if (option == "stack-trace-pc") {
+    if (option == "mtrace-log-file") {
+        mtrace_options.log_file = val;
+    } else if (option == "stack-trace-pc") {
         uint64_t x;
         stringstream ss;
 
@@ -475,10 +480,11 @@ int main(int ac, char** av)
 {
     char sym_file[128] = "mscan.syms";
     char elf_file[128] = "mscan.kern";
-    char log_file[128] = "mtrace.out";
     gzFile log;
 
     ArgParse parse(ac, av);
+    parse.add_option("mtrace-log-file", "FILE",
+                     "mtrace.out file name");
     parse.add_option("stack-trace-pc", "PC",
                      "Stack traces for access at PC");
     parse.add_option("syscall-accesses",
@@ -520,9 +526,9 @@ int main(int ac, char** av)
         mtrace_options.summary = true;
     }
 
-    log = gzopen(log_file, "rb");
+    log = gzopen(mtrace_options.log_file.c_str(), "rb");
     if (!log)
-        edie("gzopen %s", log_file);
+        edie("gzopen %s", mtrace_options.log_file.c_str());
 
     addr2line = new MtraceAddr2line(elf_file);
 
