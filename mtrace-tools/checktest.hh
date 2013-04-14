@@ -72,6 +72,10 @@ public:
         if (!kernelscope_ && scopecount_[cpu] == 0)
             return;
 
+        /* Skip sharing of user-space data by uaccess() in multiple procs */
+        if (entry->guest_addr < 0x800000000000)
+            return;
+
         PhysicalAccess pa;
         pa.access = entry->guest_addr;
         pa.pc = entry->pc;
