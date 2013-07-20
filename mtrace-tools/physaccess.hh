@@ -22,10 +22,10 @@ struct PhysicalAccess {
         }
         out->put("rawaddr", new JsonHex(access));
         if (other && pc != other->pc) {
-            out->put("pc1", addr2line->function_description(pc));
-            out->put("pc2", addr2line->function_description(other->pc));
+            out->put("pc1", addr2line->lookup(pc).to_string());
+            out->put("pc2", addr2line->lookup(other->pc).to_string());
         } else {
-            out->put("pc", addr2line->function_description(pc));
+            out->put("pc", addr2line->lookup(pc).to_string());
         }
         out->put("size", size);
 

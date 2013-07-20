@@ -44,7 +44,8 @@ public:
                 JsonDict* inst_dict = JsonDict::create();
                 inst_dict->put("name", sit->name_);
                 inst_dict->put("alloc-pc", new JsonHex(sit->alloc_pc_));
-                inst_dict->put("alloc-info", addr2line->function_description(sit->alloc_pc_));
+                inst_dict->put("alloc-info",
+                               addr2line->lookup(sit->alloc_pc_).to_string());
                 str_list->append(inst_dict);
             }
             dict->put("instances", str_list);

@@ -197,68 +197,6 @@ private:
     MtraceLabelMap types_;
 };
 
-class MtraceAddr2line {
-public:
-    MtraceAddr2line(const char* elf_file)
-        : addr2line_(elf_file) {}
-
-    string function_name(pc_t pc) const {
-        string func;
-        string file;
-        string line;
-
-        all_string(pc, func, file, line);
-        return func;
-    }
-
-    string function_description(pc_t pc) const {
-        stringstream ss;
-        string func;
-        string file;
-        string line;
-
-        ss << std::setw(16) << std::setfill('0') << std::hex;
-        ss << pc;
-        
-        all_string(pc, func, file, line);
-        return "0x" + ss.str() + ":" + file + ":" + line + ":" + func;
-    }
-
-private:
-    void all_string(pc_t pc, string& func, string& file, string& line) const {
-        char* xfunc;
-        char* xfile;
-        int xline;
-
-        if (pc == 0) {
-            func = "(unknown function)";
-            file = "(unknown file)";
-            line = "0";
-        } else if (addr2line_.lookup(pc, &xfunc, &xfile, &xline) == 0) {
-            stringstream ss;
-
-            func = xfunc;
-            file = xfile;
-            ss << xline;
-            line = ss.str();
-
-            free(xfunc);
-            free(xfile);
-
-        } else {
-            stringstream ss;
-
-            ss << pc;
-            func = ss.str();
-            file = "(unknown file)";
-            line = "0";
-        }
-    }
-
-
-    Addr2line addr2line_;
-};
-
 //
 // A bunch of global state the default handlers update
 //
@@ -268,7 +206,7 @@ extern struct mtrace_host_entry mtrace_first;
 // The current mtrace_host_entry
 extern struct mtrace_host_entry mtrace_enable;
 // An addr2line instance for the ELF file
-extern MtraceAddr2line* addr2line;
+extern Addr2line* addr2line;
 // A summary of the application/workload
 extern MtraceSummary mtrace_summary;
 // The current fcall/kernel entry point

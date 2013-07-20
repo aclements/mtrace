@@ -63,7 +63,7 @@ ObjectAddrStat::to_json(void)
     for (auto it = per_pc.begin(); it != per_pc.end(); ++it) {
         JsonDict* count = JsonDict::create();
         //count->put("pc", new JsonHex(it->first));
-        count->put("info", addr2line->function_description(it->first));
+        count->put("info", addr2line->lookup(it->first).to_string());
         count->put("count", it->second);
         l->append(count);
         tot += it->second;

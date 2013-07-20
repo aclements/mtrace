@@ -32,7 +32,7 @@ jsonify(const struct mtrace_access_entry& entry)
     d->put("bytes", entry.bytes);
     d->put("deps", entry.deps);
     d->put("description",
-           addr2line->function_description(entry.pc));
+           addr2line->lookup(entry.pc).to_string());
 
     return d;
 }
@@ -45,7 +45,7 @@ jsonify(const struct mtrace_fcall_entry& start,
     d->put("tag", start.tag);
     d->put("cpu", start.h.cpu);
     d->put("description",
-           addr2line->function_name(start.pc));
+           addr2line->lookup(start.pc).func);
     d->put("pc", new JsonHex(start.pc));
     d->put("start-access-count", start.h.access_count);
     d->put("done-access-count", done.h.access_count);

@@ -39,7 +39,7 @@ public:
             list = JsonList::create();
 
             pc = it->first;
-            name = addr2line->function_name(pc);
+            name = addr2line->lookup(pc).func;
 
             auto vit = it->second.begin();
             for (; vit != it->second.end(); ++vit) {
@@ -83,7 +83,7 @@ public:
             list = JsonList::create();
 
             pc = it->first;
-            name = addr2line->function_name(pc);
+            name = addr2line->lookup(pc).func;
 
             map<pc_t, uint64_t> pc_to_count;
 

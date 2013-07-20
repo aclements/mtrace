@@ -66,7 +66,7 @@ public:
             n = (float)pit->second.distinct /
                 (float)pit->second.calls;
 
-            func = addr2line->function_name(pc);
+            func = addr2line->lookup(pc).func;
             printf("%-32s %10" PRIu64" %10" PRIu64" %10.2f\n",
                    func.c_str(),
                    pit->second.calls,
@@ -91,7 +91,7 @@ public:
             n = (float)pit->second.distinct /
                 (float)pit->second.calls;
 
-            func = addr2line->function_name(pc);
+            func = addr2line->lookup(pc).func;
             dict->put("entry", func);
 
             dict->put("calls", pit->second.calls);
@@ -109,7 +109,7 @@ public:
             string func;
 
             pc = pit->first;
-            func = addr2line->function_name(pc);
+            func = addr2line->lookup(pc).func;
             if (strcmp(syscall, func.c_str()) == 0)
                 return pit->second.distinct;
         }

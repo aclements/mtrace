@@ -18,10 +18,10 @@ public:
             dict->put("type", it->ret ? "ret" : "call");
             dict->put("target-pc", new JsonHex(it->target_pc));
             dict->put("target-info",
-                      addr2line->function_description(it->target_pc));
+                      addr2line->lookup(it->target_pc).to_string());
             dict->put("return-pc", new JsonHex(it->return_pc));
             dict->put("return-info",
-                      addr2line->function_description(it->return_pc));
+                      addr2line->lookup(it->return_pc).to_string());
             list->append(dict);
         }
 
@@ -31,7 +31,7 @@ public:
     JsonList* new_json_short(void) const {
         JsonList* list = JsonList::create();
         for (auto &ce : stack_)
-            list->append(addr2line->function_description(ce.return_pc-1));
+            list->append(addr2line->lookup(ce.return_pc-1).to_string());
         return list;
     }
 
