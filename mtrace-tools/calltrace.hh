@@ -29,9 +29,13 @@ public:
     }
 
     JsonList* new_json_short(void) const {
+        // XXX This won't include the current PC
         JsonList* list = JsonList::create();
+        vector<line_info> lines;
         for (auto &ce : stack_)
-            list->append(addr2line->lookup(ce.return_pc-1).to_string());
+            addr2line->lookup(ce.return_pc-1, &lines);
+        for (auto &li : lines)
+            list->append(li.to_string());
         return list;
     }
 
