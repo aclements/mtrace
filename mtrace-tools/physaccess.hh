@@ -29,18 +29,17 @@ struct PhysicalAccess {
         }
         out->put("size", size);
 
-        // XXX It would be nice if these stacks included inlines
         if (other) {
             if (stack && other->stack) {
                 if (*stack == *other->stack) {
-                    out->put("stack", stack->new_json_short());
+                    out->put("stack", stack->new_json_short(pc));
                 } else {
-                    out->put("stack1", stack->new_json_short());
-                    out->put("stack2", other->stack->new_json_short());
+                    out->put("stack1", stack->new_json_short(pc));
+                    out->put("stack2", other->stack->new_json_short(other->pc));
                 }
             }
         } else if (stack) {
-            out->put("stack", stack->new_json_short());
+            out->put("stack", stack->new_json_short(pc));
         }
 
         return out;

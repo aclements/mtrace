@@ -28,10 +28,11 @@ public:
         return list;
     }
 
-    JsonList* new_json_short(void) const {
-        // XXX This won't include the current PC
+    JsonList* new_json_short(uint64_t cur_pc = ~0) const {
         JsonList* list = JsonList::create();
         vector<line_info> lines;
+        if (cur_pc != ~(uint64_t)0)
+            addr2line->lookup(cur_pc, &lines);
         for (auto &ce : stack_)
             addr2line->lookup(ce.return_pc-1, &lines);
         for (auto &li : lines)
