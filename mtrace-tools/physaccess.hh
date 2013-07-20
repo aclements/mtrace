@@ -15,6 +15,8 @@ struct PhysicalAccess {
             // XXX For static symbols, we only have the name of
             // the symbol, not the name of its type.
             out->put("addr", resolve_type_offset(mtrace_dwarf, type, base, access - base, pc));
+            if (other && other->type.size() && other->type != type)
+              out->put("addr2", resolve_type_offset(mtrace_dwarf, type, base, access - base, pc));
         } else {
             out->put("addr", new JsonHex(access));
         }
