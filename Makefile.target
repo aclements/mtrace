@@ -198,7 +198,7 @@ obj-$(CONFIG_REALLY_VIRTFS) += virtio-9p.o
 obj-y += rwhandler.o
 obj-$(CONFIG_KVM) += kvm.o kvm-all.o
 obj-$(CONFIG_NO_KVM) += kvm-stub.o
-LIBS+=-lz
+LIBS+=-lz -lrt
 
 QEMU_CFLAGS += $(VNC_TLS_CFLAGS)
 QEMU_CFLAGS += $(VNC_SASL_CFLAGS)
