@@ -31,7 +31,7 @@ line_info::to_string() const
     return ss.str();
 }
 
-Addr2line::Addr2line(const char* path)
+Addr2line::Addr2line(const std::string &path)
 {
     int out[2], in[2], check[2], child, r;
 
@@ -57,7 +57,7 @@ Addr2line::Addr2line(const char* path)
 
         for (i = 0; i < sizeof(addr2line_exe) / sizeof(addr2line_exe[0]); i++)
             r = execlp(addr2line_exe[i], addr2line_exe[i],
-                       "-C", "-f", "-s", "-i", "-e", path, NULL);
+                       "-C", "-f", "-s", "-i", "-e", path.c_str(), NULL);
         r = 1;
         r = write(check[1], &r, sizeof(r));
         assert(sizeof(r) == r);

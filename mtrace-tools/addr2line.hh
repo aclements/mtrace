@@ -20,7 +20,7 @@ private:
 
 public:
     // Construct an address-to-line translator for an ELF binary
-    explicit Addr2line(const char* path);
+    explicit Addr2line(const std::string &path);
     ~Addr2line();
 
     Addr2line(const Addr2line &o) = delete;
