@@ -56,6 +56,7 @@ static LabelMap labels;
 static list<struct mtrace_label_entry> percpu_labels;
 
 static struct MtraceOptions {
+    string      elf_file;
     string      log_file;
     set<pc_t>   stack_trace_pc;
     bool        syscall_accesses;
@@ -74,7 +75,7 @@ static struct MtraceOptions {
     bool        ser_len;
     bool        check_gc;
 
-    MtraceOptions() : log_file("mtrace.out") {}
+    MtraceOptions() : elf_file("mscan.kern"), log_file("mtrace.out") {}
 } mtrace_options;
 
 class DefaultHostHandler : public EntryHandler {
@@ -425,7 +426,9 @@ static void init_static_syms(const elf::elf &elf)
 
 static void handle_arg(const ArgParse* parser, string option, string val)
 {
-    if (option == "mtrace-log-file") {
+    if (option == "kernel") {
+        mtrace_options.elf_file = val;
+    } else if (option == "mtrace-log-file") {
         mtrace_options.log_file = val;
     } else if (option == "stack-trace-pc") {
         uint64_t x;
@@ -473,10 +476,11 @@ static void handle_arg(const ArgParse* parser, string option, string val)
 
 int main(int ac, char** av)
 {
-    char elf_file[128] = "mscan.kern";
     gzFile log;
 
     ArgParse parse(ac, av);
+    parse.add_option("kernel", "FILE",
+                     "ELF file of kernel (default mscan.kern)");
     parse.add_option("mtrace-log-file", "FILE",
                      "mtrace.out file name");
     parse.add_option("stack-trace-pc", "PC",
@@ -524,11 +528,11 @@ int main(int ac, char** av)
     if (!log)
         edie("gzopen %s", mtrace_options.log_file.c_str());
 
-    addr2line = new Addr2line(elf_file);
+    addr2line = new Addr2line(mtrace_options.elf_file);
 
-    int fd = open(elf_file, O_RDONLY);
+    int fd = open(mtrace_options.elf_file.c_str(), O_RDONLY);
     if (fd < 0)
-        die("failed to open %s", elf_file);
+        die("failed to open %s", mtrace_options.elf_file.c_str());
     mtrace_elf = elf::elf(elf::create_mmap_loader(fd));
     try {
         mtrace_dwarf = dwarf::dwarf(dwarf::elf::create_loader(mtrace_elf));
