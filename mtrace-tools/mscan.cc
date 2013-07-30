@@ -15,6 +15,7 @@ extern "C" {
 }
 
 #include "addr2line.hh"
+#include "demangle.hh"
 #include "mscan.hh"
 #include "calltrace.hh"
 #include "dissys.hh"
@@ -358,55 +359,51 @@ static void init_handlers(void)
     }
 }
 
-static void init_static_syms(const char* sym_file)
+static void init_static_syms(const elf::elf &elf)
 {
     list<struct mtrace_label_entry> tmp;
     uint64_t percpu_start = 0;
     uint64_t percpu_end = 0;
-    char line[512];
-    uint64_t addr;
-    uint64_t size;
-    char str[512];
-    char type;
-    int r;
 
-    ifstream fi;
-    fi.open(sym_file);
-    if (fi.fail())
-        die("failed to open %s", sym_file);
+    for (auto &sec : elf.sections()) {
+        if (sec.get_hdr().type != elf::sht::symtab)
+            continue;
 
-    while (fi.good()) {
-        fi.getline(line, sizeof(line));
+        elf::symtab syms = sec.as_symtab();
 
-        r = sscanf(line, "%" PRIx64" %" PRIx64" %c %[^\n]", &addr, &size, &type, str);
-        if (r == 4 && (type == 'D' || type == 'd' || // .data
-                       type == 'B' || type == 'b' || // .bbs
-                       type == 'r' || type == 'R' || // .ro
-                       type == 'A')) {               // absolute
+        for (auto sym : syms) {
+            auto &data = sym.get_data();
+
+            if ((data.binding() != elf::stb::global &&
+                 data.binding() != elf::stb::local) ||
+                data.type() != elf::stt::object)
+                continue;
+
+            const char *name = sym.get_name(nullptr);
+            if (strcmp("__per_cpu_end", name) == 0) {
+                percpu_end = data.value;
+                continue;
+            } else if (strcmp("__per_cpu_start", name) == 0){
+                percpu_start = data.value;
+                continue;
+            } else if (data.size == 0) {
+                continue;
+            }
+
+            // XXX Get symbol type information from DWARF
+
             struct mtrace_label_entry l;
-
             l.h.type = mtrace_entry_label;
             l.h.access_count = 0;
             l.label_type = mtrace_label_static;
-            strncpy(l.str, str, sizeof(l.str) - 1);
+            strncpy(l.str, demangle(name).c_str(), sizeof(l.str) - 1);
             l.str[sizeof(l.str) - 1] = 0;
             l.host_addr = 0;
-            l.guest_addr = addr;
-            l.bytes = size;
+            l.guest_addr = data.value;
+            l.bytes = data.size;
             l.pc = 0;
 
             tmp.push_back(l);
-            continue;
-        }
-
-        r = sscanf(line, "%" PRIu64" %c %s", &addr, &type, str);
-        if (r == 3 && type == 'D') {
-            if (!strcmp("__per_cpu_end", str)) {
-                percpu_end = addr;
-            } else if (!strcmp("__per_cpu_start", str)) {
-                percpu_start = addr;
-            }
-            continue;
         }
     }
 
@@ -424,8 +421,6 @@ static void init_static_syms(const char* sym_file)
 
         tmp.erase(it);
     }
-
-    fi.close();
 }
 
 static void handle_arg(const ArgParse* parser, string option, string val)
@@ -478,7 +473,6 @@ static void handle_arg(const ArgParse* parser, string option, string val)
 
 int main(int ac, char** av)
 {
-    char sym_file[128] = "mscan.syms";
     char elf_file[128] = "mscan.kern";
     gzFile log;
 
@@ -542,7 +536,7 @@ int main(int ac, char** av)
         cerr << "Cannot init dwarf: " << e.what() << "\n";
     }
 
-    init_static_syms(sym_file);
+    init_static_syms(mtrace_elf);
     init_entry_alloc();
     init_handlers();
 
