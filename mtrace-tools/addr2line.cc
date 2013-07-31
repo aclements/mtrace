@@ -88,11 +88,14 @@ Addr2line::lookup(uint64_t pc, std::vector<line_info> *out) const
 {
     char buf[4096];
 
-    // We add a dummy request so we can detect the end of the inline
-    // sequence.  The response will look like "??\n??:0\n".  If we ask
-    // for an unknown PC, we'll also get this response, but it will be
-    // the first response, so we know it's a real response.
-    int n = snprintf(buf, sizeof(buf), "%#" PRIx64 "\n\n", pc);
+    // We add a dummy known-bad address so we can detect the end of
+    // the inline sequence.  The response will look like "??\n??:0\n".
+    // If we ask for an unknown PC, we'll also get this response, but
+    // it will be the first response, so we know it's a real response.
+    // Note that sending a blank line isn't enough because addr2line
+    // will read that as 0, which can be a valid address (and is in
+    // the Linux kernel).
+    int n = snprintf(buf, sizeof(buf), "%#" PRIx64 "\n-1\n", pc);
     if (n != write(_out, buf, n))
         throw_errno();
 
