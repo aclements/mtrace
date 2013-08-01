@@ -2,7 +2,9 @@
 #define _ADDR2LINE_H
 
 #include <stdint.h>
+#include <list>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 struct line_info
@@ -17,6 +19,17 @@ struct line_info
 class Addr2line {
 private:
     int _out, _in;
+
+    struct cached
+    {
+        std::vector<line_info> stack;
+        std::list<uint64_t>::iterator pos;
+    };
+
+    mutable std::unordered_map<uint64_t, cached> _cache;
+    mutable std::list<uint64_t> _lru;
+
+    enum { CACHE_MAX = 1024 };
 
 public:
     // Construct an address-to-line translator for an ELF binary

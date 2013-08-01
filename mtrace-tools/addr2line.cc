@@ -86,6 +86,16 @@ Addr2line::~Addr2line()
 void
 Addr2line::lookup(uint64_t pc, std::vector<line_info> *out) const
 {
+    // Check cache
+    auto cit = _cache.find(pc);
+    if (cit != _cache.end()) {
+        struct cached *cval = &cit->second;
+        _lru.splice(_lru.begin(), _lru, cval->pos);
+        cval->pos = _lru.begin();
+        out->insert(out->end(), cval->stack.begin(), cval->stack.end());
+        return;
+    }
+
     char buf[4096];
 
     // We add a dummy known-bad address so we can detect the end of
@@ -115,6 +125,7 @@ Addr2line::lookup(uint64_t pc, std::vector<line_info> *out) const
         }
     }
 
+    auto out_init_len = out->size();
     char *pos = buf;
     while (*pos) {
         char* nl, *col, *end;
@@ -139,6 +150,17 @@ Addr2line::lookup(uint64_t pc, std::vector<line_info> *out) const
                 ("Malformed line number in addr2line output");
         out->push_back(li);
         pos = end + 1;
+    }
+
+    // Update cache
+    _lru.push_front(pc);
+    _cache.emplace(std::make_pair(pc, cached{{out->begin() + out_init_len,
+                                              out->end()}, _lru.begin()}));
+
+    // Evict
+    if (_cache.size() > CACHE_MAX) {
+        _cache.erase(_lru.back());
+        _lru.pop_back();
     }
 }
 
