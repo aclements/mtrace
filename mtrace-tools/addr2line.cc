@@ -26,8 +26,9 @@ line_info::to_string() const
 {
     std::stringstream ss;
     ss << func << " at " << file << ":" << line;
-    if (pc && func[0] != '0')
-        ss << " (0x" << std::hex << pc << ")";
+    // This makes mscan output impossible to diff
+    // if (pc && func[0] != '0')
+    //     ss << " (0x" << std::hex << pc << ")";
     return ss.str();
 }
 
