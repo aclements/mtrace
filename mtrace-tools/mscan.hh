@@ -85,14 +85,24 @@ public:
 
     void rem_label(const struct mtrace_label_entry* l) {
         static uint64_t misses[mtrace_label_end];
+        static uint64_t unknown_labels;
 
         auto it = object_first_.find(l->guest_addr);
         if (it == object_first_.end()) {
             extern struct mtrace_host_entry mtrace_enable;
 
-            if (mtrace_enable.access.mode)
-                die("unknown label removed at guest addr %llx",
-                    (unsigned long long)l->guest_addr);
+            if (mtrace_enable.access.mode) {
+                // XXX We used to die here unconditionally, but with
+                // Linux 3.8 this happens to me just often enough to
+                // be really annoying, but not often enough for me to
+                // think it's a real problem.
+                fprintf(stderr,
+                        "ERROR: unknown label removed at guest addr %llx",
+                        (unsigned long long)l->guest_addr);
+                if (++unknown_labels == 5)
+                    die("Too many unknown labels removed");
+                return;
+            }
 
             // We tolerate a few kfree calls for which we haven't
             // seen a previous kmalloc, because we might have missed
