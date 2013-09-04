@@ -10,35 +10,104 @@
 #include "percallstack.hh"
 #include "bininfo.hh"
 #include "physaccess.hh"
+#include "generator.hh"
 #include <dwarf++.hh>
 
 std::string scope_prefix("syscall:");
 
-struct AccessSet {
-    std::map<uint64_t, PhysicalAccess> read_;
-    std::map<uint64_t, PhysicalAccess> write_;
+struct AccessSet
+{
+    typedef std::map<uint64_t, PhysicalAccess> addr_map_t;
+    addr_map_t addrs_;
 
-    void add_access(const PhysicalAccess& pa, mtrace_access_t acctype) {
-        for (uint64_t off = 0; off < pa.size; off++) {
-            uint64_t addr = pa.access + off;
+    void add(PhysicalAccess &&pa)
+    {
+        if (pa.size == 0)
+            return;
 
-            switch (acctype) {
-            case mtrace_access_st:
-            case mtrace_access_iw:
-                if (write_.count(addr) == 0)
-                    write_[addr] = pa;
-                read_.erase(addr);
-                break;
-
-            case mtrace_access_ld:
-                if (write_.count(addr) == 0 && read_.count(addr) == 0)
-                    read_[addr] = pa;
-                break;
-
-            default:
-                assert(0);
-            }
+        // Test for overlap
+        auto oit = addrs_.lower_bound(pa.end());
+        // oit points to the access that starts *after* pa ends
+        if (oit == addrs_.begin() || !(--oit)->second.overlaps(pa)) {
+            // No overlap
+            oit = addrs_.insert(make_pair(pa.access, std::move(pa))).first;
+            try_merge(oit);
+            if (oit != addrs_.begin())
+                try_merge(--oit);
+            return;
         }
+
+        if (oit->second.access == pa.access && oit->second.size == pa.size &&
+            oit->second.is_write == pa.is_write)
+            // Trivial overlap.  Keep earlier access.
+            return;
+
+        // Complex overlap.  We have to handle the following cases
+        //
+        // |--pa--|           |--pa--|   |-----pa------|     |pa|
+        //    |overlap|   |overlap|         |overlap|     |overlap|
+        //  r1     r2      r3      r4     r1         r4    r3    r2
+        //
+        // pa may overlap with additional existing regions.  We'll
+        // handle that when we recursively insert the new regions.
+        auto overlap = oit->second;
+        addrs_.erase(oit);
+
+        // r1 and r3
+        add(trim(pa, pa.access, overlap.access));
+        add(trim(overlap, overlap.access, pa.access));
+
+        // r2 and r4
+        add(trim(overlap, pa.end(), overlap.end()));
+        add(trim(pa, overlap.end(), pa.end()));
+
+        // Overlapping area.  Here we have to choose which wins.
+        // Prefer the earlier access unless we're changing a read to a
+        // write.
+        add(trim((pa.is_write && !overlap.is_write) ? pa : overlap,
+                 std::max(pa.access, overlap.access),
+                 std::min(pa.end(), overlap.end())));
+    }
+
+    generator<std::pair<PhysicalAccess, PhysicalAccess>>
+        conflicts(const AccessSet &o)
+    {
+        auto it1 = addrs_.begin(), end1 = addrs_.end();
+        auto it2 = o.addrs_.begin(), end2 = o.addrs_.end();
+
+        return make_generator([=]() mutable {
+                while (it1 != end1 && it2 != end2) {
+                    const PhysicalAccess &acc1 = it1->second,
+                        &acc2 = it2->second;
+                    if (acc1.end() > acc2.end())
+                        ++it2;
+                    else
+                        ++it1;
+                    if (acc1.conflicts(acc2))
+                        return make_pair(acc1, acc2);
+                }
+                throw generator_stop();
+            });
+    }
+
+private:
+    // Try to merge *(it+1) into *it.
+    void try_merge(addr_map_t::iterator it)
+    {
+        auto next = it;
+        if (++next == addrs_.end())
+            return;
+        if (it->second.try_merge(next->second))
+            // it->second always has the lower address, so we don't
+            // have to adjust keys.
+            addrs_.erase(next);
+    }
+
+    PhysicalAccess trim(PhysicalAccess pa, uint64_t base, uint64_t end)
+    {
+        pa.access = base;
+        pa.size = base < end ? end - base : 0;
+        return pa;
     }
 };
 
@@ -81,6 +150,7 @@ public:
         pa.pc = entry->pc;
         pa.size = entry->bytes;
         pa.stack = mtrace_call_trace->get_current(cpu);
+        pa.is_write = (entry->access_type != mtrace_access_ld);
 
         MtraceObject obj;
         if (mtrace_label_map.object(pa.access, obj)) {
@@ -90,18 +160,13 @@ public:
             pa.base = 0;
         }
 
-        if (cpuacc_.count(cpu) == 0)
-            cpuacc_[cpu] = AccessSet();
-
-        cpuacc_[cpu].add_access(pa, entry->access_type);
+        cpuacc_[cpu].add(std::move(pa));
     }
 
     void done() {
         if (done_)
             return;
         done_ = true;
-
-        std::set<uint64_t> overlap_addrs;
 
         for (auto& cpu_a: cpuacc_) {
             for (auto& cpu_b: cpuacc_) {
@@ -111,29 +176,8 @@ public:
                 AccessSet& acc_a = cpu_a.second;
                 AccessSet& acc_b = cpu_b.second;
 
-                for (auto& write_a: acc_a.write_) {
-                    uint64_t addr_a = write_a.first;
-                    const PhysicalAccess& pa_a = write_a.second;
-
-                    if (acc_b.read_.count(addr_a) && !overlap_addrs.count(pa_a.access)) {
-                        overlaps_.insert(make_pair(pa_a, acc_b.read_[addr_a]));
-                        overlap_addrs.insert(pa_a.access);
-                    }
-                    if (acc_b.write_.count(addr_a) && !overlap_addrs.count(pa_a.access)) {
-                        overlaps_.insert(make_pair(pa_a, acc_b.write_[addr_a]));
-                        overlap_addrs.insert(pa_a.access);
-                    }
-                }
-
-                for (auto& read_a: acc_a.read_) {
-                    uint64_t addr_a = read_a.first;
-                    const PhysicalAccess& pa_a = read_a.second;
-
-                    if (acc_b.write_.count(addr_a) && !overlap_addrs.count(pa_a.access)) {
-                        overlaps_.insert(make_pair(pa_a, acc_b.write_[addr_a]));
-                        overlap_addrs.insert(pa_a.access);
-                    }
-                }
+                for (auto &conflict : acc_a.conflicts(acc_b))
+                    overlaps_.insert(conflict);
             }
         }
 

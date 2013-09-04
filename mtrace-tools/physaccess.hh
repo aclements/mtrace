@@ -6,6 +6,8 @@ struct PhysicalAccess {
     uint64_t access;
     uint64_t pc;
     uint8_t size;
+    bool is_write;              // Only used by CheckTestcases
+
     const CallTrace::CallStack *stack;
 
     JsonDict *to_json(const PhysicalAccess *other = nullptr) const
@@ -48,5 +50,40 @@ struct PhysicalAccess {
     bool operator<(const PhysicalAccess &o) const
     {
         return access < o.access;
+    }
+
+    uint64_t end() const
+    {
+        return access + size;
+    }
+
+    bool overlaps(const PhysicalAccess &o) const
+    {
+        return (access < o.access + o.size) && (o.access < access + size);
+    }
+
+    bool conflicts(const PhysicalAccess &o) const
+    {
+        return overlaps(o) && (is_write || o.is_write);
+    }
+
+    bool mergable(const PhysicalAccess &o) const
+    {
+        // Note that we don't require equivalent call stacks.
+        return (access <= o.access + o.size) && (o.access <= access + size) &&
+            type == o.type && base == o.base && pc == o.pc &&
+            is_write == o.is_write;
+    }
+
+    // Try to merge an overlapping or adjacent, compatible access into
+    // this one.
+    bool try_merge(const PhysicalAccess &o)
+    {
+        if (!mergable(o))
+            return false;
+        auto newend = std::max(end(), o.end());
+        access = std::min(access, o.access);
+        size = newend - access;
+        return true;
     }
 };
