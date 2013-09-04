@@ -97,7 +97,7 @@ public:
                 // be really annoying, but not often enough for me to
                 // think it's a real problem.
                 fprintf(stderr,
-                        "ERROR: unknown label removed at guest addr %llx",
+                        "ERROR: unknown label removed at guest addr %llx\n",
                         (unsigned long long)l->guest_addr);
                 if (++unknown_labels == 5)
                     die("Too many unknown labels removed");
