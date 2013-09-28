@@ -3,9 +3,8 @@ Q = @
 QEMUDIR = ..
 INSTDIR = /usr/local/bin
 PYFLAKES = $(shell which pyflakes)
-
-# Author date (e.g., from git log) of known-working libelfin commit
-LIBELFIN_DATE := Tue Jul 30 10:41:21 2013 -0400
+# Search for a local check-out of libelfin
+export PKG_CONFIG_PATH += :../../libelfin/elf:../../libelfin/dwarf
 
 CXX  = g++
 CC   = gcc
@@ -15,10 +14,11 @@ CWARNS	= -Wformat=2 -Wextra -Wmissing-noreturn -Wwrite-strings -Wshadow \
 	   -Wswitch-default -Wmissing-declarations -Wno-format-nonliteral \
 	   -Wno-deprecated -Wno-format-security
 
-CFLAGS   := -Wall -Werror $(CWARNS) -g -O3
+CFLAGS   := -Wall -Werror $(CWARNS) -g -O3 \
+	$$(pkg-config --cflags 'libdwarf++ >= 0.1')
 CXXFLAGS := $(CFLAGS) -std=c++0x
-CPPFLAGS := -I$(QEMUDIR) -Ilibelfin/elf -Ilibelfin/dwarf
-LDLIBS   := -lz
+CPPFLAGS := -I$(QEMUDIR)
+LDLIBS   := -lz $$(pkg-config --libs 'libdwarf++ >= 0.1')
 
 MSCAN_SRCS = mscan.cc addr2line.cc hash.c bininfo.cc addrs.cc sbw0.cc serlen.cc demangle.cc
 
@@ -26,8 +26,7 @@ CLEAN =
 
 all: mscan m2text mtrace-magic check-py m2json
 
-mscan: $(addsuffix .o,$(basename $(MSCAN_SRCS))) \
-		libelfin/dwarf/libdwarf++.a libelfin/elf/libelf++.a
+mscan: $(addsuffix .o,$(basename $(MSCAN_SRCS)))
 	@echo "  LD       $@"
 	$(Q)$(CXX) $(LDFLAGS) -o $@ $(filter %.o %.a,$^) $(LOADLIBES) $(LDLIBS)
 CLEAN += mscan $(addsuffix .o,$(basename $(MSCAN_SRCS)))
@@ -47,38 +46,17 @@ mtrace-magic: mtrace-magic.o
 	$(Q)$(CC) $(LDFLAGS) -o $@ $^ $(LOADLIBES) $(LDLIBS)
 CLEAN += mtrace-magic mtrace-magic.o
 
-%.o: %.c check-libelfin
+%.o: %.c
 	@echo "  CC       $@"
 	$(Q)$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $< -MD -MP -MF .$*.d
 
-%.o: %.cc check-libelfin
+%.o: %.cc
 	@echo "  CXX      $@"
 	$(Q)$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $< -MD -MP -MF .$*.d
 
 -include .*.d
 
-libelfin/%: check-libelfin
-	@$(MAKE) -C $(@D) -q $(@F) || $(MAKE) -C $(@D) $(@F)
-
-check-libelfin:
-	@if [ ! -d libelfin/.git ]; then \
-	 echo "libelfin not found; please"; \
-	 echo "$$ git clone git+ssh://am.lcs.mit.edu/home/am6/mpdev/libelfin.git"; \
-	 false; fi
-	@cd libelfin; \
-	 REV=$$(git log --format='%H %ad' --all | awk '/$(LIBELFIN_DATE)/ {print $$1; exit}'); \
-	 if [ "x$$REV" = x ]; then \
-	   echo "WARNING: libelfin commit from $(LIBELFIN_DATE) not found"; \
-	   if [ "x$$(git rev-list -n 1 --after=\"$$REV\" --all)" = x ]; then \
-	     echo "WARNING: Your libelfin clone appears to be out of date"; \
-	   fi; \
-	 elif [ "x$$(git rev-list -n 1 $$REV..HEAD)" != x ]; then \
-	   echo "WARNING: libelfin is ahead of expected rev $$REV"; \
-	 elif [ "x$$(git rev-list -n 1 HEAD..$$REV)" != x ]; then \
-	   echo "WARNING: libelfin is behind expected rev $$REV"; \
-	 fi
-
-.PHONY: install clean astyle check-py check-libelfin
+.PHONY: install clean astyle check-py
 
 ASTYLE = astyle
 ASTYLE_OPTS = --suffix=none \
