@@ -6,6 +6,10 @@ PYFLAKES = $(shell which pyflakes)
 # Search for a local check-out of libelfin
 export PKG_CONFIG_PATH += :../../libelfin/elf:../../libelfin/dwarf
 
+ifneq ($(shell PKG_CONFIG_PATH=${PKG_CONFIG_PATH} pkg-config --print-errors 'libdwarf++ >= 0.1'; echo $$?),0)
+$(error Please install libelfin from https://github.com/aclements/libelfin)
+endif
+
 CXX  = g++
 CC   = gcc
 
