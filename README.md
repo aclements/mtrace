@@ -1,4 +1,4 @@
-mtrace is a version of (QEMU)[http://www.qemu.org/] modified to log
+mtrace is a version of [QEMU](http://www.qemu.org/) modified to log
 memory accesses and other system events to help analyze and understand
 the memory access patterns and cache line behavior of operating
 system-level code.
