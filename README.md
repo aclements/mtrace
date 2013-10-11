@@ -16,10 +16,9 @@ mscan depends on libelfin, which can be found at
 
     git clone https://github.com/aclements/libelfin.git
 
-If libelfin is cloned and compiled next to the mtrace repository, the
-mtrace build process will find it automatically.  Otherwise, it must
-be installed somewhere `pkg-config` can find it (possibly via
-`PKG_CONFIG_PATH`).
+We recommend cloning and building libelfin next to the mtrace
+repository, as mtrace will find it automatically.  Alternatively, you
+can `make install` libelfin to install it system-wide.
 
 
 Building
@@ -28,21 +27,24 @@ Building
 Building mtrace is just like building QEMU.  We recommend a minimal
 configuration, optimized for testing OS code:
 
-    ./configure --prefix=PFX \
+    ./configure --prefix=PREFIX \
                 --target-list="x86_64-softmmu" \
                 --disable-kvm \
                 --audio-card-list="" \
                 --disable-vnc-jpeg \
                 --disable-vnc-png \
                 --disable-strip
+    make
 
-To build mscan
+Then, to build mscan
 
     cd mtrace-tools && make
 
 It's not necessary to `make install` either mtrace or mscan, though it
 may be a good idea to add `x86_64-softmmu/` and `mtrace-tools/` to
-your `$PATH`.
+your `$PATH`:
+
+    PATH=$PWD/x86_64-softmmu:$PWD/mtrace-tools:$PATH
 
 
 Running a Linux kernel in mtrace
@@ -52,8 +54,8 @@ Our mtrace-enabled version of Linux can be found at
 
     git clone https://github.com/aclements/linux-mtrace.git
 
-We recommend configuring and building this kernel as follows.  The
-first three configuration options are necessary to run the kernel in
+We recommend configuring and building the kernel as follows.  The
+first three configuration options are required to run the kernel in
 mtrace.  The rest just disables large features that are likely to be
 unnecessary.
 
@@ -86,11 +88,12 @@ unnecessary.
     echo CONFIG_SECURITY_SELINUX=n >> .config
     make olddefconfig
 
-    make -j4
+    make
 
 At this point, you can run this kernel in mtrace with
 
-    qemu-system-x86_64 -mtrace-enable -mtrace-file mtrace.out -kernel arch/x86_64/boot/bzImage -nographic -append console=ttyS0
+    qemu-system-x86_64 -mtrace-enable -mtrace-file mtrace.out \
+      -kernel arch/x86_64/boot/bzImage -nographic -append console=ttyS0
 
 It won't get very far without a disk or an initramfs to boot from, but
 you should get an `mtrace.out` with some basic log records in it.  Try
