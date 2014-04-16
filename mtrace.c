@@ -420,7 +420,8 @@ static inline int mtrace_access_enabled(void)
     return 1;
 }
 
-void mtrace_st(target_ulong host_addr, target_ulong guest_addr, char bytes, void *retaddr)
+void REGPARM mtrace_st(target_ulong host_addr, target_ulong guest_addr,
+                       char bytes, void *retaddr)
 {
     uint64_t a;
     int lock;
@@ -439,12 +440,14 @@ void mtrace_st(target_ulong host_addr, target_ulong guest_addr, char bytes, void
 			   a, retaddr, r, lock, bytes);
 }
 
-void mtrace_tcg_st(target_ulong host_addr, target_ulong guest_addr, char bytes)
+void REGPARM mtrace_tcg_st(target_ulong host_addr, target_ulong guest_addr,
+                           char bytes)
 {
     mtrace_st(host_addr, guest_addr, bytes, MTRACE_GETPC());
 }
 
-void mtrace_ld(target_ulong host_addr, target_ulong guest_addr, char bytes, void *retaddr)
+void REGPARM mtrace_ld(target_ulong host_addr, target_ulong guest_addr,
+                       char bytes, void *retaddr)
 {
     uint64_t a;
     int lock;
@@ -463,7 +466,8 @@ void mtrace_ld(target_ulong host_addr, target_ulong guest_addr, char bytes, void
 			   a, retaddr, r, lock, bytes);
 }
 
-void mtrace_tcg_ld(target_ulong host_addr, target_ulong guest_addr, char bytes)
+void REGPARM mtrace_tcg_ld(target_ulong host_addr, target_ulong guest_addr,
+                           char bytes)
 {
     mtrace_ld(host_addr, guest_addr, bytes, MTRACE_GETPC());
 }
