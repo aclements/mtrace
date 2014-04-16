@@ -22,7 +22,7 @@ struct ObjectAddrHash {
     size_t operator()(const ObjectAddrKey s) const {
         static const uint64_t length = sizeof(s)/sizeof(uintptr_t);
         register uintptr_t* k = (uintptr_t*)&s;
-        static_assert(length == 2, "Bad length");
+        static_assert(sizeof(s)%sizeof(uintptr_t) == 0, "Bad length");
         
         return bb_hash(k, length);
     }
