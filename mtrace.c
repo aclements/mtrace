@@ -432,7 +432,7 @@ void REGPARM mtrace_st(target_ulong host_addr, target_ulong guest_addr,
 
     a = mtrace_access_count++;
 
-    r = mtrace_cline_update_st((uint8_t *)host_addr, 
+    r = mtrace_cline_update_st((uint8_t *)(uintptr_t)host_addr,
 			       cpu_single_env->cpu_index);
     lock = mtrace_lock_active[cpu_single_env->cpu_index];
     if (r || lock)
@@ -458,7 +458,7 @@ void REGPARM mtrace_ld(target_ulong host_addr, target_ulong guest_addr,
 
     a = mtrace_access_count++;
 
-    r = mtrace_cline_update_ld((uint8_t *)host_addr, 
+    r = mtrace_cline_update_ld((uint8_t *)(uintptr_t)host_addr,
 			       cpu_single_env->cpu_index);
     lock = mtrace_lock_active[cpu_single_env->cpu_index];
     if (r || lock)
@@ -587,7 +587,7 @@ static int mtrace_host_addr(target_ulong guest_addr, target_ulong *host_addr)
     }
 
     ptr = qemu_get_ram_ptr(pd & TARGET_PAGE_MASK) + (phys & ~TARGET_PAGE_MASK);
-    *host_addr = (target_ulong)ptr;
+    *host_addr = (target_ulong)(uintptr_t)ptr;
     return 0;
 }
 
