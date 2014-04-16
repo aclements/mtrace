@@ -3,6 +3,9 @@
 
 // JSON spec: http://www.json.org/
 
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
+
 #include <string>
 #include <unordered_map>
 #include <list>
@@ -118,7 +121,7 @@ public:
     virtual bool write_to(ostream *o, int level, JsonObject *parent) {
         char buf[64];
         // JSON spec doesn't include hex numbers
-        snprintf(buf, sizeof(buf), "\"0x%lx\"", value_);
+        snprintf(buf, sizeof(buf), "\"0x%" PRIx64 "\"", value_);
         *o << buf;
         return true;
     }
