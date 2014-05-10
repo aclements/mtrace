@@ -165,12 +165,14 @@ Addr2line::lookup(uint64_t pc, std::vector<line_info> *out) const
         li.file = std::string(nl + 1, col - nl - 1);
         end = NULL;
         li.line = strtol(col + 1, &end, 10);
-        if (!end || *end != '\n')
+        // addr2line sometimes adds more information after the line
+        // number like " (discriminator 1)", so accept a space, too.
+        if (!end || end == col + 1 || (*end != '\n' && *end != ' '))
             throw std::runtime_error
                 ("Malformed line number in addr2line output for PC 0x" +
                  to_string(pc, 16) + ": " + std::string(nl + 1, nl2));
         out->push_back(li);
-        pos = end + 1;
+        pos = nl2 + 1;
     }
 
     // Update cache
