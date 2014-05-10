@@ -21,6 +21,22 @@ throw_errno()
     throw std::system_error(errno, std::system_category());
 }
 
+static std::string
+to_string(unsigned long long x, int base)
+{
+    const char digits[] = "0123456789abcdefghijklmnopqrstuvwxyz";
+    if (base > 36)
+        throw std::range_error("base exceeds 36");
+
+    char buf[sizeof(x) * 2];
+    char *end = buf + sizeof buf, *pos = end;
+    while (x) {
+        *(--pos) = digits[x % base];
+        x /= base;
+    }
+    return std::string(pos, end);
+}
+
 std::string
 line_info::to_string() const
 {
@@ -129,7 +145,7 @@ Addr2line::lookup(uint64_t pc, std::vector<line_info> *out) const
     auto out_init_len = out->size();
     char *pos = buf;
     while (*pos) {
-        char* nl, *col, *end;
+        char *nl, *nl2, *col, *end;
         line_info li;
         li.pc = (pos == buf ? pc : 0);
         nl = strchr(pos, '\n');
@@ -140,15 +156,19 @@ Addr2line::lookup(uint64_t pc, std::vector<line_info> *out) const
             ss << "0x" << std::hex << pc;
             li.func = ss.str();
         }
+        nl2 = strchr(nl + 1, '\n');
         col = strchr(nl, ':');
         if (!col)
-            throw std::runtime_error("Missing ':' in addr2line output");
+            throw std::runtime_error
+                ("Missing ':' in addr2line output for PC 0x" +
+                 to_string(pc, 16) + ": " + std::string(nl + 1, nl2));
         li.file = std::string(nl + 1, col - nl - 1);
         end = NULL;
         li.line = strtol(col + 1, &end, 10);
         if (!end || *end != '\n')
             throw std::runtime_error
-                ("Malformed line number in addr2line output");
+                ("Malformed line number in addr2line output for PC 0x" +
+                 to_string(pc, 16) + ": " + std::string(nl + 1, nl2));
         out->push_back(li);
         pos = end + 1;
     }
