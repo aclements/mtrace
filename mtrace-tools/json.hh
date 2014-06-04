@@ -57,6 +57,7 @@ static inline JsonObject *jsonify(uint64_t value);
 static inline JsonObject *jsonify(uint8_t value);
 static inline JsonObject *jsonify(int value);
 static inline JsonObject *jsonify(float value);
+static inline JsonObject *jsonify(double value);
 
 class JsonString : public JsonObject {
     virtual bool write_to(ostream *o, int level, JsonObject *parent) {
@@ -148,6 +149,26 @@ private:
 
 static inline JsonObject *jsonify(float value) {
     return new JsonFloat(value);
+}
+
+class JsonDouble : public JsonObject {
+public:
+    virtual bool write_to(ostream *o, int level, JsonObject *parent) {
+        char buf[64];
+        snprintf(buf, sizeof(buf), "%f", value_);
+        *o << buf;
+        return true;
+    }
+
+private:
+    JsonDouble(double value) : value_(value) {}
+    double value_;
+
+    friend JsonObject *jsonify(double value);
+};
+
+static inline JsonObject *jsonify(double value) {
+    return new JsonDouble(value);
 }
 
 class JsonDict : public JsonObject {

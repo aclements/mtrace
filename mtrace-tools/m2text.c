@@ -38,6 +38,9 @@ static void print_entry(union mtrace_entry *entry)
 		[mtrace_task_exit]   = "exit",
 	};
 
+    // Printing the timestamp for all types
+    printf("(%f) ", entry->h.timestamp);
+
 	switch(entry->h.type) {
 	case mtrace_entry_label:
 		printf("%-3s [%-3u  %16s  %016"PRIx64"  %016"PRIx64"  %016"PRIx64"  %016"PRIx64"  %016"PRIx64"]\n",

@@ -11,10 +11,11 @@ static JsonList* thelist;
 
 static void handle_entry(union mtrace_entry *entry)
 {
-        JsonDict* je = JsonDict::create();
+    JsonDict* je = JsonDict::create();
 
-        je->put("cpu", entry->h.cpu);
-        je->put("access_count", entry->h.access_count);
+    je->put("timestamp", entry->h.timestamp);
+    je->put("cpu", entry->h.cpu);
+    je->put("access_count", entry->h.access_count);
 
 	switch(entry->h.type) {
 	case mtrace_entry_label:

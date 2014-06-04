@@ -69,6 +69,7 @@ typedef enum {
  */
 struct mtrace_entry_header {
     mtrace_entry_t type;
+    double timestamp;
     uint16_t size;
     uint16_t cpu;
     uint64_t access_count;

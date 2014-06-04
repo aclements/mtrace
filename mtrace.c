@@ -30,6 +30,7 @@
 #include "sysemu.h"
 
 #include <sys/wait.h>
+#include <sys/time.h>
 
 /* 64-byte cache lines */
 #define MTRACE_CLINE_SHIFT	6
@@ -132,50 +133,52 @@ void mtrace_log_file_set(const char *path)
         abort();
     }
     if (fstat(outfd, &st) < 0) {
-	perror("mtrace: fstat");
-	abort();
+        perror("mtrace: fstat");
+        abort();
     }
     if (S_ISFIFO(st.st_mode)) {
-	mtrace_file = outfd;
-	return;
+        mtrace_file = outfd;
+        return;
     }
 
     if (pipe(p) < 0 || pipe(check) < 0) {
-	perror("mtrace: pipe");
-	abort();
+        perror("mtrace: pipe");
+        abort();
     }
+
     if (fcntl(check[1], F_SETFD,
-	      fcntl(check[1], F_GETFD, 0) | FD_CLOEXEC) < 0) {
-	perror("mtrace: fcntl");
-	abort();
+          fcntl(check[1], F_GETFD, 0) | FD_CLOEXEC) < 0) {
+        perror("mtrace: fcntl");
+        abort();
     }
 
     child = fork();
     if (child < 0) {
-	perror("mtrace: fork");
-	abort();
+        perror("mtrace: fork");
+        abort();
     } else if (child == 0) {
-	close(check[0]);
-	dup2(outfd, 1);
-	close(outfd);
-	dup2(p[0], 0);
-	close(p[0]);
-	close(p[1]);
-	r = execlp("gzip", "gzip", NULL);
-	r = write(check[1], &r, sizeof(r));
-	exit(0);
+        close(check[0]);
+        dup2(outfd, 1);
+        close(outfd);
+        dup2(p[0], 0);
+        close(p[0]);
+        close(p[1]);
+        r = execlp("gzip", "gzip", NULL);
+        r = write(check[1], &r, sizeof(r));
+        exit(0);
     }
+
     close(outfd);
     close(p[0]);
     close(check[1]);
 
     if (read(check[0], &r, sizeof(r)) != 0) {
-	errno = r;
-	perror("mtrace: exec");
-	abort();
+        errno = r;
+        perror("mtrace: exec");
+        abort();
     }
-    close(check[0]);
 
+    close(check[0]);
     child_pid = child;
     mtrace_file = p[1];
 }
@@ -183,15 +186,15 @@ void mtrace_log_file_set(const char *path)
 static void write_all(int fd, const void *data, size_t len)
 {
     while (len) {
-	ssize_t r = write(fd, data, len);
-	if (r < 0) {
-	    if (errno == EINTR)
-		continue;
-	    perror("write_all: write");
-	    abort();
-	}
-	len -= r;
-	data += r;
+        ssize_t r = write(fd, data, len);
+        if (r < 0) {
+            if (errno == EINTR)
+            continue;
+            perror("write_all: write");
+            abort();
+        }
+        len -= r;
+        data += r;
     }
 }
 
@@ -199,23 +202,28 @@ static void mtrace_log_entry(union mtrace_entry *entry)
 {
     static uint8_t flush_buffer[FLUSH_BUFFER_BYTES];
     static int n;
+    struct timeval t;
 
     if (entry == NULL) {
-	write_all(mtrace_file, flush_buffer, n);
-	n = 0;
-	return;
+        write_all(mtrace_file, flush_buffer, n);
+        n = 0;
+        return;
     }
 
+    // Setting timestamp for all entries
+    gettimeofday(&t, NULL);
+    entry->h.timestamp = t.tv_sec + t.tv_usec * 1e-6;
+
     if (n + entry->h.size > FLUSH_BUFFER_BYTES) {
-	write_all(mtrace_file, flush_buffer, n);
-	n = 0;
+        write_all(mtrace_file, flush_buffer, n);
+        n = 0;
     }
     
     if (entry->h.size > FLUSH_BUFFER_BYTES)
-	write_all(mtrace_file, entry, entry->h.size);
+        write_all(mtrace_file, entry, entry->h.size);
     else {
-	memcpy(&flush_buffer[n], entry, entry->h.size);
-	n += entry->h.size;
+        memcpy(&flush_buffer[n], entry, entry->h.size);
+        n += entry->h.size;
     }
 }
 
@@ -322,7 +330,7 @@ static void mtrace_access_dump(mtrace_access_t type, target_ulong host_addr,
 {
     struct mtrace_access_entry entry;
     static int sampler;
-    
+
     if (!mtrace_mode)
 	return;
     if (sampler++ % mtrace_sample)
@@ -652,7 +660,7 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
 	fprintf(stderr, "mtrace_entry_register: cpu_memory_rw_debug failed\n");
 	return;
     }
-
+    
     entry.h.type = type;
     entry.h.size = len;
     entry.h.cpu = cpu_single_env->cpu_index;
@@ -661,18 +669,18 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
 
     /* Special handling */
     if (type == mtrace_entry_label) {
-	/*
-	 * XXX bug -- guest_addr might cross multiple host memory allocations,
-	 * which means the [host_addr, host_addr + bytes] is not contiguous.
-	 *
-	 * A simple solution is probably to log multiple mtrace_label_entrys.
-	 */
-	r = mtrace_host_addr(entry.label.guest_addr, &entry.label.host_addr);
-	if (r) {
-	    fprintf(stderr, "mtrace_entry_register: mtrace_host_addr failed (%"PRIx64")\n", 
-		    entry.label.guest_addr);
-	    return;
-	}
+      /*
+       * XXX bug -- guest_addr might cross multiple host memory allocations,
+       * which means the [host_addr, host_addr + bytes] is not contiguous.
+       *
+       * A simple solution is probably to log multiple mtrace_label_entrys.
+       */
+        r = mtrace_host_addr(entry.label.guest_addr, &entry.label.host_addr);
+        if (r) {
+            fprintf(stderr, "mtrace_entry_register: mtrace_host_addr failed (%"PRIx64")\n", 
+                entry.label.guest_addr);
+            return;
+        }
     }
 
     /* Special handling */
@@ -832,6 +840,7 @@ void mtrace_init(void)
 
     if (mtrace_file == 0)
 	mtrace_log_file_set("mtrace.out");
+
 
     entry.h.type = mtrace_entry_machine;
     entry.h.size = sizeof(entry);
