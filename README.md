@@ -8,18 +8,15 @@ files and implements a suite of analyses.
 
 N.B.: Don't confuse QEMU's 'trace' features with mtrace.
 
-
 Dependencies
 ------------
 
-mscan depends on libelfin, which can be found at
+mscan depends on libelfin, which is a submodule of mtrace. Simply
+initialize the submodule, update it, and build it:
 
-    git clone https://github.com/aclements/libelfin.git
-
-We recommend cloning and building libelfin next to the mtrace
-repository, as mtrace will find it automatically.  Alternatively, you
-can `make install` libelfin to install it system-wide.
-
+    git submodule init libelfin
+    git submodule update libelfin
+    cd libelfin && make
 
 Building
 --------
