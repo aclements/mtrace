@@ -179,14 +179,20 @@ Make mtrace require fewer or no kernel hooks:
 * Eliminate stack-switching hypercalls.  We can detect stack switches
   automatically based on CR3 and current stack pointer, plus starting
   a new call stack when an interrupt occurs and terminating that call
-  stack when its stack pointer drops below where the interrupt frame
+  stack when its stack pointer goes above where the interrupt frame
   was pushed (while remaining in the same stack region).  These
   hypercalls are also really hard to add to all of the right places.
 
-* Eliminate allocation labeling hypercalls.  Instead, use the kernel
-  debug info to set QEMU breakpoints on the allocation function we
-  care about.  This would require a little kernel-specific
-  information, but would be less cumbersome than code modification and
-  would support a wide range of kernel versions.  (Compared to
-  stack-switching hypercalls, these are pretty easy to add, so this
-  may be less valuable.)
+* Move allocation labeling into an honest-to-goodness module that's
+  more easily portable across Linux versions.  This module could also
+  help report information about stacks (e.g., when a new process stack
+  is created, it could report its extend and information like process
+  name).
+
+  * Alternatively, mtrace could use kernel debug info to set QEMU
+    breakpoints on the allocation function we care about.  This would
+    require a little kernel-specific information, but would be less
+    cumbersome than code modification and would support a wide range
+    of kernels and kernel versions.  (Compared to stack-switching
+    hypercalls, these are pretty easy to add, so this may be less
+    valuable.)
