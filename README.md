@@ -66,6 +66,10 @@ unnecessary.
     echo CONFIG_NR_CPUS=16 >> .config
     # Avoid live-lock with timer interrupts
     echo CONFIG_HZ_100=y >> .config
+    # Enable devtmpfs
+    echo CONFIG_DEVTMPFS=y >> .config
+    # Enable RAM disk (for testing fsync, etc)
+    echo CONFIG_BLK_DEV_RAM=y >> .config
     # Shrink the kernel
     echo CONFIG_PARTITION_ADVANCED=n >> .config
     echo CONFIG_SUSPEND=n >> .config
