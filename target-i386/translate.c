@@ -4072,6 +4072,7 @@ static target_ulong disas_insn(DisasContext *s, target_ulong pc_start)
     if (unlikely(qemu_loglevel_mask(CPU_LOG_TB_OP)))
         tcg_gen_debug_insn_start(pc_start);
     s->pc = pc_start;
+    gen_helper_mtrace_guest_pc(tcg_const_i64(pc_start));
     prefixes = 0;
     aflag = s->code32;
     dflag = s->code32;

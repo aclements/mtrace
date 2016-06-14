@@ -63,6 +63,8 @@ static int mtrace_count_disable[255];
 static uint64_t mtrace_call_stack[255];
 static int mtrace_call_stack_tagvalid[255];
 
+static uint64_t MTRACE_GUEST_PC = 0;
+
 struct mtrace_call_stack_info
 {
     uint64_t tag;
@@ -334,7 +336,8 @@ static void mtrace_access_dump(mtrace_access_t type, target_ulong host_addr,
     entry.h.access_count = access_count;
     entry.h.ts = 0; /* Unimplemented timestamp */
     entry.access_type = type;
-    entry.pc = mtrace_get_pc((unsigned long)retaddr);
+    // entry.pc = mtrace_get_pc((unsigned long)retaddr);
+    entry.pc = MTRACE_GUEST_PC;
     entry.host_addr = host_addr;
     entry.guest_addr = guest_addr;
     entry.traffic = traffic;
@@ -444,6 +447,11 @@ void REGPARM mtrace_tcg_st(target_ulong host_addr, target_ulong guest_addr,
                            char bytes)
 {
     mtrace_st(host_addr, guest_addr, bytes, MTRACE_GETPC());
+}
+
+void mtrace_guest_pc(target_ulong pc)
+{
+	MTRACE_GUEST_PC = pc;
 }
 
 void REGPARM mtrace_ld(target_ulong host_addr, target_ulong guest_addr,

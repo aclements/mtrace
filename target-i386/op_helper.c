@@ -5687,6 +5687,11 @@ void helper_mtrace_inst_call(target_ulong target_pc, target_ulong return_pc)
     mtrace_inst_call(target_pc, return_pc, 0);
 }
 
+void HELPER(mtrace_guest_pc)(target_ulong pc)
+{
+	mtrace_guest_pc(pc);
+}
+
 void helper_mtrace_inst_ret(target_ulong target_pc)
 {
     mtrace_inst_call(target_pc, 0, 1);

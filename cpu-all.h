@@ -976,6 +976,7 @@ extern RAMBlock *qemu_ramblock_from_host(void *ptr);
 
 void REGPARM mtrace_st(target_ulong host_addr, target_ulong guest_addr, char bytes, void *retaddr);
 void REGPARM mtrace_ld(target_ulong host_addr, target_ulong guest_addr, char bytes, void *retaddr);
+void mtrace_guest_pc(target_ulong pc);
 void REGPARM mtrace_tcg_st(target_ulong host_addr, target_ulong guest_addr, char bytes);
 void REGPARM mtrace_tcg_ld(target_ulong host_addr, target_ulong guest_addr, char bytes);
 void mtrace_io_write(void *cb, target_phys_addr_t host_addr, target_ulong guest_addr, 
