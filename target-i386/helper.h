@@ -222,5 +222,6 @@ DEF_HELPER_0(mtrace_inst_exec, void)
 DEF_HELPER_2(mtrace_inst_call, void, tl, tl)
 DEF_HELPER_1(mtrace_inst_ret, void, tl)
 DEF_HELPER_0(mtrace_insn_count, void)
+DEF_HELPER_1(mtrace_guest_pc, void, tl);
 
 #include "def-helper.h"
