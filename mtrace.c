@@ -510,12 +510,12 @@ void mtrace_io_read(void *cb, target_phys_addr_t ram_addr,
     /* Nothing to do.. */
 }
 
-static inline uint64_t mtrace_get_percore_tsc(CPUX86State *env)
+static inline uint64_t mtrace_get_percore_tsc(CPUState *env)
 {
     return mtrace_inst_count[env->cpu_index];
 }
 
-static inline uint64_t mtrace_get_global_tsc(CPUX86State *env)
+static inline uint64_t mtrace_get_global_tsc(CPUState *env)
 {
     uint64_t t;
     int i;
@@ -526,7 +526,7 @@ static inline uint64_t mtrace_get_global_tsc(CPUX86State *env)
     return t;
 }
 
-void mtrace_lock_start(CPUX86State *env)
+void mtrace_lock_start(CPUState *env)
 {
     if (!mtrace_lock_trace)
 	return;
@@ -547,7 +547,7 @@ void mtrace_lock_start(CPUX86State *env)
     mtrace_lock_active[env->cpu_index] = 1;
 }
 
-void mtrace_lock_stop(CPUX86State *env)
+void mtrace_lock_stop(CPUState *env)
 {
     if (!mtrace_lock_trace)
 	return;
@@ -667,7 +667,7 @@ static void mtrace_entry_register(target_ulong entry_addr, target_ulong type,
 	 *
 	 * A simple solution is probably to log multiple mtrace_label_entrys.
 	 */
-	r = mtrace_host_addr(entry.label.guest_addr, &entry.label.host_addr);
+	r = mtrace_host_addr(entry.label.guest_addr, (target_ulong*) &entry.label.host_addr);
 	if (r) {
 	    fprintf(stderr, "mtrace_entry_register: mtrace_host_addr failed (%"PRIx64")\n", 
 		    entry.label.guest_addr);

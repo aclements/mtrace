@@ -36,6 +36,8 @@
 #define ELF_MACHINE     EM_SPARCV9
 #endif
 
+#define R_CS 0
+
 /*#define EXCP_INTERRUPT 0x100*/
 
 /* trap definitions */
@@ -323,12 +325,21 @@ struct QEMUFile;
 void cpu_put_timer(struct QEMUFile *f, CPUTimer *s);
 void cpu_get_timer(struct QEMUFile *f, CPUTimer *s);
 
+typedef struct SegmentCache {
+    uint32_t selector;
+    target_ulong base;
+    uint32_t limit;
+    uint32_t flags;
+} SegmentCache;
+
 typedef struct CPUSPARCState {
     target_ulong gregs[8]; /* general registers */
     target_ulong *regwptr; /* pointer to current register window */
     target_ulong pc;       /* program counter */
     target_ulong npc;      /* next program counter */
     target_ulong y;        /* multiply/divide register */
+    target_ulong eip;      /* */
+    SegmentCache segs[1];  /* selector values */
 
     /* emulator internal flags handling */
     target_ulong cc_src, cc_src2;
